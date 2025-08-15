@@ -4,7 +4,7 @@
 //! trace data following the OTLP specification.
 
 use crate::core::{Result, Span as UrpoSpan, SpanId, SpanKind, SpanStatus, TraceId, ServiceName, UrpoError};
-use chrono::{DateTime, Datelike, Utc};
+use chrono::{DateTime, Utc};
 use opentelemetry_proto::tonic::collector::trace::v1::{
     trace_service_server::{TraceService, TraceServiceServer},
     ExportTraceServiceRequest, ExportTraceServiceResponse,
@@ -63,7 +63,7 @@ impl OtelReceiver {
                 self.span_sender
                     .send(span)
                     .await
-                    .map_err(|e| UrpoError::ChannelSend(format!("Failed to send span: {}", e)))?;
+                    .map_err(|_| UrpoError::ChannelSend)?;
             }
         }
         Ok(())
@@ -322,15 +322,11 @@ impl ReceiverManager {
     }
 }
 
-// Add rand dependency for sampling
-use rand;
-
-// Add hex dependency for encoding
-use hex;
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Datelike;
 
     #[test]
     fn test_nanos_to_datetime() {

@@ -6,7 +6,6 @@
 use crate::core::{Config, Result, UrpoError};
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
-use std::time::Duration;
 
 /// Terminal-native OTEL trace explorer with real-time service health monitoring.
 #[derive(Parser, Debug)]

@@ -401,7 +401,7 @@ mod tests {
     #[tokio::test]
     async fn test_service_metrics() {
         let storage = InMemoryStorage::new(100);
-        let service_name = ServiceName::new("test-service".to_string()).unwrap();
+        let _service_name = ServiceName::new("test-service".to_string()).unwrap();
         
         for i in 1..=5 {
             let mut span = create_test_span(i, i).await;

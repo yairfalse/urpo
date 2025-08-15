@@ -39,10 +39,7 @@ pub enum UrpoError {
     Grpc(#[from] tonic::Status),
     
     #[error("Terminal UI error: {0}")]
-    Terminal(#[from] std::io::Error),
-    
-    #[error("Crossterm error: {0}")]
-    Crossterm(#[from] crossterm::ErrorKind),
+    Terminal(String),
     
     #[error("Async task join error: {0}")]
     Join(#[from] tokio::task::JoinError),
@@ -95,6 +92,16 @@ impl UrpoError {
         Self::Parse { message: msg.into() }
     }
     
+    /// Creates a new render error
+    pub fn render<S: Into<String>>(msg: S) -> Self {
+        Self::Render(msg.into())
+    }
+    
+    /// Creates a new terminal error
+    pub fn terminal<S: Into<String>>(msg: S) -> Self {
+        Self::Terminal(msg.into())
+    }
+    
     /// Returns true if this error is recoverable
     pub fn is_recoverable(&self) -> bool {
         match self {
@@ -117,7 +124,7 @@ impl UrpoError {
             Self::Protocol(_) => "protocol",
             Self::Storage(_) => "storage",
             Self::Config(_) => "config",
-            Self::Render(_) | Self::Terminal(_) | Self::Crossterm(_) => "ui",
+            Self::Render(_) | Self::Terminal(_) => "ui",
             Self::ServiceNotFound(_) | Self::TraceNotFound(_) => "not_found",
             Self::InvalidSpan(_) | Self::InvalidSamplingRate(_) => "validation",
             Self::MemoryLimitExceeded { .. } => "resource",
