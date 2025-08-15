@@ -70,7 +70,6 @@ impl Application {
         
         let storage_manager = Arc::new(StorageManager::new_in_memory(
             config.max_traces,
-            config.max_memory_mb,
         ));
 
         Ok(Self {
@@ -112,12 +111,11 @@ impl Application {
 
         // Start cleanup task
         let cleanup_storage = self.storage_manager.clone();
-        let retention = self.config.retention();
         let cleanup_handle = tokio::spawn(async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
             loop {
                 interval.tick().await;
-                if let Err(e) = cleanup_storage.run_cleanup(retention).await {
+                if let Err(e) = cleanup_storage.run_cleanup().await {
                     tracing::error!("Cleanup failed: {}", e);
                 }
             }
@@ -224,10 +222,10 @@ impl Application {
                         for metric in metrics {
                             tracing::info!(
                                 "Service: {} | RPS: {:.1} | Error Rate: {:.2}% | P95: {}ms",
-                                metric.service_name.as_str(),
-                                metric.rps,
-                                metric.error_rate(),
-                                metric.p95_latency_ms
+                                metric.name.as_str(),
+                                metric.request_rate,
+                                metric.error_rate * 100.0,
+                                metric.latency_p95.as_millis()
                             );
                         }
                     }

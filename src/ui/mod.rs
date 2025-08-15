@@ -6,12 +6,14 @@
 mod fake_data;
 
 use crate::core::{Result, ServiceMetrics, Span, UrpoError};
+use crate::storage::StorageBackend;
+use std::sync::Arc;
 use crossterm::{
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
 };
-use fake_data::{FakeDataGenerator, HealthStatus};
+use fake_data::FakeDataGenerator;
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -41,6 +43,8 @@ pub struct App {
     pub search_query: String,
     /// Whether search mode is active.
     pub search_active: bool,
+    /// Storage backend for real data.
+    pub storage: Option<Arc<dyn StorageBackend>>,
     /// Fake data generator for demo mode.
     pub fake_generator: FakeDataGenerator,
 }
@@ -74,6 +78,7 @@ impl App {
             traces: Vec::new(),
             search_query: String::new(),
             search_active: false,
+            storage: None,
             fake_generator: FakeDataGenerator::new(),
         };
         
@@ -81,6 +86,34 @@ impl App {
         app.services = app.fake_generator.generate_metrics();
         app.traces = app.fake_generator.generate_traces(20);
         app
+    }
+    
+    /// Create a new UI application with storage backend.
+    pub fn with_storage(storage: Arc<dyn StorageBackend>) -> Self {
+        let mut app = Self::new();
+        app.storage = Some(storage);
+        app
+    }
+    
+    /// Refresh data from storage or fake generator.
+    pub async fn refresh_data(&mut self) {
+        if let Some(storage) = &self.storage {
+            // Get real metrics from storage
+            match storage.get_service_metrics().await {
+                Ok(metrics) => self.services = metrics,
+                Err(e) => {
+                    tracing::warn!("Failed to get metrics from storage: {}", e);
+                    // Fall back to fake data
+                    self.services = self.fake_generator.generate_metrics();
+                }
+            }
+            // For now, still use fake traces (we'll implement trace listing later)
+            self.traces = self.fake_generator.generate_traces(20);
+        } else {
+            // No storage, use fake data
+            self.services = self.fake_generator.generate_metrics();
+            self.traces = self.fake_generator.generate_traces(20);
+        }
     }
 
     /// Handle keyboard input.
@@ -119,9 +152,8 @@ impl App {
                 self.search_query.clear();
             }
             KeyCode::Char('r') | KeyCode::Char('R') => {
-                // Refresh data
-                self.services = self.fake_generator.generate_metrics();
-                self.traces = self.fake_generator.generate_traces(20);
+                // Refresh will be handled in the event loop
+                // Mark that we need refresh
             }
             KeyCode::Up | KeyCode::Char('k') => self.move_selection_up(),
             KeyCode::Down | KeyCode::Char('j') => self.move_selection_down(),
@@ -431,9 +463,10 @@ fn draw_services_tab(frame: &mut Frame, area: Rect, app: &mut App) {
         let selected = app.service_state.selected() == Some(idx);
         
         // Determine health status and colors
-        let (status_text, status_color, status_symbol) = if service.error_rate() > 10.0 {
+        let error_rate_pct = service.error_rate * 100.0;
+        let (status_text, status_color, status_symbol) = if error_rate_pct > 10.0 {
             ("Unhealthy", Color::Red, "●")
-        } else if service.error_rate() > 2.0 {
+        } else if error_rate_pct > 2.0 {
             ("Degraded", Color::Yellow, "⚠")
         } else {
             ("Healthy", Color::Green, "●")
@@ -450,19 +483,19 @@ fn draw_services_tab(frame: &mut Frame, area: Rect, app: &mut App) {
 
         // Add selection indicator
         let service_name = if selected {
-            format!("→ {}", service.service_name.as_str())
+            format!("→ {}", service.name.as_str())
         } else {
-            format!("  {}", service.service_name.as_str())
+            format!("  {}", service.name.as_str())
         };
 
         Row::new(vec![
             Cell::from(service_name),
-            Cell::from(format!("{:.1}", service.rps)),
-            Cell::from(format!("{:.1}%", service.error_rate()))
+            Cell::from(format!("{:.1}", service.request_rate)),
+            Cell::from(format!("{:.1}%", service.error_rate * 100.0))
                 .style(Style::default().fg(status_color)),
-            Cell::from(format_latency(service.p50_latency_ms)),
-            Cell::from(format_latency(service.p95_latency_ms)),
-            Cell::from(format_latency(service.p99_latency_ms)),
+            Cell::from(format_latency(service.latency_p50.as_millis() as u64)),
+            Cell::from(format_latency(service.latency_p95.as_millis() as u64)),
+            Cell::from(format_latency(service.latency_p99.as_millis() as u64)),
             Cell::from(format!("{} {}", status_symbol, status_text))
                 .style(Style::default().fg(status_color)),
         ])
@@ -495,21 +528,22 @@ fn draw_traces_tab(frame: &mut Frame, area: Rect, app: &mut App) {
     let header = Row::new(header_cells).height(1).bottom_margin(1);
 
     let rows = app.traces.iter().map(|span| {
-        let status_color = if span.is_error() {
+        let status_color = if span.status.is_error() {
             Color::Red
         } else {
             Color::Green
         };
 
         Row::new(vec![
-            Cell::from(&span.trace_id.as_str()[..8]),
+            Cell::from(&span.trace_id.as_str()[..8.min(span.trace_id.as_str().len())]),
             Cell::from(span.service_name.as_str()),
             Cell::from(span.operation_name.as_str()),
-            Cell::from(format!("{:.2}ms", span.duration().as_secs_f64() * 1000.0)),
+            Cell::from(format!("{:.2}ms", span.duration.as_secs_f64() * 1000.0)),
             Cell::from(match &span.status {
                 crate::core::SpanStatus::Ok => "OK",
                 crate::core::SpanStatus::Error(_) => "ERROR",
-                crate::core::SpanStatus::Unset => "-",
+                crate::core::SpanStatus::Cancelled => "CANCELLED",
+                crate::core::SpanStatus::Unknown => "-",
             })
             .style(Style::default().fg(status_color)),
         ])

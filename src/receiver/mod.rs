@@ -3,7 +3,7 @@
 //! This module implements GRPC and HTTP receivers for OpenTelemetry
 //! trace data following the OTLP specification.
 
-use crate::core::{Result, Span as UrpoSpan, SpanId, SpanKind, SpanStatus, TraceId, ServiceName, UrpoError};
+use crate::core::{Result, Span as UrpoSpan, SpanId, SpanStatus, TraceId, ServiceName, UrpoError};
 use chrono::{DateTime, Utc};
 use opentelemetry_proto::tonic::collector::trace::v1::{
     trace_service_server::{TraceService, TraceServiceServer},
@@ -156,28 +156,29 @@ fn convert_otel_span(
 
     let service_name = ServiceName::new(service_name)?;
     
-    let kind = match otel_span.kind() {
-        opentelemetry_proto::tonic::trace::v1::span::SpanKind::Unspecified => SpanKind::Internal,
-        opentelemetry_proto::tonic::trace::v1::span::SpanKind::Internal => SpanKind::Internal,
-        opentelemetry_proto::tonic::trace::v1::span::SpanKind::Server => SpanKind::Server,
-        opentelemetry_proto::tonic::trace::v1::span::SpanKind::Client => SpanKind::Client,
-        opentelemetry_proto::tonic::trace::v1::span::SpanKind::Producer => SpanKind::Producer,
-        opentelemetry_proto::tonic::trace::v1::span::SpanKind::Consumer => SpanKind::Consumer,
+    // Map span kind to an attribute instead
+    let kind_str = match otel_span.kind() {
+        opentelemetry_proto::tonic::trace::v1::span::SpanKind::Unspecified => "internal",
+        opentelemetry_proto::tonic::trace::v1::span::SpanKind::Internal => "internal",
+        opentelemetry_proto::tonic::trace::v1::span::SpanKind::Server => "server",
+        opentelemetry_proto::tonic::trace::v1::span::SpanKind::Client => "client",
+        opentelemetry_proto::tonic::trace::v1::span::SpanKind::Producer => "producer",
+        opentelemetry_proto::tonic::trace::v1::span::SpanKind::Consumer => "consumer",
     };
 
-    let start_time = nanos_to_datetime(otel_span.start_time_unix_nano);
-    let end_time = nanos_to_datetime(otel_span.end_time_unix_nano);
+    let _start_time = nanos_to_datetime(otel_span.start_time_unix_nano);
+    let _end_time = nanos_to_datetime(otel_span.end_time_unix_nano);
 
     let status = if let Some(status) = otel_span.status {
         match status.code() {
-            opentelemetry_proto::tonic::trace::v1::status::StatusCode::Unset => SpanStatus::Unset,
+            opentelemetry_proto::tonic::trace::v1::status::StatusCode::Unset => SpanStatus::Unknown,
             opentelemetry_proto::tonic::trace::v1::status::StatusCode::Ok => SpanStatus::Ok,
             opentelemetry_proto::tonic::trace::v1::status::StatusCode::Error => {
                 SpanStatus::Error(status.message.clone())
             }
         }
     } else {
-        SpanStatus::Unset
+        SpanStatus::Unknown
     };
 
     let mut attributes = HashMap::new();
@@ -187,35 +188,47 @@ fn convert_otel_span(
         }
     }
 
-    let events = otel_span
-        .events
-        .into_iter()
-        .map(|event| crate::core::SpanEvent {
-            name: event.name,
-            timestamp: nanos_to_datetime(event.time_unix_nano),
-            attributes: event
-                .attributes
-                .into_iter()
-                .filter_map(|attr| {
-                    attr.value.map(|v| (attr.key, value_to_string(v)))
-                })
-                .collect(),
-        })
-        .collect();
+    // Store events as attributes for now since we don't have SpanEvent in core types
+    for (i, event) in otel_span.events.into_iter().enumerate() {
+        attributes.insert(format!("event.{}.name", i), event.name);
+        attributes.insert(format!("event.{}.time", i), nanos_to_datetime(event.time_unix_nano).to_rfc3339());
+        for attr in event.attributes {
+            if let Some(value) = attr.value {
+                attributes.insert(format!("event.{}.{}", i, attr.key), value_to_string(value));
+            }
+        }
+    }
 
-    Ok(UrpoSpan {
-        span_id,
-        trace_id,
-        parent_span_id,
-        service_name,
-        operation_name: otel_span.name,
-        kind,
-        start_time,
-        end_time,
-        status,
-        attributes,
-        events,
-    })
+    // Add span kind to attributes
+    attributes.insert("span.kind".to_string(), kind_str.to_string());
+    
+    // Calculate duration from start and end times
+    let start_system = std::time::SystemTime::UNIX_EPOCH + 
+        std::time::Duration::from_nanos(otel_span.start_time_unix_nano);
+    let end_system = std::time::SystemTime::UNIX_EPOCH + 
+        std::time::Duration::from_nanos(otel_span.end_time_unix_nano);
+    
+    let duration = if end_system > start_system {
+        end_system.duration_since(start_system).unwrap_or_default()
+    } else {
+        std::time::Duration::from_millis(0)
+    };
+    
+    let mut builder = UrpoSpan::builder()
+        .trace_id(trace_id)
+        .span_id(span_id)
+        .service_name(service_name)
+        .operation_name(otel_span.name)
+        .start_time(start_system)
+        .duration(duration)
+        .status(status)
+        .attribute("span.kind", kind_str);
+    
+    if let Some(parent_id) = parent_span_id {
+        builder = builder.parent_span_id(parent_id);
+    }
+    
+    builder.build()
 }
 
 /// Convert nanoseconds to DateTime.

@@ -273,15 +273,51 @@ pub async fn execute(cli: Cli) -> Result<()> {
     }
 }
 
-async fn start_with_ui(_config: Config) -> Result<()> {
+async fn start_with_ui(config: Config) -> Result<()> {
+    use crate::storage::{StorageManager, fake_spans::FakeSpanGenerator};
     use crate::ui::{App, TerminalUI};
+    use std::sync::Arc;
+    
+    // Create storage manager with configured limits
+    let storage_manager = StorageManager::new_in_memory(config.max_traces);
+    let storage = storage_manager.backend();
+    
+    // Start fake span generator in background
+    let generator = Arc::new(FakeSpanGenerator::new());
+    let storage_clone = storage.clone();
+    let generator_clone = generator.clone();
+    
+    // Spawn background task to generate fake spans
+    let generator_handle = tokio::spawn(async move {
+        let storage = storage_clone;
+        loop {
+            // Generate spans continuously
+            match generator_clone.generate_batch(50).await {
+                Ok(spans) => {
+                    for span in spans {
+                        if let Err(e) = storage.store_span(span).await {
+                            tracing::warn!("Failed to store span: {}", e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to generate spans: {}", e);
+                }
+            }
+            // Wait a bit before generating next batch
+            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        }
+    });
+    
+    // Create UI app with storage backend
+    let app = App::with_storage(storage);
     
     // Create and run the terminal UI
     let mut terminal = TerminalUI::new()?;
-    let app = App::new();
-    
-    // Run the UI
     let result = terminal.run(app).await;
+    
+    // Stop the generator
+    generator_handle.abort();
     
     // Restore terminal on exit
     terminal.restore()?;

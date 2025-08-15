@@ -1,10 +1,8 @@
 //! Fake data generator for UI development and testing.
 
-use crate::core::{ServiceMetrics, ServiceName, Span, SpanId, SpanKind, SpanStatus, TraceId};
-use chrono::Utc;
+use crate::core::{ServiceMetrics, ServiceName, Span, SpanId, SpanStatus, TraceId};
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
-use std::collections::HashMap;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 /// Service definitions for fake data
 #[derive(Debug, Clone)]
@@ -122,17 +120,19 @@ impl FakeDataGenerator {
                 let span_count = (rps * 60.0) as u64; // Approximation for last minute
                 let error_count = (span_count as f64 * (error_rate / 100.0)) as u64;
 
-                ServiceMetrics {
-                    service_name: ServiceName::new(service.name.clone()).unwrap(),
-                    span_count,
-                    error_count,
-                    avg_duration_ms: p50,
-                    p50_latency_ms: p50,
-                    p95_latency_ms: p95,
-                    p99_latency_ms: p99,
-                    rps,
-                    last_updated: Utc::now(),
-                }
+                let mut metrics = ServiceMetrics::new(ServiceName::new(service.name.clone()).unwrap());
+                metrics.span_count = span_count;
+                metrics.error_count = error_count;
+                metrics.request_rate = rps;
+                metrics.error_rate = error_rate / 100.0; // Convert percentage to fraction
+                metrics.latency_p50 = Duration::from_millis(p50);
+                metrics.latency_p95 = Duration::from_millis(p95);
+                metrics.latency_p99 = Duration::from_millis(p99);
+                metrics.avg_duration = Duration::from_millis(p50); // Use P50 as average
+                metrics.min_duration = Duration::from_millis(p50 / 2);
+                metrics.max_duration = Duration::from_millis(p99 * 2);
+                metrics.last_seen = SystemTime::now();
+                metrics
             })
             .collect()
     }
@@ -183,22 +183,20 @@ impl FakeDataGenerator {
                 _ => service.base_p99,
             };
 
-            let now = Utc::now();
-            let start_time = now - chrono::Duration::milliseconds(duration_ms as i64);
+            let now = SystemTime::now();
+            let duration = Duration::from_millis(duration_ms);
+            let start_time = now - duration;
 
-            let span = Span {
-                span_id,
-                trace_id,
-                parent_span_id: None,
-                service_name: ServiceName::new(service.name.clone()).unwrap(),
-                operation_name: operation.to_string(),
-                kind: SpanKind::Server,
-                start_time,
-                end_time: now,
-                status,
-                attributes: HashMap::new(),
-                events: Vec::new(),
-            };
+            let span = Span::builder()
+                .trace_id(trace_id)
+                .span_id(span_id)
+                .service_name(ServiceName::new(service.name.clone()).unwrap())
+                .operation_name(operation)
+                .start_time(start_time)
+                .duration(duration)
+                .status(status)
+                .build()
+                .unwrap();
 
             spans.push(span);
         }
@@ -208,9 +206,10 @@ impl FakeDataGenerator {
 
     /// Get health status color for a service
     pub fn health_color(metrics: &ServiceMetrics) -> HealthStatus {
-        if metrics.error_rate() > 10.0 {
+        let error_rate_pct = metrics.error_rate * 100.0;
+        if error_rate_pct > 10.0 {
             HealthStatus::Unhealthy
-        } else if metrics.error_rate() > 2.0 {
+        } else if error_rate_pct > 2.0 {
             HealthStatus::Degraded
         } else {
             HealthStatus::Healthy

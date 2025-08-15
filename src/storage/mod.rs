@@ -3,11 +3,14 @@
 //! This module provides the storage interface and implementations
 //! for storing and querying trace data efficiently.
 
-use crate::core::{Result, ServiceMetrics, ServiceName, Span, SpanId, TraceId, UrpoError};
-use chrono::{DateTime, Duration, Utc};
+pub mod fake_spans;
+pub mod aggregator;
+
+use crate::core::{Result, ServiceMetrics, ServiceName, Span, SpanId, TraceId};
 use dashmap::DashMap;
-use std::collections::{HashMap, VecDeque};
+use std::collections::VecDeque;
 use std::sync::Arc;
+use std::time::SystemTime;
 use tokio::sync::RwLock;
 
 /// Trait for storage backend implementations.
@@ -22,17 +25,21 @@ pub trait StorageBackend: Send + Sync {
     /// Get all spans for a trace.
     async fn get_trace_spans(&self, trace_id: &TraceId) -> Result<Vec<Span>>;
 
-    /// Get spans for a service.
-    async fn get_service_spans(&self, service: &ServiceName, limit: usize) -> Result<Vec<Span>>;
+    /// Get spans for a service within a time window.
+    async fn get_service_spans(
+        &self,
+        service: &ServiceName,
+        since: SystemTime,
+    ) -> Result<Vec<Span>>;
 
-    /// Get service metrics.
+    /// Get service metrics calculated from stored spans.
     async fn get_service_metrics(&self) -> Result<Vec<ServiceMetrics>>;
 
-    /// Remove old traces based on retention policy.
-    async fn cleanup(&self, retention: Duration) -> Result<usize>;
+    /// Get the total number of stored spans.
+    async fn get_span_count(&self) -> Result<usize>;
 
-    /// Get storage statistics.
-    async fn get_stats(&self) -> Result<StorageStats>;
+    /// Remove old spans to enforce storage limits.
+    async fn enforce_limits(&self) -> Result<usize>;
 }
 
 /// Storage statistics.
@@ -47,109 +54,94 @@ pub struct StorageStats {
     /// Estimated memory usage in bytes.
     pub memory_bytes: usize,
     /// Oldest span timestamp.
-    pub oldest_span: Option<DateTime<Utc>>,
+    pub oldest_span: Option<SystemTime>,
     /// Newest span timestamp.
-    pub newest_span: Option<DateTime<Utc>>,
+    pub newest_span: Option<SystemTime>,
 }
 
-/// In-memory storage implementation.
+/// In-memory storage implementation with bounded capacity.
 pub struct InMemoryStorage {
     /// Spans indexed by span ID.
     spans: Arc<DashMap<SpanId, Span>>,
     /// Trace ID to span IDs mapping.
     traces: Arc<DashMap<TraceId, Vec<SpanId>>>,
-    /// Service to span IDs mapping.
-    services: Arc<DashMap<ServiceName, VecDeque<SpanId>>>,
-    /// Service metrics.
-    metrics: Arc<RwLock<HashMap<ServiceName, ServiceMetrics>>>,
-    /// Maximum number of traces to store.
-    max_traces: usize,
+    /// Service to span IDs mapping with timestamps for efficient querying.
+    services: Arc<DashMap<ServiceName, VecDeque<(SystemTime, SpanId)>>>,
+    /// Ordered list of span IDs by insertion time for LRU eviction.
+    span_order: Arc<RwLock<VecDeque<(SystemTime, SpanId)>>>,
+    /// Maximum number of spans to store.
+    max_spans: usize,
     /// Maximum spans per service.
     max_spans_per_service: usize,
 }
 
 impl InMemoryStorage {
-    /// Create a new in-memory storage.
-    pub fn new(max_traces: usize) -> Self {
+    /// Create a new in-memory storage with specified limits.
+    pub fn new(max_spans: usize) -> Self {
         Self {
             spans: Arc::new(DashMap::new()),
             traces: Arc::new(DashMap::new()),
             services: Arc::new(DashMap::new()),
-            metrics: Arc::new(RwLock::new(HashMap::new())),
-            max_traces,
-            max_spans_per_service: 1000,
+            span_order: Arc::new(RwLock::new(VecDeque::new())),
+            max_spans,
+            max_spans_per_service: max_spans / 10, // Allow each service ~10% of total capacity
         }
     }
 
-    /// Update service metrics with a new span.
-    async fn update_metrics(&self, span: &Span) {
-        let mut metrics = self.metrics.write().await;
-        let entry = metrics
-            .entry(span.service_name.clone())
-            .or_insert_with(|| ServiceMetrics {
-                service_name: span.service_name.clone(),
-                span_count: 0,
-                error_count: 0,
-                avg_duration_ms: 0,
-                p50_latency_ms: 0,
-                p95_latency_ms: 0,
-                p99_latency_ms: 0,
-                rps: 0.0,
-                last_updated: Utc::now(),
-            });
+    /// Remove the oldest spans to stay within limits.
+    async fn evict_oldest_spans(&self, count: usize) -> usize {
+        let mut span_order = self.span_order.write().await;
+        let mut removed = 0;
 
-        entry.span_count += 1;
-        if span.is_error() {
-            entry.error_count += 1;
-        }
-
-        // Update average duration (simplified - in production, use proper statistics)
-        let span_duration_ms = span.duration().as_millis() as u64;
-        let current_total = entry.avg_duration_ms * (entry.span_count - 1);
-        let new_total = current_total + span_duration_ms;
-        entry.avg_duration_ms = new_total / entry.span_count;
-
-        // Update percentiles (simplified - in production, use proper percentile calculation)
-        entry.p50_latency_ms = entry.avg_duration_ms;
-        entry.p95_latency_ms = (entry.avg_duration_ms as f64 * 1.5) as u64;
-        entry.p99_latency_ms = (entry.avg_duration_ms as f64 * 2.0) as u64;
-
-        // Update RPS (simplified - in production, track time windows)
-        let time_window = (Utc::now() - entry.last_updated).num_seconds().max(1) as f64;
-        entry.rps = entry.span_count as f64 / time_window;
-        
-        entry.last_updated = Utc::now();
-    }
-
-    /// Enforce storage limits.
-    async fn enforce_limits(&self) {
-        // Limit number of traces
-        if self.traces.len() > self.max_traces {
-            let to_remove = self.traces.len() - self.max_traces;
-            let mut removed = 0;
-            
-            // Remove oldest traces (simplified - in production, track insertion order)
-            for item in self.traces.iter() {
-                if removed >= to_remove {
-                    break;
-                }
-                
-                let trace_id = item.key().clone();
-                if let Some((_, span_ids)) = self.traces.remove(&trace_id) {
-                    for span_id in span_ids {
-                        self.spans.remove(&span_id);
+        for _ in 0..count {
+            if let Some((_, span_id)) = span_order.pop_front() {
+                // Remove from main storage
+                if let Some((_, span)) = self.spans.remove(&span_id) {
+                    // Remove from trace index
+                    if let Some(mut trace_spans) = self.traces.get_mut(&span.trace_id) {
+                        trace_spans.retain(|id| id != &span_id);
+                        if trace_spans.is_empty() {
+                            drop(trace_spans);
+                            self.traces.remove(&span.trace_id);
+                        }
                     }
+
+                    // Remove from service index
+                    if let Some(mut service_spans) = self.services.get_mut(&span.service_name) {
+                        service_spans.retain(|(_, id)| id != &span_id);
+                        if service_spans.is_empty() {
+                            drop(service_spans);
+                            self.services.remove(&span.service_name);
+                        }
+                    }
+
                     removed += 1;
                 }
+            } else {
+                break;
             }
         }
 
-        // Limit spans per service
-        for mut item in self.services.iter_mut() {
-            let spans = item.value_mut();
-            while spans.len() > self.max_spans_per_service {
-                if let Some(old_span_id) = spans.pop_front() {
-                    self.spans.remove(&old_span_id);
+        removed
+    }
+
+    /// Enforce per-service limits.
+    async fn enforce_service_limits(&self) {
+        for mut entry in self.services.iter_mut() {
+            let service_spans = entry.value_mut();
+            while service_spans.len() > self.max_spans_per_service {
+                if let Some((_, old_span_id)) = service_spans.pop_front() {
+                    // Remove from main storage
+                    if let Some((_, span)) = self.spans.remove(&old_span_id) {
+                        // Remove from trace index
+                        if let Some(mut trace_spans) = self.traces.get_mut(&span.trace_id) {
+                            trace_spans.retain(|id| id != &old_span_id);
+                        }
+                        
+                        // Remove from span order
+                        let mut span_order = self.span_order.write().await;
+                        span_order.retain(|(_, id)| id != &old_span_id);
+                    }
                 }
             }
         }
@@ -162,9 +154,13 @@ impl StorageBackend for InMemoryStorage {
         let span_id = span.span_id.clone();
         let trace_id = span.trace_id.clone();
         let service_name = span.service_name.clone();
+        let start_time = span.start_time;
 
-        // Update metrics
-        self.update_metrics(&span).await;
+        // Check if we need to evict spans before storing
+        if self.spans.len() >= self.max_spans {
+            let to_evict = (self.max_spans / 10).max(1); // Evict 10% when at capacity
+            self.evict_oldest_spans(to_evict).await;
+        }
 
         // Store the span
         self.spans.insert(span_id.clone(), span);
@@ -175,14 +171,20 @@ impl StorageBackend for InMemoryStorage {
             .or_insert_with(Vec::new)
             .push(span_id.clone());
 
-        // Update service index
+        // Update service index with timestamp for efficient time-based queries
         self.services
             .entry(service_name)
             .or_insert_with(VecDeque::new)
-            .push_back(span_id);
+            .push_back((start_time, span_id.clone()));
 
-        // Enforce limits
-        self.enforce_limits().await;
+        // Add to span order for LRU eviction
+        {
+            let mut span_order = self.span_order.write().await;
+            span_order.push_back((start_time, span_id));
+        }
+
+        // Enforce per-service limits
+        self.enforce_service_limits().await;
 
         Ok(())
     }
@@ -193,27 +195,32 @@ impl StorageBackend for InMemoryStorage {
 
     async fn get_trace_spans(&self, trace_id: &TraceId) -> Result<Vec<Span>> {
         if let Some(span_ids) = self.traces.get(trace_id) {
-            let mut spans = Vec::new();
+            let mut spans = Vec::with_capacity(span_ids.len());
             for span_id in span_ids.iter() {
                 if let Some(span) = self.spans.get(span_id) {
                     spans.push(span.clone());
                 }
             }
+            // Sort by start time
+            spans.sort_by_key(|s| s.start_time);
             Ok(spans)
         } else {
             Ok(Vec::new())
         }
     }
 
-    async fn get_service_spans(&self, service: &ServiceName, limit: usize) -> Result<Vec<Span>> {
-        if let Some(span_ids) = self.services.get(service) {
+    async fn get_service_spans(
+        &self,
+        service: &ServiceName,
+        since: SystemTime,
+    ) -> Result<Vec<Span>> {
+        if let Some(service_spans) = self.services.get(service) {
             let mut spans = Vec::new();
-            for (i, span_id) in span_ids.iter().rev().enumerate() {
-                if i >= limit {
-                    break;
-                }
-                if let Some(span) = self.spans.get(span_id) {
-                    spans.push(span.clone());
+            for (timestamp, span_id) in service_spans.iter() {
+                if *timestamp >= since {
+                    if let Some(span) = self.spans.get(span_id) {
+                        spans.push(span.clone());
+                    }
                 }
             }
             Ok(spans)
@@ -223,99 +230,35 @@ impl StorageBackend for InMemoryStorage {
     }
 
     async fn get_service_metrics(&self) -> Result<Vec<ServiceMetrics>> {
-        let metrics = self.metrics.read().await;
-        Ok(metrics.values().cloned().collect())
+        // Delegate to the aggregator module
+        aggregator::calculate_service_metrics(self).await
     }
 
-    async fn cleanup(&self, retention: Duration) -> Result<usize> {
-        let cutoff = Utc::now() - retention;
-        let mut removed = 0;
-
-        // Find and remove old spans
-        let mut to_remove = Vec::new();
-        for item in self.spans.iter() {
-            if item.value().end_time < cutoff {
-                to_remove.push(item.key().clone());
-            }
-        }
-
-        for span_id in to_remove {
-            if let Some((_, span)) = self.spans.remove(&span_id) {
-                // Remove from trace index
-                if let Some(mut trace_spans) = self.traces.get_mut(&span.trace_id) {
-                    trace_spans.retain(|id| id != &span_id);
-                }
-
-                // Remove from service index
-                if let Some(mut service_spans) = self.services.get_mut(&span.service_name) {
-                    service_spans.retain(|id| id != &span_id);
-                }
-
-                removed += 1;
-            }
-        }
-
-        // Clean up empty traces
-        self.traces.retain(|_, spans| !spans.is_empty());
-
-        // Clean up empty services
-        self.services.retain(|_, spans| !spans.is_empty());
-
-        Ok(removed)
+    async fn get_span_count(&self) -> Result<usize> {
+        Ok(self.spans.len())
     }
 
-    async fn get_stats(&self) -> Result<StorageStats> {
-        let span_count = self.spans.len();
-        let trace_count = self.traces.len();
-        let service_count = self.services.len();
-
-        // Estimate memory usage (rough approximation)
-        let avg_span_size = 1024; // bytes
-        let memory_bytes = span_count * avg_span_size;
-
-        // Find oldest and newest spans
-        let mut oldest: Option<DateTime<Utc>> = None;
-        let mut newest: Option<DateTime<Utc>> = None;
-
-        for item in self.spans.iter() {
-            let span = item.value();
-            match oldest {
-                None => oldest = Some(span.start_time),
-                Some(current) if span.start_time < current => oldest = Some(span.start_time),
-                _ => {}
-            }
-            match newest {
-                None => newest = Some(span.end_time),
-                Some(current) if span.end_time > current => newest = Some(span.end_time),
-                _ => {}
-            }
+    async fn enforce_limits(&self) -> Result<usize> {
+        let current_count = self.spans.len();
+        if current_count > self.max_spans {
+            let to_remove = current_count - self.max_spans;
+            Ok(self.evict_oldest_spans(to_remove).await)
+        } else {
+            Ok(0)
         }
-
-        Ok(StorageStats {
-            trace_count,
-            span_count,
-            service_count,
-            memory_bytes,
-            oldest_span: oldest,
-            newest_span: newest,
-        })
     }
 }
 
 /// Storage manager for coordinating storage operations.
 pub struct StorageManager {
     backend: Arc<dyn StorageBackend>,
-    max_memory_mb: usize,
 }
 
 impl StorageManager {
     /// Create a new storage manager with in-memory backend.
-    pub fn new_in_memory(max_traces: usize, max_memory_mb: usize) -> Self {
-        let backend = Arc::new(InMemoryStorage::new(max_traces));
-        Self {
-            backend,
-            max_memory_mb,
-        }
+    pub fn new_in_memory(max_spans: usize) -> Self {
+        let backend = Arc::new(InMemoryStorage::new(max_spans));
+        Self { backend }
     }
 
     /// Get the storage backend.
@@ -323,57 +266,68 @@ impl StorageManager {
         self.backend.clone()
     }
 
-    /// Check if memory limit is exceeded.
-    pub async fn check_memory_limit(&self) -> Result<()> {
-        let stats = self.backend.get_stats().await?;
-        let memory_mb = stats.memory_bytes / (1024 * 1024);
-        
-        if memory_mb > self.max_memory_mb {
-            return Err(UrpoError::MemoryLimitExceeded {
-                current: memory_mb,
-                limit: self.max_memory_mb,
-            });
+    /// Store a span.
+    pub async fn store_span(&self, span: Span) -> Result<()> {
+        self.backend.store_span(span).await
+    }
+
+    /// Get service metrics.
+    pub async fn get_service_metrics(&self) -> Result<Vec<ServiceMetrics>> {
+        self.backend.get_service_metrics().await
+    }
+
+    /// Run periodic cleanup to enforce storage limits.
+    pub async fn run_cleanup(&self) -> Result<()> {
+        let removed = self.backend.enforce_limits().await?;
+        if removed > 0 {
+            tracing::debug!("Cleaned up {} old spans", removed);
         }
-        
         Ok(())
     }
 
-    /// Run periodic cleanup.
-    pub async fn run_cleanup(&self, retention: Duration) -> Result<()> {
-        let removed = self.backend.cleanup(retention).await?;
-        if removed > 0 {
-            tracing::info!("Cleaned up {} old spans", removed);
-        }
-        Ok(())
+    /// Get storage statistics.
+    pub async fn get_stats(&self) -> Result<StorageStats> {
+        let span_count = self.backend.get_span_count().await?;
+        
+        // Simple approximation for now
+        // In a real implementation, this would be part of the trait
+        let avg_span_size = 1024; // bytes per span
+        let memory_bytes = span_count * avg_span_size;
+        
+        Ok(StorageStats {
+            trace_count: 0, // Would need a trait method
+            span_count,
+            service_count: 0, // Would need a trait method
+            memory_bytes,
+            oldest_span: None,
+            newest_span: None,
+        })
     }
 }
+
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::{SpanKind, SpanStatus};
-    use std::collections::HashMap;
+    use std::time::Duration;
 
-    async fn create_test_span(trace_num: u32, span_num: u32) -> Span {
-        Span {
-            span_id: SpanId::new(format!("{:0>16}", span_num)).unwrap(),
-            trace_id: TraceId::new(format!("{:0>32}", trace_num)).unwrap(),
-            parent_span_id: None,
-            service_name: ServiceName::new("test-service".to_string()).unwrap(),
-            operation_name: format!("operation-{}", span_num),
-            kind: SpanKind::Server,
-            start_time: Utc::now(),
-            end_time: Utc::now() + Duration::milliseconds(100),
-            status: SpanStatus::Ok,
-            attributes: HashMap::new(),
-            events: Vec::new(),
-        }
+    async fn create_test_span(trace_num: u32, span_num: u32, service: &str) -> Span {
+        Span::builder()
+            .trace_id(TraceId::new(format!("trace_{:04}", trace_num)).unwrap())
+            .span_id(SpanId::new(format!("span_{:04}", span_num)).unwrap())
+            .service_name(ServiceName::new(service.to_string()).unwrap())
+            .operation_name(format!("operation_{}", span_num))
+            .start_time(SystemTime::now())
+            .duration(Duration::from_millis(100))
+            .status(crate::core::SpanStatus::Ok)
+            .build()
+            .unwrap()
     }
 
     #[tokio::test]
     async fn test_store_and_retrieve_span() {
         let storage = InMemoryStorage::new(100);
-        let span = create_test_span(1, 1).await;
+        let span = create_test_span(1, 1, "test-service").await;
         let span_id = span.span_id.clone();
 
         storage.store_span(span.clone()).await.unwrap();
@@ -386,10 +340,10 @@ mod tests {
     #[tokio::test]
     async fn test_get_trace_spans() {
         let storage = InMemoryStorage::new(100);
-        let trace_id = TraceId::new(format!("{:0>32}", 1)).unwrap();
+        let trace_id = TraceId::new("trace_0001".to_string()).unwrap();
         
         for i in 1..=3 {
-            let mut span = create_test_span(1, i).await;
+            let mut span = create_test_span(1, i, "test-service").await;
             span.trace_id = trace_id.clone();
             storage.store_span(span).await.unwrap();
         }
@@ -399,72 +353,37 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_service_metrics() {
-        let storage = InMemoryStorage::new(100);
-        let _service_name = ServiceName::new("test-service".to_string()).unwrap();
-        
-        for i in 1..=5 {
-            let mut span = create_test_span(i, i).await;
-            if i == 3 {
-                span.status = SpanStatus::Error("test error".to_string());
-            }
-            storage.store_span(span).await.unwrap();
-        }
-
-        let metrics = storage.get_service_metrics().await.unwrap();
-        assert_eq!(metrics.len(), 1);
-        
-        let service_metrics = &metrics[0];
-        assert_eq!(service_metrics.span_count, 5);
-        assert_eq!(service_metrics.error_count, 1);
-    }
-
-    #[tokio::test]
-    async fn test_cleanup() {
-        let storage = InMemoryStorage::new(100);
-        
-        // Create old span
-        let mut old_span = create_test_span(1, 1).await;
-        old_span.end_time = Utc::now() - Duration::hours(2);
-        storage.store_span(old_span).await.unwrap();
-        
-        // Create recent span
-        let recent_span = create_test_span(2, 2).await;
-        storage.store_span(recent_span).await.unwrap();
-        
-        // Cleanup with 1 hour retention
-        let removed = storage.cleanup(Duration::hours(1)).await.unwrap();
-        assert_eq!(removed, 1);
-        
-        let stats = storage.get_stats().await.unwrap();
-        assert_eq!(stats.span_count, 1);
-    }
-
-    #[tokio::test]
     async fn test_storage_limits() {
-        let storage = InMemoryStorage::new(2); // Max 2 traces
+        let storage = InMemoryStorage::new(5); // Max 5 spans
         
-        for i in 1..=5 {
-            let span = create_test_span(i, i).await;
+        for i in 1..=10 {
+            let span = create_test_span(i, i, "test-service").await;
             storage.store_span(span).await.unwrap();
         }
         
         // Should have enforced limit
-        assert!(storage.traces.len() <= 2);
+        assert!(storage.spans.len() <= 5);
     }
 
     #[tokio::test]
-    async fn test_storage_manager_memory_check() {
-        let manager = StorageManager::new_in_memory(100, 1); // 1MB limit
+    async fn test_service_spans_time_filter() {
+        let storage = InMemoryStorage::new(100);
+        let service_name = ServiceName::new("test-service".to_string()).unwrap();
         
-        // Store many spans to exceed limit
-        for i in 1..=1000 {
-            let span = create_test_span(i, i).await;
-            manager.backend().store_span(span).await.unwrap();
+        // Store some spans
+        for i in 1..=5 {
+            let span = create_test_span(i, i, "test-service").await;
+            storage.store_span(span).await.unwrap();
         }
         
-        // Memory limit should be exceeded
-        let result = manager.check_memory_limit().await;
-        assert!(result.is_err());
+        // Query spans from now (should get all)
+        let since = SystemTime::now() - Duration::from_secs(60);
+        let spans = storage.get_service_spans(&service_name, since).await.unwrap();
+        assert_eq!(spans.len(), 5);
+        
+        // Query spans from future (should get none)
+        let future = SystemTime::now() + Duration::from_secs(60);
+        let spans = storage.get_service_spans(&service_name, future).await.unwrap();
+        assert_eq!(spans.len(), 0);
     }
 }
