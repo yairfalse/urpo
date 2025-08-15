@@ -1,0 +1,63 @@
+[package]
+name = "urpo"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.70"
+license = "MIT OR Apache-2.0"
+description = "Terminal-native OTEL trace explorer with real-time service health"
+repository = "https://github.com/user/urpo"
+keywords = ["observability", "tracing", "opentelemetry", "terminal", "tui"]
+categories = ["command-line-utilities", "development-tools::debugging"]
+
+[dependencies]
+# Core async runtime
+tokio = { version = "1.40", features = ["rt-multi-thread", "net", "sync", "time", "macros", "signal"] }
+
+# OTEL and GRPC
+tonic = "0.12"
+prost = "0.13"
+opentelemetry = "0.26"
+opentelemetry-proto = { version = "0.26", features = ["gen-tonic"] }
+
+# Terminal UI
+ratatui = "0.29"
+crossterm = "0.28"
+
+# CLI
+clap = { version = "4.5", features = ["derive", "env"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Data structures
+dashmap = "6.1"
+arc-swap = "1.7"
+
+# Utilities
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+chrono = "0.4"
+bytes = "1.7"
+
+[dev-dependencies]
+tempfile = "3.0"
+wiremock = "0.6"
+criterion = "0.5"
+pretty_assertions = "1.4"
+
+[build-dependencies]
+tonic-build = "0.12"
+
+[[bin]]
+name = "urpo"
+path = "src/main.rs"
+
+[profile.release]
+lto = true
+codegen-units = 1

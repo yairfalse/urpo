@@ -1,0 +1,54 @@
+# Rust build artifacts
+/target/
+**/*.rs.bk
+*.pdb
+
+# Cargo lock file (for libraries)
+Cargo.lock
+
+# IDE and editor files
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Debug files
+*.dSYM/
+
+# Benchmark and profiling
+perf.data
+perf.data.old
+flamegraph.svg
+*.prof
+
+# Test coverage
+lcov.info
+coverage/
+*.gcov
+*.gcda
+*.gcno
+
+# Environment files
+.env
+.env.*
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Log files
+*.log
+logs/
+
+# OS specific
+Thumbs.db
+desktop.ini
+
+# Project specific
+/data/
+/traces/
+*.trace
