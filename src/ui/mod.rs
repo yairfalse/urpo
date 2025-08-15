@@ -3,12 +3,15 @@
 //! This module provides the interactive terminal UI using ratatui
 //! for real-time trace exploration and service health monitoring.
 
+mod fake_data;
+
 use crate::core::{Result, ServiceMetrics, Span, UrpoError};
 use crossterm::{
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
 };
+use fake_data::{FakeDataGenerator, HealthStatus};
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -38,6 +41,8 @@ pub struct App {
     pub search_query: String,
     /// Whether search mode is active.
     pub search_active: bool,
+    /// Fake data generator for demo mode.
+    pub fake_generator: FakeDataGenerator,
 }
 
 /// Available UI tabs.
@@ -60,7 +65,7 @@ impl App {
         let mut trace_state = TableState::default();
         trace_state.select(Some(0));
 
-        Self {
+        let mut app = Self {
             should_quit: false,
             selected_tab: Tab::Services,
             service_state,
@@ -69,7 +74,13 @@ impl App {
             traces: Vec::new(),
             search_query: String::new(),
             search_active: false,
-        }
+            fake_generator: FakeDataGenerator::new(),
+        };
+        
+        // Initialize with fake data
+        app.services = app.fake_generator.generate_metrics();
+        app.traces = app.fake_generator.generate_traces(20);
+        app
     }
 
     /// Handle keyboard input.
@@ -106,6 +117,11 @@ impl App {
             KeyCode::Char('/') => {
                 self.search_active = true;
                 self.search_query.clear();
+            }
+            KeyCode::Char('r') | KeyCode::Char('R') => {
+                // Refresh data
+                self.services = self.fake_generator.generate_metrics();
+                self.traces = self.fake_generator.generate_traces(20);
             }
             KeyCode::Up | KeyCode::Char('k') => self.move_selection_up(),
             KeyCode::Down | KeyCode::Char('j') => self.move_selection_down(),
@@ -249,7 +265,17 @@ impl TerminalUI {
 
     /// Run the UI event loop.
     pub async fn run(&mut self, mut app: App) -> Result<()> {
+        let mut last_update = std::time::Instant::now();
+        let update_interval = Duration::from_secs(1);
+        
         loop {
+            // Update fake data every second
+            if last_update.elapsed() >= update_interval {
+                app.services = app.fake_generator.generate_metrics();
+                app.traces = app.fake_generator.generate_traces(20);
+                last_update = std::time::Instant::now();
+            }
+            
             self.terminal
                 .draw(|f| draw_ui(f, &mut app))
                 .map_err(|e| UrpoError::render(format!("Failed to draw UI: {}", e)))?;
@@ -300,28 +326,43 @@ impl Drop for TerminalUI {
 fn draw_ui(frame: &mut Frame, app: &mut App) {
     let size = frame.area();
 
-    // Create main layout
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(3), // Header
-            Constraint::Min(0),    // Content
-            Constraint::Length(3), // Footer
-        ])
-        .split(size);
+    // For services view, we don't need the tab header
+    if app.selected_tab == Tab::Services {
+        // Create layout without header tabs
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Min(0),    // Content
+                Constraint::Length(3), // Footer
+            ])
+            .split(size);
 
-    // Draw header
-    draw_header(frame, chunks[0], app);
+        draw_services_tab(frame, chunks[0], app);
+        draw_footer(frame, chunks[1], app);
+    } else {
+        // Create main layout with header for other tabs
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(3), // Header
+                Constraint::Min(0),    // Content
+                Constraint::Length(3), // Footer
+            ])
+            .split(size);
 
-    // Draw content based on selected tab
-    match app.selected_tab {
-        Tab::Services => draw_services_tab(frame, chunks[1], app),
-        Tab::Traces => draw_traces_tab(frame, chunks[1], app),
-        Tab::Spans => draw_spans_tab(frame, chunks[1], app),
+        // Draw header
+        draw_header(frame, chunks[0], app);
+
+        // Draw content based on selected tab
+        match app.selected_tab {
+            Tab::Traces => draw_traces_tab(frame, chunks[1], app),
+            Tab::Spans => draw_spans_tab(frame, chunks[1], app),
+            _ => {}
+        }
+
+        // Draw footer
+        draw_footer(frame, chunks[2], app);
     }
-
-    // Draw footer
-    draw_footer(frame, chunks[2], app);
 }
 
 /// Draw the header with tab navigation.
@@ -360,45 +401,89 @@ fn draw_header(frame: &mut Frame, area: Rect, app: &App) {
 
 /// Draw the services tab.
 fn draw_services_tab(frame: &mut Frame, area: Rect, app: &mut App) {
-    let header_cells = ["Service", "RPS", "Error %", "P50", "P95", "P99"]
+    // Split area for title and table
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),  // Title
+            Constraint::Min(0),     // Table
+        ])
+        .split(area);
+
+    // Draw title with service count
+    let title = format!(" Urpo: Service Health ({} services) ", app.services.len());
+    let title_block = Block::default()
+        .borders(Borders::ALL)
+        .title(title)
+        .title_alignment(Alignment::Center)
+        .border_style(Style::default().fg(Color::Cyan));
+    frame.render_widget(title_block, chunks[0]);
+
+    // Create table header
+    let header_cells = ["Service", "RPS", "Error%", "P50", "P95", "P99", "Status"]
         .iter()
-        .map(|h| Cell::from(*h).style(Style::default().fg(Color::Yellow)));
+        .map(|h| Cell::from(*h).style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)));
     
     let header = Row::new(header_cells).height(1).bottom_margin(1);
 
-    let rows = app.services.iter().map(|service| {
-        let error_color = if service.error_rate() > 5.0 {
-            Color::Red
-        } else if service.error_rate() > 1.0 {
-            Color::Yellow
+    // Create table rows with formatted data
+    let rows = app.services.iter().enumerate().map(|(idx, service)| {
+        let selected = app.service_state.selected() == Some(idx);
+        
+        // Determine health status and colors
+        let (status_text, status_color, status_symbol) = if service.error_rate() > 10.0 {
+            ("Unhealthy", Color::Red, "●")
+        } else if service.error_rate() > 2.0 {
+            ("Degraded", Color::Yellow, "⚠")
         } else {
-            Color::Green
+            ("Healthy", Color::Green, "●")
+        };
+
+        // Format latencies with appropriate units
+        let format_latency = |ms: u64| {
+            if ms >= 1000 {
+                format!("{:.1}s", ms as f64 / 1000.0)
+            } else {
+                format!("{}ms", ms)
+            }
+        };
+
+        // Add selection indicator
+        let service_name = if selected {
+            format!("→ {}", service.service_name.as_str())
+        } else {
+            format!("  {}", service.service_name.as_str())
         };
 
         Row::new(vec![
-            Cell::from(service.service_name.as_str()),
+            Cell::from(service_name),
             Cell::from(format!("{:.1}", service.rps)),
-            Cell::from(format!("{:.2}%", service.error_rate()))
-                .style(Style::default().fg(error_color)),
-            Cell::from(format!("{}ms", service.p50_latency_ms)),
-            Cell::from(format!("{}ms", service.p95_latency_ms)),
-            Cell::from(format!("{}ms", service.p99_latency_ms)),
+            Cell::from(format!("{:.1}%", service.error_rate()))
+                .style(Style::default().fg(status_color)),
+            Cell::from(format_latency(service.p50_latency_ms)),
+            Cell::from(format_latency(service.p95_latency_ms)),
+            Cell::from(format_latency(service.p99_latency_ms)),
+            Cell::from(format!("{} {}", status_symbol, status_text))
+                .style(Style::default().fg(status_color)),
         ])
     });
 
     let table = Table::new(rows, [
-        Constraint::Percentage(30),
-        Constraint::Percentage(10),
-        Constraint::Percentage(12),
-        Constraint::Percentage(16),
-        Constraint::Percentage(16),
-        Constraint::Percentage(16),
+        Constraint::Percentage(25),  // Service
+        Constraint::Percentage(10),  // RPS
+        Constraint::Percentage(10),  // Error%
+        Constraint::Percentage(12),  // P50
+        Constraint::Percentage(12),  // P95
+        Constraint::Percentage(12),  // P99
+        Constraint::Percentage(19),  // Status
     ])
     .header(header)
-    .block(Block::default().borders(Borders::ALL).title(" Services "))
+    .block(Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Gray)))
     .row_highlight_style(Style::default().add_modifier(Modifier::REVERSED));
 
-    frame.render_stateful_widget(table, area, &mut app.service_state);
+    frame.render_stateful_widget(table, chunks[1], &mut app.service_state);
 }
 
 /// Draw the traces tab.
@@ -458,13 +543,15 @@ fn draw_footer(frame: &mut Frame, area: Rect, app: &App) {
     let help_text = if app.search_active {
         format!("Search: {} | ESC: Cancel | Enter: Apply", app.search_query)
     } else {
-        "q: Quit | Tab: Next Tab | /: Search | ↑↓/jk: Navigate | Enter: Select".to_string()
+        "[q] Quit  [j/k] Navigate  [Enter] Details  [r] Refresh".to_string()
     };
 
     let footer = Paragraph::new(help_text)
-        .block(Block::default().borders(Borders::ALL))
+        .block(Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Gray)))
         .alignment(Alignment::Center)
-        .style(Style::default().fg(Color::DarkGray));
+        .style(Style::default().fg(Color::White));
 
     frame.render_widget(footer, area);
 }
@@ -478,8 +565,8 @@ mod tests {
         let app = App::new();
         assert!(!app.should_quit);
         assert_eq!(app.selected_tab, Tab::Services);
-        assert!(app.services.is_empty());
-        assert!(app.traces.is_empty());
+        assert!(!app.services.is_empty());
+        assert!(!app.traces.is_empty());
     }
 
     #[test]

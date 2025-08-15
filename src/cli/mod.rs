@@ -274,9 +274,19 @@ pub async fn execute(cli: Cli) -> Result<()> {
 }
 
 async fn start_with_ui(_config: Config) -> Result<()> {
-    // Placeholder for UI startup
-    tracing::info!("Terminal UI startup would happen here");
-    Ok(())
+    use crate::ui::{App, TerminalUI};
+    
+    // Create and run the terminal UI
+    let mut terminal = TerminalUI::new()?;
+    let app = App::new();
+    
+    // Run the UI
+    let result = terminal.run(app).await;
+    
+    // Restore terminal on exit
+    terminal.restore()?;
+    
+    result
 }
 
 async fn start_headless(_config: Config) -> Result<()> {
