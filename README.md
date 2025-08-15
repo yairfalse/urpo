@@ -142,17 +142,6 @@ cargo build --release
    - Press `r` to refresh data
    - Press `q` to quit
 
-## Comparison
-
-| Feature | Urpo | Jaeger UI | otel-tui |
-|---------|------|-----------|----------|
-| **Startup Time** | Instant | 10-30s | Instant |
-| **Interface** | Terminal | Web Browser | Terminal |
-| **Real-time Updates** | ✅ Sub-second | ❌ Manual refresh | ⚠️ Limited |
-| **Service Health View** | ✅ Built-in | ❌ Separate tools | ❌ No |
-| **Memory Usage** | Low (bounded) | High | Medium |
-| **Keyboard Navigation** | ✅ Vim-like | ❌ Mouse-heavy | ✅ Basic |
-| **Setup Complexity** | Zero config | Complex deployment | Manual setup |
 
 ## Development Status & Roadmap
 
