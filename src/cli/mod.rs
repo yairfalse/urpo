@@ -276,36 +276,66 @@ pub async fn execute(cli: Cli) -> Result<()> {
 async fn start_with_ui(config: Config) -> Result<()> {
     use crate::storage::{StorageManager, fake_spans::FakeSpanGenerator};
     use crate::ui::{App, TerminalUI};
+    use crate::receiver::ReceiverManager;
     use std::sync::Arc;
+    use tokio::sync::mpsc;
     
     // Create storage manager with configured limits
     let storage_manager = StorageManager::new_in_memory(config.max_traces);
     let storage = storage_manager.backend();
     
-    // Start fake span generator in background
+    // Create channel for spans from GRPC receiver
+    let (span_tx, mut span_rx) = mpsc::channel(1000);
+    
+    // Start GRPC and HTTP receivers
+    let receiver_manager = ReceiverManager::new(
+        span_tx,
+        config.grpc_port,
+        config.http_port,
+        config.sampling_rate,
+    );
+    
+    let receiver_handle = tokio::spawn(async move {
+        tracing::info!("Starting OTEL receivers...");
+        if let Err(e) = receiver_manager.start().await {
+            tracing::error!("OTEL receiver failed: {}", e);
+        }
+    });
+    
+    // Spawn task to process spans from receiver and store them
+    let storage_clone = storage.clone();
+    let span_processor_handle = tokio::spawn(async move {
+        while let Some(span) = span_rx.recv().await {
+            if let Err(e) = storage_clone.store_span(span).await {
+                tracing::warn!("Failed to store span from receiver: {}", e);
+            }
+        }
+        tracing::info!("Span processor stopped");
+    });
+    
+    // Start fake span generator in background (for demonstration)
     let generator = Arc::new(FakeSpanGenerator::new());
     let storage_clone = storage.clone();
     let generator_clone = generator.clone();
     
-    // Spawn background task to generate fake spans
     let generator_handle = tokio::spawn(async move {
         let storage = storage_clone;
         loop {
-            // Generate spans continuously
-            match generator_clone.generate_batch(50).await {
+            // Generate spans continuously but less frequently than before
+            match generator_clone.generate_batch(10).await {
                 Ok(spans) => {
                     for span in spans {
                         if let Err(e) = storage.store_span(span).await {
-                            tracing::warn!("Failed to store span: {}", e);
+                            tracing::warn!("Failed to store fake span: {}", e);
                         }
                     }
                 }
                 Err(e) => {
-                    tracing::warn!("Failed to generate spans: {}", e);
+                    tracing::warn!("Failed to generate fake spans: {}", e);
                 }
             }
-            // Wait a bit before generating next batch
-            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+            // Wait longer between fake span generation
+            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
         }
     });
     
@@ -316,7 +346,9 @@ async fn start_with_ui(config: Config) -> Result<()> {
     let mut terminal = TerminalUI::new()?;
     let result = terminal.run(app).await;
     
-    // Stop the generator
+    // Stop all background tasks
+    receiver_handle.abort();
+    span_processor_handle.abort();
     generator_handle.abort();
     
     // Restore terminal on exit
@@ -325,9 +357,64 @@ async fn start_with_ui(config: Config) -> Result<()> {
     result
 }
 
-async fn start_headless(_config: Config) -> Result<()> {
-    // Placeholder for headless startup
-    tracing::info!("Headless mode startup would happen here");
+async fn start_headless(config: Config) -> Result<()> {
+    use crate::storage::StorageManager;
+    use crate::receiver::ReceiverManager;
+    use tokio::sync::mpsc;
+    use tokio::signal;
+    
+    tracing::info!("Starting Urpo in headless mode...");
+    
+    // Create storage manager with configured limits
+    let storage_manager = StorageManager::new_in_memory(config.max_traces);
+    let storage = storage_manager.backend();
+    
+    // Create channel for spans from GRPC receiver
+    let (span_tx, mut span_rx) = mpsc::channel(1000);
+    
+    // Start GRPC and HTTP receivers
+    let receiver_manager = ReceiverManager::new(
+        span_tx,
+        config.grpc_port,
+        config.http_port,
+        config.sampling_rate,
+    );
+    
+    let receiver_handle = tokio::spawn(async move {
+        tracing::info!("Starting OTEL receivers in headless mode...");
+        if let Err(e) = receiver_manager.start().await {
+            tracing::error!("OTEL receiver failed: {}", e);
+        }
+    });
+    
+    // Spawn task to process spans from receiver and store them
+    let span_processor_handle = tokio::spawn(async move {
+        let storage = storage;
+        while let Some(span) = span_rx.recv().await {
+            if let Err(e) = storage.store_span(span).await {
+                tracing::warn!("Failed to store span from receiver: {}", e);
+            }
+        }
+        tracing::info!("Span processor stopped");
+    });
+    
+    tracing::info!("Urpo headless mode ready. Press Ctrl+C to stop.");
+    
+    // Wait for shutdown signal
+    match signal::ctrl_c().await {
+        Ok(()) => {
+            tracing::info!("Shutdown signal received, stopping...");
+        }
+        Err(err) => {
+            tracing::error!("Unable to listen for shutdown signal: {}", err);
+        }
+    }
+    
+    // Stop all background tasks
+    receiver_handle.abort();
+    span_processor_handle.abort();
+    
+    tracing::info!("Urpo stopped");
     Ok(())
 }
 
