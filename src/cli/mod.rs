@@ -61,6 +61,10 @@ pub enum Commands {
         /// Run in headless mode (no UI).
         #[arg(long)]
         headless: bool,
+        
+        /// Enable fake span generation for testing (disabled by default).
+        #[arg(long)]
+        fake_spans: bool,
     },
 
     /// Export traces to a file.
@@ -238,14 +242,14 @@ pub async fn execute(cli: Cli) -> Result<()> {
     cli.init_logging()?;
 
     match cli.command {
-        Some(Commands::Start { headless, .. }) => {
+        Some(Commands::Start { headless, fake_spans, .. }) => {
             let config = cli.load_config().await?;
             if headless {
                 tracing::info!("Starting Urpo in headless mode...");
-                start_headless(config).await
+                start_headless(config, fake_spans).await
             } else {
                 tracing::info!("Starting Urpo with terminal UI...");
-                start_with_ui(config).await
+                start_with_ui(config, fake_spans).await
             }
         }
         Some(Commands::Export { .. }) => {
@@ -268,12 +272,12 @@ pub async fn execute(cli: Cli) -> Result<()> {
             // Default action: start with UI
             let config = cli.load_config().await?;
             tracing::info!("Starting Urpo with terminal UI (default)...");
-            start_with_ui(config).await
+            start_with_ui(config, false).await
         }
     }
 }
 
-async fn start_with_ui(config: Config) -> Result<()> {
+async fn start_with_ui(config: Config, enable_fake_spans: bool) -> Result<()> {
     use crate::storage::{StorageManager, fake_spans::FakeSpanGenerator};
     use crate::ui::{App, TerminalUI};
     use crate::receiver::ReceiverManager;
@@ -295,8 +299,13 @@ async fn start_with_ui(config: Config) -> Result<()> {
         config.sampling_rate,
     );
     
+    tracing::info!(
+        "Starting OTEL receivers on GRPC port {} and HTTP port {}",
+        config.grpc_port,
+        config.http_port
+    );
+    
     let receiver_handle = tokio::spawn(async move {
-        tracing::info!("Starting OTEL receivers...");
         if let Err(e) = receiver_manager.start().await {
             tracing::error!("OTEL receiver failed: {}", e);
         }
@@ -305,39 +314,47 @@ async fn start_with_ui(config: Config) -> Result<()> {
     // Spawn task to process spans from receiver and store them
     let storage_clone = storage.clone();
     let span_processor_handle = tokio::spawn(async move {
+        let mut span_count = 0;
         while let Some(span) = span_rx.recv().await {
+            span_count += 1;
             if let Err(e) = storage_clone.store_span(span).await {
                 tracing::warn!("Failed to store span from receiver: {}", e);
+            } else if span_count % 100 == 0 {
+                tracing::debug!("Processed {} spans from OTEL receiver", span_count);
             }
         }
-        tracing::info!("Span processor stopped");
+        tracing::info!("Span processor stopped after processing {} spans", span_count);
     });
     
-    // Start fake span generator in background (for demonstration)
-    let generator = Arc::new(FakeSpanGenerator::new());
-    let storage_clone = storage.clone();
-    let generator_clone = generator.clone();
-    
-    let generator_handle = tokio::spawn(async move {
-        let storage = storage_clone;
-        loop {
-            // Generate spans continuously but less frequently than before
-            match generator_clone.generate_batch(10).await {
-                Ok(spans) => {
-                    for span in spans {
-                        if let Err(e) = storage.store_span(span).await {
-                            tracing::warn!("Failed to store fake span: {}", e);
+    // Optionally start fake span generator
+    let generator_handle = if enable_fake_spans {
+        tracing::info!("Fake span generation enabled for testing");
+        let generator = Arc::new(FakeSpanGenerator::new());
+        let storage_clone = storage.clone();
+        let generator_clone = generator.clone();
+        
+        Some(tokio::spawn(async move {
+            let storage = storage_clone;
+            loop {
+                match generator_clone.generate_batch(5).await {
+                    Ok(spans) => {
+                        for span in spans {
+                            if let Err(e) = storage.store_span(span).await {
+                                tracing::warn!("Failed to store fake span: {}", e);
+                            }
                         }
                     }
+                    Err(e) => {
+                        tracing::warn!("Failed to generate fake spans: {}", e);
+                    }
                 }
-                Err(e) => {
-                    tracing::warn!("Failed to generate fake spans: {}", e);
-                }
+                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
             }
-            // Wait longer between fake span generation
-            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-        }
-    });
+        }))
+    } else {
+        tracing::info!("Fake span generation disabled. Waiting for real OTEL data on port {}", config.grpc_port);
+        None
+    };
     
     // Create UI app with storage backend
     let app = App::with_storage(storage);
@@ -349,7 +366,9 @@ async fn start_with_ui(config: Config) -> Result<()> {
     // Stop all background tasks
     receiver_handle.abort();
     span_processor_handle.abort();
-    generator_handle.abort();
+    if let Some(handle) = generator_handle {
+        handle.abort();
+    }
     
     // Restore terminal on exit
     terminal.restore()?;
@@ -357,9 +376,10 @@ async fn start_with_ui(config: Config) -> Result<()> {
     result
 }
 
-async fn start_headless(config: Config) -> Result<()> {
-    use crate::storage::StorageManager;
+async fn start_headless(config: Config, enable_fake_spans: bool) -> Result<()> {
+    use crate::storage::{StorageManager, fake_spans::FakeSpanGenerator};
     use crate::receiver::ReceiverManager;
+    use std::sync::Arc;
     use tokio::sync::mpsc;
     use tokio::signal;
     
@@ -380,25 +400,66 @@ async fn start_headless(config: Config) -> Result<()> {
         config.sampling_rate,
     );
     
+    tracing::info!(
+        "Starting OTEL receivers in headless mode on GRPC port {} and HTTP port {}",
+        config.grpc_port,
+        config.http_port
+    );
+    
     let receiver_handle = tokio::spawn(async move {
-        tracing::info!("Starting OTEL receivers in headless mode...");
         if let Err(e) = receiver_manager.start().await {
             tracing::error!("OTEL receiver failed: {}", e);
         }
     });
     
     // Spawn task to process spans from receiver and store them
+    let storage_clone = storage.clone();
     let span_processor_handle = tokio::spawn(async move {
-        let storage = storage;
+        let storage = storage_clone;
+        let mut span_count = 0;
         while let Some(span) = span_rx.recv().await {
+            span_count += 1;
             if let Err(e) = storage.store_span(span).await {
                 tracing::warn!("Failed to store span from receiver: {}", e);
+            } else if span_count % 100 == 0 {
+                tracing::info!("Processed {} spans from OTEL receiver", span_count);
             }
         }
-        tracing::info!("Span processor stopped");
+        tracing::info!("Span processor stopped after processing {} spans", span_count);
     });
     
+    // Optionally start fake span generator  
+    let generator_handle = if enable_fake_spans {
+        tracing::info!("Fake span generation enabled for testing in headless mode");
+        let generator = Arc::new(FakeSpanGenerator::new());
+        let storage_clone = storage.clone();
+        let generator_clone = generator.clone();
+        
+        Some(tokio::spawn(async move {
+            let storage = storage_clone;
+            loop {
+                match generator_clone.generate_batch(5).await {
+                    Ok(spans) => {
+                        for span in spans {
+                            if let Err(e) = storage.store_span(span).await {
+                                tracing::warn!("Failed to store fake span: {}", e);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to generate fake spans: {}", e);
+                    }
+                }
+                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+            }
+        }))
+    } else {
+        tracing::info!("Fake span generation disabled. Waiting for real OTEL data on port {}", config.grpc_port);
+        None
+    };
+    
     tracing::info!("Urpo headless mode ready. Press Ctrl+C to stop.");
+    tracing::info!("Send OTEL trace data to localhost:{} (GRPC) or localhost:{} (HTTP)", config.grpc_port, config.http_port);
     
     // Wait for shutdown signal
     match signal::ctrl_c().await {
@@ -413,6 +474,9 @@ async fn start_headless(config: Config) -> Result<()> {
     // Stop all background tasks
     receiver_handle.abort();
     span_processor_handle.abort();
+    if let Some(handle) = generator_handle {
+        handle.abort();
+    }
     
     tracing::info!("Urpo stopped");
     Ok(())

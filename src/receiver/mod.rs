@@ -96,23 +96,67 @@ impl TraceService for GrpcTraceService {
     ) -> std::result::Result<Response<ExportTraceServiceResponse>, Status> {
         let export_request = request.into_inner();
         let mut spans = Vec::new();
+        let mut total_resource_spans = 0;
+        let mut total_scope_spans = 0;
+        let mut total_spans = 0;
 
         // Process resource spans
         for resource_spans in export_request.resource_spans {
+            total_resource_spans += 1;
             let resource = resource_spans.resource.unwrap_or_default();
             let service_name = extract_service_name(&resource.attributes);
+            
+            tracing::debug!(
+                "Processing resource spans for service: {}, scope_spans count: {}",
+                service_name,
+                resource_spans.scope_spans.len()
+            );
 
             for scope_spans in resource_spans.scope_spans {
+                total_scope_spans += 1;
+                let scope_name = scope_spans.scope
+                    .as_ref()
+                    .map(|s| s.name.as_str())
+                    .unwrap_or("unknown");
+                
+                tracing::debug!(
+                    "Processing scope: {}, spans count: {}",
+                    scope_name,
+                    scope_spans.spans.len()
+                );
+                
                 for otel_span in scope_spans.spans {
+                    total_spans += 1;
+                    let span_name = otel_span.name.clone();
+                    let trace_id_hex = hex::encode(&otel_span.trace_id);
+                    let span_id_hex = hex::encode(&otel_span.span_id);
+                    
                     match convert_otel_span(otel_span, service_name.clone()) {
-                        Ok(span) => spans.push(span),
+                        Ok(span) => {
+                            tracing::debug!(
+                                "Converted span: service={}, operation={}, trace_id={}, span_id={}",
+                                service_name, span_name, trace_id_hex, span_id_hex
+                            );
+                            spans.push(span);
+                        }
                         Err(e) => {
-                            tracing::warn!("Failed to convert span: {}", e);
+                            tracing::warn!(
+                                "Failed to convert span: service={}, operation={}, trace_id={}, span_id={}, error={}",
+                                service_name, span_name, trace_id_hex, span_id_hex, e
+                            );
                         }
                     }
                 }
             }
         }
+
+        tracing::info!(
+            "Received OTEL export request: {} resource spans, {} scope spans, {} spans total, {} successfully converted",
+            total_resource_spans,
+            total_scope_spans,
+            total_spans,
+            spans.len()
+        );
 
         // Process the spans
         if let Err(e) = self.receiver.process_spans(spans).await {
@@ -145,16 +189,37 @@ fn convert_otel_span(
     otel_span: opentelemetry_proto::tonic::trace::v1::Span,
     service_name: String,
 ) -> Result<UrpoSpan> {
-    let trace_id = TraceId::new(hex::encode(&otel_span.trace_id))?;
-    let span_id = SpanId::new(hex::encode(&otel_span.span_id))?;
+    // OTEL trace IDs are 16 bytes (32 hex chars), span IDs are 8 bytes (16 hex chars)
+    let trace_id_hex = hex::encode(&otel_span.trace_id);
+    let span_id_hex = hex::encode(&otel_span.span_id);
+    
+    // Validate IDs are not empty
+    if trace_id_hex.is_empty() || trace_id_hex == "00000000000000000000000000000000" {
+        return Err(UrpoError::InvalidSpan("Invalid trace ID: empty or all zeros".to_string()));
+    }
+    if span_id_hex.is_empty() || span_id_hex == "0000000000000000" {
+        return Err(UrpoError::InvalidSpan("Invalid span ID: empty or all zeros".to_string()));
+    }
+    
+    let trace_id = TraceId::new(trace_id_hex)?;
+    let span_id = SpanId::new(span_id_hex)?;
     
     let parent_span_id = if otel_span.parent_span_id.is_empty() {
         None
     } else {
-        Some(SpanId::new(hex::encode(&otel_span.parent_span_id))?)
+        let parent_hex = hex::encode(&otel_span.parent_span_id);
+        if parent_hex != "0000000000000000" {
+            Some(SpanId::new(parent_hex)?)
+        } else {
+            None
+        }
     };
 
-    let service_name = ServiceName::new(service_name)?;
+    let service_name = if service_name.is_empty() {
+        ServiceName::new("unknown".to_string())?
+    } else {
+        ServiceName::new(service_name)?
+    };
     
     // Map span kind to an attribute instead
     let kind_str = match otel_span.kind() {

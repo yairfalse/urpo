@@ -53,6 +53,8 @@ tempfile = "3.0"
 wiremock = "0.6"
 criterion = "0.5"
 pretty_assertions = "1.4"
+opentelemetry-otlp = { version = "0.26", features = ["tonic", "trace"] }
+opentelemetry_sdk = { version = "0.26", features = ["rt-tokio"] }
 
 [build-dependencies]
 tonic-build = "0.12"

@@ -21,8 +21,9 @@ impl TraceId {
         if id.is_empty() {
             return Err(UrpoError::InvalidSpan("TraceId cannot be empty".to_string()));
         }
+        // OTEL trace IDs are 16 bytes = 32 hex characters
         if id.len() > 32 {
-            return Err(UrpoError::InvalidSpan("TraceId cannot exceed 32 characters".to_string()));
+            return Err(UrpoError::InvalidSpan(format!("TraceId cannot exceed 32 characters, got {}", id.len())));
         }
         Ok(TraceId(id))
     }
@@ -44,8 +45,9 @@ impl SpanId {
         if id.is_empty() {
             return Err(UrpoError::InvalidSpan("SpanId cannot be empty".to_string()));
         }
+        // OTEL span IDs are 8 bytes = 16 hex characters
         if id.len() > 16 {
-            return Err(UrpoError::InvalidSpan("SpanId cannot exceed 16 characters".to_string()));
+            return Err(UrpoError::InvalidSpan(format!("SpanId cannot exceed 16 characters, got {}", id.len())));
         }
         Ok(SpanId(id))
     }
