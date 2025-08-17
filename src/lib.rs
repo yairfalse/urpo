@@ -44,6 +44,7 @@
 
 pub mod cli;
 pub mod core;
+pub mod monitoring;
 pub mod receiver;
 pub mod storage;
 pub mod ui;

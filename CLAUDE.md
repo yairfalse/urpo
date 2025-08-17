@@ -1,5 +1,12 @@
-# Rust Best Practices for Claude
+# URPO: Rust-Only Project Guidelines for Claude
+**THIS IS A RUST PROJECT - NO GO, NO OTHER LANGUAGES**
 **Essential Guidelines for Production-Ready Rust Code**
+
+## ⚠️ CRITICAL: Language Requirements
+- **THIS IS A RUST PROJECT** - All code MUST be in Rust
+- **NO GO CODE** - Never generate Go code (no `map[string]interface{}`, no `func`, no `:=`)  
+- **NO OTHER LANGUAGES** - Only Rust, TOML (for Cargo), and YAML (for CI)
+- **STRONG TYPING ONLY** - Never use dynamic typing patterns
 
 ## Core Principles
 
@@ -22,8 +29,7 @@ pub enum AppError {
     Parse { message: String },
 }
 
-pub type Result<T> = std::result::Result<T, AppError>;
-
+pub type Result<T> = std::result::Result<T, AppError>
 // ✅ Never unwrap in library code
 pub fn read_config(path: &Path) -> Result<Config> {
     let contents = std::fs::read_to_string(path)?;
@@ -411,3 +417,15 @@ jobs:
 8. **Consistent formatting** - Use `rustfmt` and `clippy`
 
 **Remember**: Write code that's maintainable, performant, and correct from day one!
+
+# important-instruction-reminders
+Do what has been asked; nothing more, nothing less.
+NEVER create files unless they're absolutely necessary for achieving your goal.
+ALWAYS prefer editing an existing file to creating a new one.
+NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.
+
+## LANGUAGE ENFORCEMENT
+**URPO IS A RUST PROJECT** - Every single line of code must be Rust
+- If you see ANY Go patterns (map[string]interface{}, func, :=, etc.) - STOP and rewrite in Rust
+- Use strong typing with structs and enums - NEVER dynamic typing
+- Follow the Rust patterns in this document EXACTLY

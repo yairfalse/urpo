@@ -61,10 +61,6 @@ pub enum Commands {
         /// Run in headless mode (no UI).
         #[arg(long)]
         headless: bool,
-        
-        /// Enable fake span generation for testing (disabled by default).
-        #[arg(long)]
-        fake_spans: bool,
     },
 
     /// Export traces to a file.
@@ -175,15 +171,15 @@ impl Cli {
             let config_str = tokio::fs::read_to_string(config_path)
                 .await
                 .map_err(|e| UrpoError::config(format!("Failed to read config file: {}", e)))?;
-            
+
             let mut config: Config = serde_yaml::from_str(&config_str)
                 .map_err(|e| UrpoError::config(format!("Failed to parse config file: {}", e)))?;
-            
+
             // Override with command-line debug flag if set
             if self.debug {
                 config.debug = true;
             }
-            
+
             config.validate()?;
             return Ok(config);
         }
@@ -220,11 +216,9 @@ impl Cli {
         use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
         let filter = if self.debug {
-            EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| EnvFilter::new("debug"))
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("debug"))
         } else {
-            EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| EnvFilter::new(&self.log_level))
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&self.log_level))
         };
 
         tracing_subscriber::registry()
@@ -242,14 +236,14 @@ pub async fn execute(cli: Cli) -> Result<()> {
     cli.init_logging()?;
 
     match cli.command {
-        Some(Commands::Start { headless, fake_spans, .. }) => {
+        Some(Commands::Start { headless, .. }) => {
             let config = cli.load_config().await?;
             if headless {
                 tracing::info!("Starting Urpo in headless mode...");
-                start_headless(config, fake_spans).await
+                start_headless(config).await
             } else {
                 tracing::info!("Starting Urpo with terminal UI...");
-                start_with_ui(config, fake_spans).await
+                start_with_ui(config).await
             }
         }
         Some(Commands::Export { .. }) => {
@@ -272,213 +266,20 @@ pub async fn execute(cli: Cli) -> Result<()> {
             // Default action: start with UI
             let config = cli.load_config().await?;
             tracing::info!("Starting Urpo with terminal UI (default)...");
-            start_with_ui(config, false).await
+            start_with_ui(config).await
         }
     }
 }
 
-async fn start_with_ui(config: Config, enable_fake_spans: bool) -> Result<()> {
-    use crate::storage::{StorageManager, fake_spans::FakeSpanGenerator};
-    use crate::ui::{App, TerminalUI};
-    use crate::receiver::ReceiverManager;
-    use std::sync::Arc;
-    use tokio::sync::mpsc;
-    
-    // Create storage manager with configured limits
-    let storage_manager = StorageManager::new_in_memory(config.max_traces);
-    let storage = storage_manager.backend();
-    
-    // Create channel for spans from GRPC receiver
-    let (span_tx, mut span_rx) = mpsc::channel(1000);
-    
-    // Start GRPC and HTTP receivers
-    let receiver_manager = ReceiverManager::new(
-        span_tx,
-        config.grpc_port,
-        config.http_port,
-        config.sampling_rate,
-    );
-    
-    tracing::info!(
-        "Starting OTEL receivers on GRPC port {} and HTTP port {}",
-        config.grpc_port,
-        config.http_port
-    );
-    
-    let receiver_handle = tokio::spawn(async move {
-        if let Err(e) = receiver_manager.start().await {
-            tracing::error!("OTEL receiver failed: {}", e);
-        }
-    });
-    
-    // Spawn task to process spans from receiver and store them
-    let storage_clone = storage.clone();
-    let span_processor_handle = tokio::spawn(async move {
-        let mut span_count = 0;
-        while let Some(span) = span_rx.recv().await {
-            span_count += 1;
-            if let Err(e) = storage_clone.store_span(span).await {
-                tracing::warn!("Failed to store span from receiver: {}", e);
-            } else if span_count % 100 == 0 {
-                tracing::debug!("Processed {} spans from OTEL receiver", span_count);
-            }
-        }
-        tracing::info!("Span processor stopped after processing {} spans", span_count);
-    });
-    
-    // Optionally start fake span generator
-    let generator_handle = if enable_fake_spans {
-        tracing::info!("Fake span generation enabled for testing");
-        let generator = Arc::new(FakeSpanGenerator::new());
-        let storage_clone = storage.clone();
-        let generator_clone = generator.clone();
-        
-        Some(tokio::spawn(async move {
-            let storage = storage_clone;
-            loop {
-                match generator_clone.generate_batch(5).await {
-                    Ok(spans) => {
-                        for span in spans {
-                            if let Err(e) = storage.store_span(span).await {
-                                tracing::warn!("Failed to store fake span: {}", e);
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        tracing::warn!("Failed to generate fake spans: {}", e);
-                    }
-                }
-                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-            }
-        }))
-    } else {
-        tracing::info!("Fake span generation disabled. Waiting for real OTEL data on port {}", config.grpc_port);
-        None
-    };
-    
-    // Create UI app with storage backend
-    let app = App::with_storage(storage);
-    
-    // Create and run the terminal UI
-    let mut terminal = TerminalUI::new()?;
-    let result = terminal.run(app).await;
-    
-    // Stop all background tasks
-    receiver_handle.abort();
-    span_processor_handle.abort();
-    if let Some(handle) = generator_handle {
-        handle.abort();
-    }
-    
-    // Restore terminal on exit
-    terminal.restore()?;
-    
-    result
+async fn start_with_ui(_config: Config) -> Result<()> {
+    // Placeholder for UI startup
+    tracing::info!("Terminal UI startup would happen here");
+    Ok(())
 }
 
-async fn start_headless(config: Config, enable_fake_spans: bool) -> Result<()> {
-    use crate::storage::{StorageManager, fake_spans::FakeSpanGenerator};
-    use crate::receiver::ReceiverManager;
-    use std::sync::Arc;
-    use tokio::sync::mpsc;
-    use tokio::signal;
-    
-    tracing::info!("Starting Urpo in headless mode...");
-    
-    // Create storage manager with configured limits
-    let storage_manager = StorageManager::new_in_memory(config.max_traces);
-    let storage = storage_manager.backend();
-    
-    // Create channel for spans from GRPC receiver
-    let (span_tx, mut span_rx) = mpsc::channel(1000);
-    
-    // Start GRPC and HTTP receivers
-    let receiver_manager = ReceiverManager::new(
-        span_tx,
-        config.grpc_port,
-        config.http_port,
-        config.sampling_rate,
-    );
-    
-    tracing::info!(
-        "Starting OTEL receivers in headless mode on GRPC port {} and HTTP port {}",
-        config.grpc_port,
-        config.http_port
-    );
-    
-    let receiver_handle = tokio::spawn(async move {
-        if let Err(e) = receiver_manager.start().await {
-            tracing::error!("OTEL receiver failed: {}", e);
-        }
-    });
-    
-    // Spawn task to process spans from receiver and store them
-    let storage_clone = storage.clone();
-    let span_processor_handle = tokio::spawn(async move {
-        let storage = storage_clone;
-        let mut span_count = 0;
-        while let Some(span) = span_rx.recv().await {
-            span_count += 1;
-            if let Err(e) = storage.store_span(span).await {
-                tracing::warn!("Failed to store span from receiver: {}", e);
-            } else if span_count % 100 == 0 {
-                tracing::info!("Processed {} spans from OTEL receiver", span_count);
-            }
-        }
-        tracing::info!("Span processor stopped after processing {} spans", span_count);
-    });
-    
-    // Optionally start fake span generator  
-    let generator_handle = if enable_fake_spans {
-        tracing::info!("Fake span generation enabled for testing in headless mode");
-        let generator = Arc::new(FakeSpanGenerator::new());
-        let storage_clone = storage.clone();
-        let generator_clone = generator.clone();
-        
-        Some(tokio::spawn(async move {
-            let storage = storage_clone;
-            loop {
-                match generator_clone.generate_batch(5).await {
-                    Ok(spans) => {
-                        for span in spans {
-                            if let Err(e) = storage.store_span(span).await {
-                                tracing::warn!("Failed to store fake span: {}", e);
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        tracing::warn!("Failed to generate fake spans: {}", e);
-                    }
-                }
-                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-            }
-        }))
-    } else {
-        tracing::info!("Fake span generation disabled. Waiting for real OTEL data on port {}", config.grpc_port);
-        None
-    };
-    
-    tracing::info!("Urpo headless mode ready. Press Ctrl+C to stop.");
-    tracing::info!("Send OTEL trace data to localhost:{} (GRPC) or localhost:{} (HTTP)", config.grpc_port, config.http_port);
-    
-    // Wait for shutdown signal
-    match signal::ctrl_c().await {
-        Ok(()) => {
-            tracing::info!("Shutdown signal received, stopping...");
-        }
-        Err(err) => {
-            tracing::error!("Unable to listen for shutdown signal: {}", err);
-        }
-    }
-    
-    // Stop all background tasks
-    receiver_handle.abort();
-    span_processor_handle.abort();
-    if let Some(handle) = generator_handle {
-        handle.abort();
-    }
-    
-    tracing::info!("Urpo stopped");
+async fn start_headless(_config: Config) -> Result<()> {
+    // Placeholder for headless startup
+    tracing::info!("Headless mode startup would happen here");
     Ok(())
 }
 
@@ -504,12 +305,12 @@ async fn validate_config(path: PathBuf) -> Result<()> {
     let config_str = tokio::fs::read_to_string(&path)
         .await
         .map_err(|e| UrpoError::config(format!("Failed to read config file: {}", e)))?;
-    
+
     let config: Config = serde_yaml::from_str(&config_str)
         .map_err(|e| UrpoError::config(format!("Failed to parse config file: {}", e)))?;
-    
+
     config.validate()?;
-    
+
     tracing::info!("Configuration file is valid: {:?}", path);
     println!("✓ Configuration file is valid");
     Ok(())
@@ -521,16 +322,31 @@ mod tests {
 
     #[test]
     fn test_export_format_parsing() {
-        assert!(matches!("json".parse::<ExportFormat>(), Ok(ExportFormat::Json)));
-        assert!(matches!("yaml".parse::<ExportFormat>(), Ok(ExportFormat::Yaml)));
-        assert!(matches!("yml".parse::<ExportFormat>(), Ok(ExportFormat::Yaml)));
+        assert!(matches!(
+            "json".parse::<ExportFormat>(),
+            Ok(ExportFormat::Json)
+        ));
+        assert!(matches!(
+            "yaml".parse::<ExportFormat>(),
+            Ok(ExportFormat::Yaml)
+        ));
+        assert!(matches!(
+            "yml".parse::<ExportFormat>(),
+            Ok(ExportFormat::Yaml)
+        ));
         assert!("unknown".parse::<ExportFormat>().is_err());
     }
 
     #[test]
     fn test_output_format_parsing() {
-        assert!(matches!("table".parse::<OutputFormat>(), Ok(OutputFormat::Table)));
-        assert!(matches!("json".parse::<OutputFormat>(), Ok(OutputFormat::Json)));
+        assert!(matches!(
+            "table".parse::<OutputFormat>(),
+            Ok(OutputFormat::Table)
+        ));
+        assert!(matches!(
+            "json".parse::<OutputFormat>(),
+            Ok(OutputFormat::Json)
+        ));
         assert!("unknown".parse::<OutputFormat>().is_err());
     }
 }

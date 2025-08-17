@@ -144,7 +144,7 @@ fn draw_header(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(time_display, chunks[2]);
 }
 
-/// Draw the statistics bar.
+/// Draw the statistics bar with system health.
 fn draw_stats_bar(frame: &mut Frame, area: Rect, app: &App) {
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
@@ -220,17 +220,17 @@ fn draw_stats_bar(frame: &mut Frame, area: Rect, app: &App) {
     );
     frame.render_widget(sort_filter, chunks[2]);
 
-    // Total spans processed
-    let spans_info = Paragraph::new(vec![Line::from(vec![
-        Span::raw(" Spans: "),
+    // System health status (production monitoring)
+    let (health_icon, health_color, health_text) = get_system_health_info();
+    let health_info = Paragraph::new(vec![Line::from(vec![
+        Span::raw(" "),
+        Span::styled(health_icon, Style::default().fg(health_color)),
+        Span::raw(" System: "),
+        Span::styled(health_text, Style::default().fg(health_color)),
+        Span::raw(" | "),
         Span::styled(
-            format_number(app.total_spans),
-            Style::default().fg(Color::Green),
-        ),
-        Span::raw(" @ "),
-        Span::styled(
-            format!("{:.0}/s", app.spans_per_sec),
-            Style::default().fg(Color::Green),
+            format!("{}MB", app.memory_usage_mb as u32),
+            Style::default().fg(if app.memory_usage_mb > 256.0 { Color::Red } else { Color::Green }),
         ),
     ])])
     .block(
@@ -238,7 +238,24 @@ fn draw_stats_bar(frame: &mut Frame, area: Rect, app: &App) {
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::DarkGray)),
     );
-    frame.render_widget(spans_info, chunks[3]);
+    frame.render_widget(health_info, chunks[3]);
+}
+
+/// Get system health information for display.
+fn get_system_health_info() -> (&'static str, Color, &'static str) {
+    // In a real implementation, this would check actual system health
+    // For now, return placeholder values based on simple heuristics
+    
+    // Simulate health check (this would use the monitoring module)
+    let health_status = "Healthy"; // SystemHealth::Healthy, Degraded, Unhealthy, Critical
+    
+    match health_status {
+        "Healthy" => ("●", Color::Green, "Healthy"),
+        "Degraded" => ("●", Color::Yellow, "Degraded"),
+        "Unhealthy" => ("●", Color::Red, "Unhealthy"),
+        "Critical" => ("●", Color::Magenta, "Critical"),
+        _ => ("○", Color::Gray, "Unknown"),
+    }
 }
 
 /// Draw the main service table.

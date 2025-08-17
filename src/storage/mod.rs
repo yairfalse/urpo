@@ -5,13 +5,15 @@
 
 pub mod fake_spans;
 pub mod aggregator;
+pub mod performance;
+pub mod degradation;
 
 use crate::core::{Result, ServiceMetrics, ServiceName, Span, SpanId, TraceId};
 use dashmap::DashMap;
-use std::collections::VecDeque;
-use std::sync::Arc;
-use std::time::SystemTime;
-use tokio::sync::RwLock;
+use std::collections::{VecDeque, HashMap};
+use std::sync::{Arc, atomic::{AtomicU64, AtomicUsize, Ordering}};
+use std::time::{SystemTime, Duration, Instant};
+use tokio::sync::{RwLock, Mutex};
 
 /// Trait for storage backend implementations.
 #[async_trait::async_trait]
@@ -40,9 +42,24 @@ pub trait StorageBackend: Send + Sync {
 
     /// Remove old spans to enforce storage limits.
     async fn enforce_limits(&self) -> Result<usize>;
+    
+    /// Get list of active service names.
+    async fn list_services(&self) -> Result<Vec<ServiceName>>;
+    
+    /// Get detailed storage statistics.
+    async fn get_storage_stats(&self) -> Result<StorageStats>;
+    
+    /// Perform emergency cleanup.
+    async fn emergency_cleanup(&self) -> Result<usize>;
+    
+    /// Check storage health.
+    fn get_health(&self) -> StorageHealth;
+    
+    /// Enable downcasting for concrete types.
+    fn as_any(&self) -> &dyn std::any::Any;
 }
 
-/// Storage statistics.
+/// Storage statistics with comprehensive monitoring.
 #[derive(Debug, Clone)]
 pub struct StorageStats {
     /// Total number of traces.
@@ -53,13 +70,73 @@ pub struct StorageStats {
     pub service_count: usize,
     /// Estimated memory usage in bytes.
     pub memory_bytes: usize,
+    /// Memory usage in MB for display.
+    pub memory_mb: f64,
+    /// Memory pressure level (0.0 = normal, 1.0 = critical).
+    pub memory_pressure: f64,
     /// Oldest span timestamp.
     pub oldest_span: Option<SystemTime>,
     /// Newest span timestamp.
     pub newest_span: Option<SystemTime>,
+    /// Spans processed per second.
+    pub processing_rate: f64,
+    /// Error rate for processing.
+    pub error_rate: f64,
+    /// Number of cleanup operations performed.
+    pub cleanup_count: u64,
+    /// Last cleanup timestamp.
+    pub last_cleanup: Option<SystemTime>,
+    /// Storage health status.
+    pub health_status: StorageHealth,
 }
 
-/// In-memory storage implementation with bounded capacity.
+/// Storage health status.
+#[derive(Debug, Clone, PartialEq)]
+pub enum StorageHealth {
+    /// Healthy operation.
+    Healthy,
+    /// Warning - approaching limits.
+    Warning,
+    /// Critical - memory pressure.
+    Critical,
+    /// Emergency - dropping data.
+    Emergency,
+}
+
+/// Memory cleanup configuration.
+#[derive(Debug, Clone)]
+pub struct CleanupConfig {
+    /// Maximum memory usage in bytes before cleanup.
+    pub max_memory_bytes: usize,
+    /// Warning threshold (0.0 - 1.0).
+    pub warning_threshold: f64,
+    /// Critical threshold (0.0 - 1.0).
+    pub critical_threshold: f64,
+    /// Emergency threshold (0.0 - 1.0).
+    pub emergency_threshold: f64,
+    /// Span retention period.
+    pub retention_period: Duration,
+    /// Cleanup interval.
+    pub cleanup_interval: Duration,
+    /// Minimum spans to keep per service.
+    pub min_spans_per_service: usize,
+}
+
+impl Default for CleanupConfig {
+    fn default() -> Self {
+        Self {
+            max_memory_bytes: 512 * 1024 * 1024, // 512MB
+            warning_threshold: 0.7,
+            critical_threshold: 0.85,
+            emergency_threshold: 0.95,
+            retention_period: Duration::from_secs(3600), // 1 hour
+            cleanup_interval: Duration::from_secs(30),
+            min_spans_per_service: 100,
+        }
+    }
+}
+
+/// Production-ready in-memory storage with advanced memory management.
 pub struct InMemoryStorage {
     /// Spans indexed by span ID.
     spans: Arc<DashMap<SpanId, Span>>,
@@ -73,10 +150,35 @@ pub struct InMemoryStorage {
     max_spans: usize,
     /// Maximum spans per service.
     max_spans_per_service: usize,
+    /// Memory cleanup configuration.
+    cleanup_config: CleanupConfig,
+    /// Performance counters.
+    counters: StorageCounters,
+    /// Last cleanup operation time.
+    last_cleanup: Arc<Mutex<Instant>>,
+    /// Active service names for efficient listing.
+    active_services: Arc<RwLock<HashMap<ServiceName, SystemTime>>>,
+}
+
+/// Performance and monitoring counters.
+#[derive(Debug)]
+struct StorageCounters {
+    /// Total spans processed.
+    spans_processed: AtomicU64,
+    /// Processing errors.
+    processing_errors: AtomicU64,
+    /// Cleanup operations performed.
+    cleanup_operations: AtomicU64,
+    /// Memory bytes estimate.
+    memory_bytes: AtomicUsize,
+    /// Spans evicted.
+    spans_evicted: AtomicU64,
+    /// Start time for rate calculations.
+    start_time: Instant,
 }
 
 impl InMemoryStorage {
-    /// Create a new in-memory storage with specified limits.
+    /// Create a new production-ready in-memory storage with specified limits.
     pub fn new(max_spans: usize) -> Self {
         Self {
             spans: Arc::new(DashMap::new()),
@@ -85,18 +187,40 @@ impl InMemoryStorage {
             span_order: Arc::new(RwLock::new(VecDeque::new())),
             max_spans,
             max_spans_per_service: max_spans / 10, // Allow each service ~10% of total capacity
+            cleanup_config: CleanupConfig::default(),
+            counters: StorageCounters {
+                spans_processed: AtomicU64::new(0),
+                processing_errors: AtomicU64::new(0),
+                cleanup_operations: AtomicU64::new(0),
+                memory_bytes: AtomicUsize::new(0),
+                spans_evicted: AtomicU64::new(0),
+                start_time: Instant::now(),
+            },
+            last_cleanup: Arc::new(Mutex::new(Instant::now())),
+            active_services: Arc::new(RwLock::new(HashMap::new())),
         }
     }
+    
+    /// Create storage with custom cleanup configuration.
+    pub fn with_config(max_spans: usize, cleanup_config: CleanupConfig) -> Self {
+        let mut storage = Self::new(max_spans);
+        storage.cleanup_config = cleanup_config;
+        storage
+    }
 
-    /// Remove the oldest spans to stay within limits.
+    /// Production-grade span eviction with memory tracking.
     async fn evict_oldest_spans(&self, count: usize) -> usize {
         let mut span_order = self.span_order.write().await;
         let mut removed = 0;
+        let mut memory_freed = 0;
 
         for _ in 0..count {
             if let Some((_, span_id)) = span_order.pop_front() {
                 // Remove from main storage
                 if let Some((_, span)) = self.spans.remove(&span_id) {
+                    // Estimate memory freed
+                    memory_freed += self.estimate_span_memory(&span);
+                    
                     // Remove from trace index
                     if let Some(mut trace_spans) = self.traces.get_mut(&span.trace_id) {
                         trace_spans.retain(|id| id != &span_id);
@@ -121,29 +245,297 @@ impl InMemoryStorage {
                 break;
             }
         }
+        
+        // Update memory tracking
+        self.counters.memory_bytes.fetch_sub(memory_freed, Ordering::Relaxed);
+        self.counters.spans_evicted.fetch_add(removed as u64, Ordering::Relaxed);
+
+        if removed > 0 {
+            tracing::debug!(
+                "Evicted {} spans, freed ~{}KB memory", 
+                removed, 
+                memory_freed / 1024
+            );
+        }
 
         removed
     }
+    
+    /// Estimate memory usage of a span in bytes.
+    fn estimate_span_memory(&self, span: &Span) -> usize {
+        // Conservative estimate including overhead
+        let base_size = std::mem::size_of::<Span>();
+        let string_sizes = span.trace_id.as_str().len() +
+                          span.span_id.as_str().len() +
+                          span.service_name.as_str().len() +
+                          span.operation_name.len();
+        let tags_size = span.tags.iter().map(|(k, v)| k.len() + v.len()).sum::<usize>();
+        
+        base_size + string_sizes + tags_size + 200 // 200 bytes overhead
+    }
 
-    /// Enforce per-service limits.
+    /// Enforce per-service limits with memory awareness.
     async fn enforce_service_limits(&self) {
         for mut entry in self.services.iter_mut() {
+            let service_name = entry.key().clone();
             let service_spans = entry.value_mut();
+            
             while service_spans.len() > self.max_spans_per_service {
                 if let Some((_, old_span_id)) = service_spans.pop_front() {
                     // Remove from main storage
                     if let Some((_, span)) = self.spans.remove(&old_span_id) {
+                        // Update memory tracking
+                        let memory_freed = self.estimate_span_memory(&span);
+                        self.counters.memory_bytes.fetch_sub(memory_freed, Ordering::Relaxed);
+                        
                         // Remove from trace index
                         if let Some(mut trace_spans) = self.traces.get_mut(&span.trace_id) {
                             trace_spans.retain(|id| id != &old_span_id);
+                            if trace_spans.is_empty() {
+                                drop(trace_spans);
+                                self.traces.remove(&span.trace_id);
+                            }
                         }
                         
                         // Remove from span order
                         let mut span_order = self.span_order.write().await;
                         span_order.retain(|(_, id)| id != &old_span_id);
+                        
+                        self.counters.spans_evicted.fetch_add(1, Ordering::Relaxed);
                     }
                 }
             }
+            
+            // Keep service active if it has recent spans
+            if !service_spans.is_empty() {
+                let latest_time = service_spans.back().map(|(t, _)| *t).unwrap_or(SystemTime::now());
+                self.active_services.write().await.insert(service_name, latest_time);
+            }
+        }
+    }
+    
+    /// Aggressive cleanup for memory pressure situations.
+    async fn emergency_cleanup(&self) -> Result<usize> {
+        let mut removed = 0;
+        
+        // 1. Remove expired spans based on retention period
+        let cutoff_time = SystemTime::now() - self.cleanup_config.retention_period;
+        removed += self.cleanup_expired_spans(cutoff_time).await;
+        
+        // 2. Remove incomplete traces (orphaned spans)
+        removed += self.cleanup_incomplete_traces().await;
+        
+        // 3. Remove inactive services
+        removed += self.cleanup_inactive_services().await;
+        
+        // 4. If still over limit, do aggressive LRU eviction
+        let current_memory = self.counters.memory_bytes.load(Ordering::Relaxed);
+        if current_memory > self.cleanup_config.max_memory_bytes {
+            let target_memory = (self.cleanup_config.max_memory_bytes as f64 * 0.8) as usize;
+            let spans_to_remove = ((current_memory - target_memory) / 1024).max(100); // Rough estimate
+            removed += self.evict_oldest_spans(spans_to_remove).await;
+        }
+        
+        self.counters.cleanup_operations.fetch_add(1, Ordering::Relaxed);
+        
+        if removed > 0 {
+            tracing::info!(
+                "Emergency cleanup completed: removed {} spans, memory: {}MB",
+                removed,
+                self.counters.memory_bytes.load(Ordering::Relaxed) / 1024 / 1024
+            );
+        }
+        
+        Ok(removed)
+    }
+    
+    /// Remove spans older than the retention period.
+    async fn cleanup_expired_spans(&self, cutoff_time: SystemTime) -> usize {
+        let mut span_order = self.span_order.write().await;
+        let mut removed = 0;
+        
+        while let Some((timestamp, _span_id)) = span_order.front() {
+            if *timestamp < cutoff_time {
+                let (_, span_id) = span_order.pop_front().unwrap();
+                if let Some((_, span)) = self.spans.remove(&span_id) {
+                    // Remove from all indices
+                    self.remove_span_from_indices(&span, &span_id).await;
+                    removed += 1;
+                }
+            } else {
+                break; // Spans are ordered by time
+            }
+        }
+        
+        removed
+    }
+    
+    /// Remove incomplete traces (traces with only one span that's been around too long).
+    async fn cleanup_incomplete_traces(&self) -> usize {
+        let mut removed = 0;
+        let cutoff = SystemTime::now() - Duration::from_secs(300); // 5 minutes
+        
+        let traces_to_check: Vec<_> = self.traces.iter()
+            .filter(|entry| entry.value().len() == 1)
+            .map(|entry| (entry.key().clone(), entry.value()[0].clone()))
+            .collect();
+        
+        for (_trace_id, span_id) in traces_to_check {
+            if let Some(span) = self.spans.get(&span_id) {
+                if span.start_time < cutoff {
+                    drop(span);
+                    if let Some((_, span)) = self.spans.remove(&span_id) {
+                        self.remove_span_from_indices(&span, &span_id).await;
+                        removed += 1;
+                    }
+                }
+            }
+        }
+        
+        removed
+    }
+    
+    /// Remove services that haven't seen activity recently.
+    async fn cleanup_inactive_services(&self) -> usize {
+        let mut removed = 0;
+        let cutoff = SystemTime::now() - Duration::from_secs(900); // 15 minutes
+        
+        let inactive_services: Vec<_> = {
+            let active_services = self.active_services.read().await;
+            active_services.iter()
+                .filter(|(_, &last_seen)| last_seen < cutoff)
+                .map(|(service, _)| service.clone())
+                .collect()
+        };
+        
+        for service_name in inactive_services {
+            if let Some((_, service_spans)) = self.services.remove(&service_name) {
+                for (_, span_id) in service_spans {
+                    if let Some((_, span)) = self.spans.remove(&span_id) {
+                        self.remove_span_from_indices(&span, &span_id).await;
+                        removed += 1;
+                    }
+                }
+                
+                // Remove from active services
+                self.active_services.write().await.remove(&service_name);
+            }
+        }
+        
+        removed
+    }
+    
+    /// Helper to remove span from all indices.
+    async fn remove_span_from_indices(&self, span: &Span, span_id: &SpanId) {
+        // Update memory tracking
+        let memory_freed = self.estimate_span_memory(span);
+        self.counters.memory_bytes.fetch_sub(memory_freed, Ordering::Relaxed);
+        
+        // Remove from trace index
+        if let Some(mut trace_spans) = self.traces.get_mut(&span.trace_id) {
+            trace_spans.retain(|id| id != span_id);
+            if trace_spans.is_empty() {
+                drop(trace_spans);
+                self.traces.remove(&span.trace_id);
+            }
+        }
+        
+        // Remove from service index
+        if let Some(mut service_spans) = self.services.get_mut(&span.service_name) {
+            service_spans.retain(|(_, id)| id != span_id);
+            if service_spans.is_empty() {
+                drop(service_spans);
+                self.services.remove(&span.service_name);
+            }
+        }
+        
+        // Remove from span order
+        let mut span_order = self.span_order.write().await;
+        span_order.retain(|(_, id)| id != span_id);
+    }
+    
+    /// Check if cleanup is needed based on memory pressure.
+    pub async fn should_cleanup(&self) -> bool {
+        let last_cleanup = *self.last_cleanup.lock().await;
+        let memory_usage = self.counters.memory_bytes.load(Ordering::Relaxed);
+        let memory_pressure = memory_usage as f64 / self.cleanup_config.max_memory_bytes as f64;
+        
+        // Always cleanup if over critical threshold
+        if memory_pressure >= self.cleanup_config.critical_threshold {
+            return true;
+        }
+        
+        // Regular cleanup interval
+        last_cleanup.elapsed() >= self.cleanup_config.cleanup_interval
+    }
+    
+    /// Get current memory pressure level.
+    pub fn get_memory_pressure(&self) -> f64 {
+        let memory_usage = self.counters.memory_bytes.load(Ordering::Relaxed);
+        memory_usage as f64 / self.cleanup_config.max_memory_bytes as f64
+    }
+    
+    /// Get storage health status.
+    pub fn get_health_status(&self) -> StorageHealth {
+        let pressure = self.get_memory_pressure();
+        
+        if pressure >= self.cleanup_config.emergency_threshold {
+            StorageHealth::Emergency
+        } else if pressure >= self.cleanup_config.critical_threshold {
+            StorageHealth::Critical
+        } else if pressure >= self.cleanup_config.warning_threshold {
+            StorageHealth::Warning
+        } else {
+            StorageHealth::Healthy
+        }
+    }
+    
+    /// List all active service names.
+    pub async fn list_active_services(&self) -> Vec<ServiceName> {
+        self.active_services.read().await.keys().cloned().collect()
+    }
+}
+
+impl InMemoryStorage {
+    /// Get detailed statistics for monitoring.
+    pub async fn get_detailed_stats(&self) -> StorageStats {
+        let span_count = self.spans.len();
+        let trace_count = self.traces.len();
+        let service_count = self.services.len();
+        let memory_bytes = self.counters.memory_bytes.load(Ordering::Relaxed);
+        let memory_mb = memory_bytes as f64 / 1024.0 / 1024.0;
+        let memory_pressure = self.get_memory_pressure();
+        
+        // Calculate processing rate
+        let elapsed = self.counters.start_time.elapsed().as_secs_f64();
+        let spans_processed = self.counters.spans_processed.load(Ordering::Relaxed);
+        let processing_errors = self.counters.processing_errors.load(Ordering::Relaxed);
+        let processing_rate = if elapsed > 0.0 { spans_processed as f64 / elapsed } else { 0.0 };
+        let error_rate = if spans_processed > 0 { 
+            processing_errors as f64 / spans_processed as f64 
+        } else { 
+            0.0 
+        };
+        
+        // Find oldest and newest spans
+        let span_order = self.span_order.read().await;
+        let oldest_span = span_order.front().map(|(t, _)| *t);
+        let newest_span = span_order.back().map(|(t, _)| *t);
+        
+        StorageStats {
+            trace_count,
+            span_count,
+            service_count,
+            memory_bytes,
+            memory_mb,
+            memory_pressure,
+            oldest_span,
+            newest_span,
+            processing_rate,
+            error_rate,
+            cleanup_count: self.counters.cleanup_operations.load(Ordering::Relaxed),
+            last_cleanup: Some(SystemTime::now()), // Approximate
+            health_status: self.get_health_status(),
         }
     }
 }
@@ -151,11 +543,38 @@ impl InMemoryStorage {
 #[async_trait::async_trait]
 impl StorageBackend for InMemoryStorage {
     async fn store_span(&self, span: Span) -> Result<()> {
+        // Increment processing counter
+        self.counters.spans_processed.fetch_add(1, Ordering::Relaxed);
+        
         let span_id = span.span_id.clone();
         let trace_id = span.trace_id.clone();
         let service_name = span.service_name.clone();
         let start_time = span.start_time;
-
+        
+        // Estimate memory for this span
+        let span_memory = self.estimate_span_memory(&span);
+        
+        // Check memory pressure and perform cleanup if needed
+        let memory_pressure = self.get_memory_pressure();
+        if memory_pressure >= self.cleanup_config.warning_threshold || self.should_cleanup().await {
+            if memory_pressure >= self.cleanup_config.emergency_threshold {
+                // Emergency: drop new spans if at emergency threshold
+                self.counters.processing_errors.fetch_add(1, Ordering::Relaxed);
+                return Err(crate::core::UrpoError::Storage(
+                    "Storage at emergency capacity, dropping span".to_string()
+                ));
+            } else if memory_pressure >= self.cleanup_config.critical_threshold {
+                // Critical: aggressive cleanup
+                let _ = self.emergency_cleanup().await;
+                *self.last_cleanup.lock().await = Instant::now();
+            } else {
+                // Warning: regular cleanup
+                let to_evict = (self.max_spans / 20).max(10); // Evict 5% when at warning
+                self.evict_oldest_spans(to_evict).await;
+                *self.last_cleanup.lock().await = Instant::now();
+            }
+        }
+        
         // Check if we need to evict spans before storing
         if self.spans.len() >= self.max_spans {
             let to_evict = (self.max_spans / 10).max(1); // Evict 10% when at capacity
@@ -164,6 +583,9 @@ impl StorageBackend for InMemoryStorage {
 
         // Store the span
         self.spans.insert(span_id.clone(), span);
+        
+        // Update memory tracking
+        self.counters.memory_bytes.fetch_add(span_memory, Ordering::Relaxed);
 
         // Update trace index
         self.traces
@@ -173,7 +595,7 @@ impl StorageBackend for InMemoryStorage {
 
         // Update service index with timestamp for efficient time-based queries
         self.services
-            .entry(service_name)
+            .entry(service_name.clone())
             .or_insert_with(VecDeque::new)
             .push_back((start_time, span_id.clone()));
 
@@ -182,6 +604,9 @@ impl StorageBackend for InMemoryStorage {
             let mut span_order = self.span_order.write().await;
             span_order.push_back((start_time, span_id));
         }
+        
+        // Update active services tracking
+        self.active_services.write().await.insert(service_name, start_time);
 
         // Enforce per-service limits
         self.enforce_service_limits().await;
@@ -247,6 +672,26 @@ impl StorageBackend for InMemoryStorage {
             Ok(0)
         }
     }
+    
+    async fn list_services(&self) -> Result<Vec<ServiceName>> {
+        Ok(self.list_active_services().await)
+    }
+    
+    async fn get_storage_stats(&self) -> Result<StorageStats> {
+        Ok(self.get_detailed_stats().await)
+    }
+    
+    async fn emergency_cleanup(&self) -> Result<usize> {
+        self.emergency_cleanup().await
+    }
+    
+    fn get_health(&self) -> StorageHealth {
+        self.get_health_status()
+    }
+    
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }
 
 /// Storage manager for coordinating storage operations.
@@ -285,23 +730,33 @@ impl StorageManager {
         Ok(())
     }
 
-    /// Get storage statistics.
+    /// Get comprehensive storage statistics.
     pub async fn get_stats(&self) -> Result<StorageStats> {
-        let span_count = self.backend.get_span_count().await?;
-        
-        // Simple approximation for now
-        // In a real implementation, this would be part of the trait
-        let avg_span_size = 1024; // bytes per span
-        let memory_bytes = span_count * avg_span_size;
-        
-        Ok(StorageStats {
-            trace_count: 0, // Would need a trait method
-            span_count,
-            service_count: 0, // Would need a trait method
-            memory_bytes,
-            oldest_span: None,
-            newest_span: None,
-        })
+        // Delegate to the backend if it's InMemoryStorage
+        if let Some(in_memory) = self.backend.as_any().downcast_ref::<InMemoryStorage>() {
+            Ok(in_memory.get_detailed_stats().await)
+        } else {
+            // Fallback for other storage backends
+            let span_count = self.backend.get_span_count().await?;
+            let avg_span_size = 1024; // bytes per span
+            let memory_bytes = span_count * avg_span_size;
+            
+            Ok(StorageStats {
+                trace_count: 0,
+                span_count,
+                service_count: 0,
+                memory_bytes,
+                memory_mb: memory_bytes as f64 / 1024.0 / 1024.0,
+                memory_pressure: 0.0,
+                oldest_span: None,
+                newest_span: None,
+                processing_rate: 0.0,
+                error_rate: 0.0,
+                cleanup_count: 0,
+                last_cleanup: None,
+                health_status: StorageHealth::Healthy,
+            })
+        }
     }
 }
 

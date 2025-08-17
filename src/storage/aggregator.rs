@@ -5,11 +5,19 @@
 
 use crate::core::{Result, ServiceMetrics, ServiceName};
 use crate::storage::StorageBackend;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
+use std::sync::Arc;
 use std::time::{Duration, SystemTime};
+use tokio::sync::RwLock;
 
 /// Time window for metric calculation (60 seconds).
 const METRIC_WINDOW_SECS: u64 = 60;
+
+/// Number of histogram buckets for latency tracking.
+const LATENCY_BUCKETS: usize = 50;
+
+/// Maximum number of data points per sliding window.
+const MAX_WINDOW_SIZE: usize = 10000;
 
 /// Calculate service metrics from spans in storage.
 ///
@@ -43,9 +51,8 @@ pub async fn calculate_service_metrics(
             continue;
         }
         
-        // Calculate metrics from spans
-        let span_count = spans.len() as u64;
-        let error_count = spans.iter().filter(|s| s.status.is_error()).count() as u64;
+        // Batch process spans for efficiency
+        let (span_count, error_count, latencies) = process_spans_batch(&spans);
         
         // Calculate RPS (requests per second)
         let request_rate = span_count as f64 / METRIC_WINDOW_SECS as f64;
@@ -57,16 +64,20 @@ pub async fn calculate_service_metrics(
             0.0
         };
         
-        // Collect and sort latencies for percentile calculation
-        let mut latencies: Vec<u64> = spans.iter()
-            .map(|s| s.duration.as_millis() as u64)
-            .collect();
-        latencies.sort_unstable();
-        
-        // Calculate percentiles
-        let p50 = calculate_percentile(&latencies, 0.50);
-        let p95 = calculate_percentile(&latencies, 0.95);
-        let p99 = calculate_percentile(&latencies, 0.99);
+        // Calculate percentiles using efficient approximation
+        let (p50, p95, p99) = if latencies.len() > 1000 {
+            // Use histogram approximation for large datasets
+            calculate_percentiles_histogram(&latencies)
+        } else {
+            // Use exact calculation for smaller datasets
+            let mut sorted_latencies = latencies.clone();
+            sorted_latencies.sort_unstable();
+            (
+                calculate_percentile(&sorted_latencies, 0.50),
+                calculate_percentile(&sorted_latencies, 0.95),
+                calculate_percentile(&sorted_latencies, 0.99),
+            )
+        };
         
         // Calculate average duration
         let total_duration: u64 = latencies.iter().sum();
@@ -76,11 +87,13 @@ pub async fn calculate_service_metrics(
             Duration::from_millis(0)
         };
         
-        // Find min and max durations
-        let min_duration = latencies.first()
+        // Find min and max durations  
+        let mut sorted_for_minmax = latencies.clone();
+        sorted_for_minmax.sort_unstable();
+        let min_duration = sorted_for_minmax.first()
             .map(|&ms| Duration::from_millis(ms))
             .unwrap_or(Duration::from_millis(0));
-        let max_duration = latencies.last()
+        let max_duration = sorted_for_minmax.last()
             .map(|&ms| Duration::from_millis(ms))
             .unwrap_or(Duration::from_millis(0));
         
@@ -119,6 +132,76 @@ fn calculate_percentile(sorted_values: &[u64], percentile: f64) -> u64 {
     
     let index = ((sorted_values.len() - 1) as f64 * percentile) as usize;
     sorted_values[index]
+}
+
+/// Calculate percentiles using histogram approximation for large datasets.
+fn calculate_percentiles_histogram(latencies: &[u64]) -> (u64, u64, u64) {
+    if latencies.is_empty() {
+        return (0, 0, 0);
+    }
+    
+    // Find min and max for bucket calculation
+    let min_latency = *latencies.iter().min().unwrap();
+    let max_latency = *latencies.iter().max().unwrap();
+    
+    if min_latency == max_latency {
+        return (min_latency, min_latency, min_latency);
+    }
+    
+    // Create histogram buckets
+    let bucket_size = (max_latency - min_latency + LATENCY_BUCKETS as u64 - 1) / LATENCY_BUCKETS as u64;
+    let mut histogram = vec![0u64; LATENCY_BUCKETS];
+    
+    // Fill histogram
+    for &latency in latencies {
+        let bucket = ((latency - min_latency) / bucket_size).min(LATENCY_BUCKETS as u64 - 1) as usize;
+        histogram[bucket] += 1;
+    }
+    
+    // Calculate cumulative distribution
+    let total_count = latencies.len() as u64;
+    let mut cumulative = 0u64;
+    let mut p50 = min_latency;
+    let mut p95 = min_latency;
+    let mut p99 = min_latency;
+    
+    for (i, &count) in histogram.iter().enumerate() {
+        cumulative += count;
+        let percentile = cumulative as f64 / total_count as f64;
+        
+        let bucket_start = min_latency + i as u64 * bucket_size;
+        
+        if percentile >= 0.50 && p50 == min_latency {
+            p50 = bucket_start;
+        }
+        if percentile >= 0.95 && p95 == min_latency {
+            p95 = bucket_start;
+        }
+        if percentile >= 0.99 && p99 == min_latency {
+            p99 = bucket_start;
+        }
+    }
+    
+    (p50, p95, p99)
+}
+
+/// Efficiently process spans in batches.
+fn process_spans_batch(spans: &[crate::core::Span]) -> (u64, u64, Vec<u64>) {
+    let mut span_count = 0u64;
+    let mut error_count = 0u64;
+    let mut latencies = Vec::with_capacity(spans.len());
+    
+    for span in spans {
+        span_count += 1;
+        
+        if span.status.is_error() {
+            error_count += 1;
+        }
+        
+        latencies.push(span.duration.as_millis() as u64);
+    }
+    
+    (span_count, error_count, latencies)
 }
 
 /// Aggregated metrics over multiple time windows.
@@ -170,23 +253,30 @@ pub async fn calculate_windowed_metrics(
         let spans = storage.get_service_spans(service_name, window_start).await?;
         
         if !spans.is_empty() {
-            // Calculate metrics for this window
-            let span_count = spans.len() as u64;
-            let error_count = spans.iter().filter(|s| s.status.is_error()).count() as u64;
+            // Batch process spans for efficiency
+            let (span_count, error_count, latencies) = process_spans_batch(&spans);
             let request_rate = span_count as f64 / seconds as f64;
             let error_rate = error_count as f64 / span_count as f64;
             
-            let mut latencies: Vec<u64> = spans.iter()
-                .map(|s| s.duration.as_millis() as u64)
-                .collect();
-            latencies.sort_unstable();
+            // Calculate percentiles using efficient method
+            let (p50, p95, p99) = if latencies.len() > 1000 {
+                calculate_percentiles_histogram(&latencies)
+            } else {
+                let mut sorted_latencies = latencies;
+                sorted_latencies.sort_unstable();
+                (
+                    calculate_percentile(&sorted_latencies, 0.50),
+                    calculate_percentile(&sorted_latencies, 0.95),
+                    calculate_percentile(&sorted_latencies, 0.99),
+                )
+            };
             
             let mut metrics = ServiceMetrics::new(service_name.clone());
             metrics.request_rate = request_rate;
             metrics.error_rate = error_rate;
-            metrics.latency_p50 = Duration::from_millis(calculate_percentile(&latencies, 0.50));
-            metrics.latency_p95 = Duration::from_millis(calculate_percentile(&latencies, 0.95));
-            metrics.latency_p99 = Duration::from_millis(calculate_percentile(&latencies, 0.99));
+            metrics.latency_p50 = Duration::from_millis(p50);
+            metrics.latency_p95 = Duration::from_millis(p95);
+            metrics.latency_p99 = Duration::from_millis(p99);
             metrics.span_count = span_count;
             metrics.error_count = error_count;
             
@@ -195,6 +285,224 @@ pub async fn calculate_windowed_metrics(
     }
     
     Ok(windowed)
+}
+
+/// Sliding window for efficient real-time metrics.
+#[derive(Debug)]
+pub struct SlidingWindow {
+    /// Service name.
+    service_name: ServiceName,
+    /// Data points with timestamps.
+    data_points: VecDeque<(SystemTime, MetricDataPoint)>,
+    /// Window duration.
+    window_duration: Duration,
+    /// Cached metrics (updated incrementally).
+    cached_metrics: Option<ServiceMetrics>,
+    /// Last update time.
+    last_update: SystemTime,
+}
+
+/// Individual metric data point.
+#[derive(Debug, Clone)]
+struct MetricDataPoint {
+    /// Request count.
+    requests: u64,
+    /// Error count.
+    errors: u64,
+    /// Latency value in milliseconds.
+    latency_ms: u64,
+}
+
+impl SlidingWindow {
+    /// Create a new sliding window.
+    pub fn new(service_name: ServiceName, window_duration: Duration) -> Self {
+        Self {
+            service_name,
+            data_points: VecDeque::new(),
+            window_duration,
+            cached_metrics: None,
+            last_update: SystemTime::now(),
+        }
+    }
+    
+    /// Add a data point to the window.
+    pub fn add_data_point(&mut self, timestamp: SystemTime, requests: u64, errors: u64, latency_ms: u64) {
+        // Remove expired data points
+        let cutoff = timestamp - self.window_duration;
+        while let Some((ts, _)) = self.data_points.front() {
+            if *ts < cutoff {
+                self.data_points.pop_front();
+            } else {
+                break;
+            }
+        }
+        
+        // Add new data point
+        let data_point = MetricDataPoint {
+            requests,
+            errors,
+            latency_ms,
+        };
+        
+        self.data_points.push_back((timestamp, data_point));
+        
+        // Limit window size to prevent memory growth
+        while self.data_points.len() > MAX_WINDOW_SIZE {
+            self.data_points.pop_front();
+        }
+        
+        // Invalidate cache
+        self.cached_metrics = None;
+        self.last_update = timestamp;
+    }
+    
+    /// Get current metrics from the sliding window.
+    pub fn get_metrics(&mut self) -> ServiceMetrics {
+        // Use cached metrics if available and recent
+        if let Some(ref metrics) = self.cached_metrics {
+            if self.last_update.duration_since(SystemTime::now()).unwrap_or(Duration::ZERO) < Duration::from_secs(1) {
+                return metrics.clone();
+            }
+        }
+        
+        // Calculate metrics from data points
+        let mut total_requests = 0u64;
+        let mut total_errors = 0u64;
+        let mut latencies = Vec::new();
+        
+        for (_, data_point) in &self.data_points {
+            total_requests += data_point.requests;
+            total_errors += data_point.errors;
+            latencies.push(data_point.latency_ms);
+        }
+        
+        let request_rate = total_requests as f64 / self.window_duration.as_secs() as f64;
+        let error_rate = if total_requests > 0 {
+            total_errors as f64 / total_requests as f64
+        } else {
+            0.0
+        };
+        
+        // Calculate percentiles
+        let (p50, p95, p99) = if latencies.len() > 1000 {
+            calculate_percentiles_histogram(&latencies)
+        } else {
+            latencies.sort_unstable();
+            (
+                calculate_percentile(&latencies, 0.50),
+                calculate_percentile(&latencies, 0.95),
+                calculate_percentile(&latencies, 0.99),
+            )
+        };
+        
+        // Calculate other stats
+        let avg_latency = if !latencies.is_empty() {
+            latencies.iter().sum::<u64>() / latencies.len() as u64
+        } else {
+            0
+        };
+        
+        let min_latency = latencies.iter().min().copied().unwrap_or(0);
+        let max_latency = latencies.iter().max().copied().unwrap_or(0);
+        
+        // Create metrics
+        let mut metrics = ServiceMetrics::new(self.service_name.clone());
+        metrics.request_rate = request_rate;
+        metrics.error_rate = error_rate;
+        metrics.latency_p50 = Duration::from_millis(p50);
+        metrics.latency_p95 = Duration::from_millis(p95);
+        metrics.latency_p99 = Duration::from_millis(p99);
+        metrics.span_count = total_requests;
+        metrics.error_count = total_errors;
+        metrics.avg_duration = Duration::from_millis(avg_latency);
+        metrics.min_duration = Duration::from_millis(min_latency);
+        metrics.max_duration = Duration::from_millis(max_latency);
+        metrics.last_seen = self.last_update;
+        
+        // Cache the result
+        self.cached_metrics = Some(metrics.clone());
+        
+        metrics
+    }
+}
+
+/// Real-time metrics aggregator with sliding windows.
+#[derive(Debug)]
+pub struct RealtimeAggregator {
+    /// Sliding windows per service.
+    windows: Arc<RwLock<HashMap<ServiceName, SlidingWindow>>>,
+    /// Window duration.
+    window_duration: Duration,
+}
+
+impl RealtimeAggregator {
+    /// Create a new real-time aggregator.
+    pub fn new(window_duration: Duration) -> Self {
+        Self {
+            windows: Arc::new(RwLock::new(HashMap::new())),
+            window_duration,
+        }
+    }
+    
+    /// Add spans to the aggregator.
+    pub async fn add_spans(&self, spans: &[crate::core::Span]) {
+        let timestamp = SystemTime::now();
+        let mut windows = self.windows.write().await;
+        
+        // Group spans by service
+        let mut service_data: HashMap<ServiceName, (u64, u64, Vec<u64>)> = HashMap::new();
+        
+        for span in spans {
+            let entry = service_data.entry(span.service_name.clone()).or_default();
+            entry.0 += 1; // requests
+            if span.status.is_error() {
+                entry.1 += 1; // errors
+            }
+            entry.2.push(span.duration.as_millis() as u64); // latencies
+        }
+        
+        // Update windows
+        for (service_name, (requests, errors, latencies)) in service_data {
+            let window = windows.entry(service_name.clone())
+                .or_insert_with(|| SlidingWindow::new(service_name, self.window_duration));
+            
+            // Use average latency for the data point
+            let avg_latency = if !latencies.is_empty() {
+                latencies.iter().sum::<u64>() / latencies.len() as u64
+            } else {
+                0
+            };
+            
+            window.add_data_point(timestamp, requests, errors, avg_latency);
+        }
+    }
+    
+    /// Get metrics for all services.
+    pub async fn get_all_metrics(&self) -> Vec<ServiceMetrics> {
+        let mut windows = self.windows.write().await;
+        let mut metrics = Vec::new();
+        
+        for window in windows.values_mut() {
+            metrics.push(window.get_metrics());
+        }
+        
+        // Sort by service name for consistency
+        metrics.sort_by(|a, b| a.name.as_str().cmp(b.name.as_str()));
+        
+        metrics
+    }
+    
+    /// Get metrics for a specific service.
+    pub async fn get_service_metrics(&self, service_name: &ServiceName) -> Option<ServiceMetrics> {
+        let mut windows = self.windows.write().await;
+        windows.get_mut(service_name).map(|window| window.get_metrics())
+    }
+    
+    /// Clean up old windows for inactive services.
+    pub async fn cleanup_inactive(&self, cutoff: SystemTime) {
+        let mut windows = self.windows.write().await;
+        windows.retain(|_, window| window.last_update >= cutoff);
+    }
 }
 
 #[cfg(test)]
