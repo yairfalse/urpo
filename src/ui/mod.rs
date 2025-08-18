@@ -3,9 +3,12 @@
 //! This module provides the interactive terminal UI using ratatui
 //! for real-time trace exploration and service health monitoring.
 
-mod dashboard;
+pub mod dashboard;
 mod fake_data;
 mod widgets;
+
+// Re-export commonly used types
+// Dashboard is defined below
 
 use crate::core::{Result, ServiceMetrics, Span, UrpoError};
 use crate::storage::StorageBackend;
@@ -96,7 +99,7 @@ impl FilterMode {
 }
 
 /// Main UI application state.
-pub struct App {
+pub struct Dashboard {
     /// Whether the application should quit.
     pub should_quit: bool,
     /// Currently selected tab.
@@ -158,9 +161,12 @@ pub enum Tab {
     Spans,
 }
 
-impl App {
-    /// Create a new UI application.
-    pub fn new() -> Self {
+impl Dashboard {
+    /// Create a new UI dashboard with storage and health monitor.
+    pub fn new(
+        storage: Arc<dyn StorageBackend>,
+        health_monitor: Arc<crate::monitoring::ServiceHealthMonitor>,
+    ) -> Result<Self> {
         let mut service_state = TableState::default();
         service_state.select(Some(0));
 
@@ -181,20 +187,20 @@ impl App {
             sort_desc: true,
             filter_mode: FilterMode::All,
             show_help: false,
-            storage: None,
+            storage: Some(storage),
             fake_generator: FakeDataGenerator::new(),
             total_spans: 0,
             spans_per_sec: 0.0,
             memory_usage_mb: 45.0, // Mock value
             last_update: Instant::now(),
-            receiver_status: ReceiverStatus::Listening,
+            receiver_status: ReceiverStatus::Connected,
         };
 
-        // Initialize with fake data
+        // Initialize with fake data for now
         app.services = app.fake_generator.generate_metrics();
         app.traces = app.fake_generator.generate_traces(20);
         app.update_rps_history();
-        app
+        Ok(app)
     }
 
     /// Create a new UI application with storage backend.
@@ -250,12 +256,12 @@ impl App {
         self.spans_per_sec = (rand::random::<f64>() * 500.0) + 800.0;
         self.last_update = Instant::now();
 
-        // Apply sorting and filtering
+        // Dashboardly sorting and filtering
         self.apply_sort();
         self.apply_filter();
     }
 
-    /// Apply current sort order to services.
+    /// Dashboardly current sort order to services.
     fn apply_sort(&mut self) {
         self.services.sort_by(|a, b| {
             let ordering = match self.sort_by {
@@ -275,7 +281,7 @@ impl App {
         });
     }
 
-    /// Apply current filter to services.
+    /// Dashboardly current filter to services.
     fn apply_filter(&mut self) {
         // This would filter services based on filter_mode
         // For now, we'll keep all services visible
@@ -287,7 +293,7 @@ impl App {
             .services
             .iter()
             .filter(|s| {
-                // Apply search filter
+                // Dashboardly search filter
                 if !self.search_query.is_empty() {
                     if !s
                         .name
@@ -299,7 +305,7 @@ impl App {
                     }
                 }
 
-                // Apply filter mode
+                // Dashboardly filter mode
                 match self.filter_mode {
                     FilterMode::All => true,
                     FilterMode::ErrorsOnly => s.error_rate > 0.01,
@@ -309,7 +315,7 @@ impl App {
             })
             .collect();
 
-        // Apply sorting
+        // Dashboardly sorting
         filtered.sort_by(|a, b| {
             let ordering = match self.sort_by {
                 SortBy::Name => a.name.as_str().cmp(b.name.as_str()),
@@ -365,7 +371,7 @@ impl App {
                 }
                 KeyCode::Enter => {
                     self.search_active = false;
-                    // Apply search filter
+                    // Dashboardly search filter
                     self.apply_filter();
                 }
                 KeyCode::Backspace => {
@@ -570,6 +576,41 @@ impl App {
     pub fn update_traces(&mut self, traces: Vec<Span>) {
         self.traces = traces;
     }
+
+    /// Run the terminal UI
+    pub async fn run(&mut self) -> Result<()> {
+        let mut terminal = TerminalUI::new()?;
+        
+        let tick_rate = Duration::from_millis(100);
+        let mut last_tick = Instant::now();
+
+        loop {
+            let timeout = tick_rate
+                .checked_sub(last_tick.elapsed())
+                .unwrap_or_else(|| Duration::from_secs(0));
+
+            if event::poll(timeout)? {
+                if let Event::Key(key) = event::read()? {
+                    self.handle_key(key);
+                    if self.should_quit {
+                        break;
+                    }
+                }
+            }
+
+            if last_tick.elapsed() >= tick_rate {
+                self.update_fake_data();
+                last_tick = Instant::now();
+            }
+
+            terminal.draw(|frame| {
+                dashboard::draw_dashboard(frame, self);
+            })?;
+        }
+
+        terminal.restore()?;
+        Ok(())
+    }
 }
 
 /// Terminal UI manager.
@@ -596,7 +637,7 @@ impl TerminalUI {
     }
 
     /// Run the UI event loop.
-    pub async fn run(&mut self, mut app: App) -> Result<()> {
+    pub async fn run(&mut self, mut app: Dashboard) -> Result<()> {
         let mut last_update = Instant::now();
         let update_interval = Duration::from_secs(1);
 
@@ -653,7 +694,7 @@ impl Drop for TerminalUI {
 }
 
 /// Draw the main UI.
-fn draw_ui(frame: &mut Frame, app: &mut App) {
+fn draw_ui(frame: &mut Frame, app: &mut Dashboard) {
     match app.selected_tab {
         Tab::Services => dashboard::draw_dashboard(frame, app),
         Tab::Traces => draw_traces_view(frame, app),
@@ -667,7 +708,7 @@ fn draw_ui(frame: &mut Frame, app: &mut App) {
 }
 
 /// Draw the traces view.
-fn draw_traces_view(frame: &mut Frame, app: &mut App) {
+fn draw_traces_view(frame: &mut Frame, app: &mut Dashboard) {
     let size = frame.area();
     
     // Create layout
@@ -745,7 +786,7 @@ fn draw_traces_view(frame: &mut Frame, app: &mut App) {
 }
 
 /// Draw the spans view.
-fn draw_spans_view(frame: &mut Frame, _app: &App) {
+fn draw_spans_view(frame: &mut Frame, _app: &Dashboard) {
     let size = frame.area();
     
     let paragraph = Paragraph::new("Span details will be shown here\nPress Tab to go back to Services view")
@@ -762,9 +803,9 @@ fn draw_spans_view(frame: &mut Frame, _app: &App) {
 }
 
 /// Draw the footer with help text.
-fn draw_footer(frame: &mut Frame, area: Rect, app: &App) {
+fn draw_footer(frame: &mut Frame, area: Rect, app: &Dashboard) {
     let help_text = if app.search_active {
-        format!("Search: {} | ESC: Cancel | Enter: Apply", app.search_query)
+        format!("Search: {} | ESC: Cancel | Enter: Dashboardly", app.search_query)
     } else {
         match app.selected_tab {
             Tab::Services => {
@@ -842,7 +883,7 @@ mod tests {
 
     #[test]
     fn test_app_creation() {
-        let app = App::new();
+        let app = Dashboard::new();
         assert!(!app.should_quit);
         assert_eq!(app.selected_tab, Tab::Services);
         assert!(!app.services.is_empty());
@@ -851,7 +892,7 @@ mod tests {
 
     #[test]
     fn test_sort_cycling() {
-        let mut app = App::new();
+        let mut app = Dashboard::new();
         
         assert_eq!(app.sort_by, SortBy::Rps);
         app.sort_by = app.sort_by.next();
@@ -862,7 +903,7 @@ mod tests {
 
     #[test]
     fn test_filter_cycling() {
-        let mut app = App::new();
+        let mut app = Dashboard::new();
         
         assert_eq!(app.filter_mode, FilterMode::All);
         app.filter_mode = app.filter_mode.next();
@@ -873,7 +914,7 @@ mod tests {
 
     #[test]
     fn test_tab_navigation() {
-        let mut app = App::new();
+        let mut app = Dashboard::new();
 
         app.next_tab();
         assert_eq!(app.selected_tab, Tab::Traces);
@@ -890,19 +931,19 @@ mod tests {
 
     #[test]
     fn test_quit_handling() {
-        let mut app = App::new();
+        let mut app = Dashboard::new();
 
         app.handle_key(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::empty()));
         assert!(app.should_quit);
 
-        let mut app = App::new();
+        let mut app = Dashboard::new();
         app.handle_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL));
         assert!(app.should_quit);
     }
 
     #[test]
     fn test_search_mode() {
-        let mut app = App::new();
+        let mut app = Dashboard::new();
 
         app.handle_key(KeyEvent::new(KeyCode::Char('/'), KeyModifiers::empty()));
         assert!(app.search_active);

@@ -106,7 +106,7 @@ impl ServiceConfig {
 }
 
 /// Fake span generator that produces realistic OTEL spans.
-pub struct FakeSpanGenerator {
+pub struct SpanGenerator {
     /// Service configurations
     services: Vec<ServiceConfig>,
     /// Counter for generating unique IDs
@@ -115,7 +115,7 @@ pub struct FakeSpanGenerator {
     running: Arc<RwLock<bool>>,
 }
 
-impl FakeSpanGenerator {
+impl SpanGenerator {
     /// Create a new fake span generator with default services.
     pub fn new() -> Self {
         let services = vec![
@@ -314,7 +314,7 @@ impl FakeSpanGenerator {
     }
 }
 
-impl Default for FakeSpanGenerator {
+impl Default for SpanGenerator {
     fn default() -> Self {
         Self::new()
     }
@@ -326,7 +326,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_generate_single_span() {
-        let generator = FakeSpanGenerator::new();
+        let generator = SpanGenerator::new();
         let service = &generator.services[0];
         let span = generator.generate_span(service).await.unwrap();
         
@@ -337,7 +337,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_generate_batch() {
-        let generator = FakeSpanGenerator::new();
+        let generator = SpanGenerator::new();
         let spans = generator.generate_batch(100).await.unwrap();
         
         assert_eq!(spans.len(), 100);
@@ -352,7 +352,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_error_rate() {
-        let generator = FakeSpanGenerator::new();
+        let generator = SpanGenerator::new();
         let spans = generator.generate_batch(1000).await.unwrap();
         
         // Find payment service spans (highest error rate)
@@ -375,7 +375,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_latency_distribution() {
-        let generator = FakeSpanGenerator::new();
+        let generator = SpanGenerator::new();
         let service = &generator.services[0]; // api-gateway
         
         let mut latencies = Vec::new();

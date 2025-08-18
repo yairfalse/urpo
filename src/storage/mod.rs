@@ -8,7 +8,10 @@ pub mod aggregator;
 pub mod performance;
 pub mod degradation;
 
-use crate::core::{Result, ServiceMetrics, ServiceName, Span, SpanId, TraceId};
+// Re-export commonly used types
+pub use fake_spans::SpanGenerator;
+
+use crate::core::{Config, Result, ServiceMetrics, ServiceName, Span, SpanId, TraceId};
 use dashmap::DashMap;
 use std::collections::{VecDeque, HashMap};
 use std::sync::{Arc, atomic::{AtomicU64, AtomicUsize, Ordering}};
@@ -202,9 +205,27 @@ impl InMemoryStorage {
     }
     
     /// Create storage with custom cleanup configuration.
-    pub fn with_config(max_spans: usize, cleanup_config: CleanupConfig) -> Self {
+    pub fn with_cleanup_config(max_spans: usize, cleanup_config: CleanupConfig) -> Self {
         let mut storage = Self::new(max_spans);
         storage.cleanup_config = cleanup_config;
+        storage
+    }
+    
+    /// Create storage from application configuration.
+    pub fn with_config(config: &Config) -> Self {
+        let cleanup_config = CleanupConfig {
+            max_memory_bytes: config.storage.max_memory_mb * 1024 * 1024,
+            warning_threshold: 0.7,
+            critical_threshold: 0.85,
+            emergency_threshold: 0.95,
+            retention_period: config.storage.retention_duration,
+            cleanup_interval: config.storage.cleanup_interval,
+            min_spans_per_service: 100,
+        };
+        
+        let mut storage = Self::new(config.storage.max_spans);
+        storage.cleanup_config = cleanup_config;
+        storage.max_spans_per_service = config.storage.max_spans / 10;
         storage
     }
 

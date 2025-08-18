@@ -3,7 +3,7 @@
 //! This module provides the beautiful, professional service health dashboard
 //! that shows real-time metrics in an htop-like interface.
 
-use super::{App, ReceiverStatus, SortBy};
+use super::{Dashboard, ReceiverStatus, SortBy};
 use crate::core::ServiceMetrics;
 use chrono::Local;
 use ratatui::{
@@ -16,7 +16,7 @@ use ratatui::{
 use std::time::Duration;
 
 /// Draw the main service dashboard.
-pub fn draw_dashboard(frame: &mut Frame, app: &mut App) {
+pub fn draw_dashboard(frame: &mut Frame, app: &mut Dashboard) {
     let size = frame.area();
 
     // Create main layout
@@ -43,7 +43,7 @@ pub fn draw_dashboard(frame: &mut Frame, app: &mut App) {
 }
 
 /// Draw the dashboard header.
-fn draw_header(frame: &mut Frame, area: Rect, app: &App) {
+fn draw_header(frame: &mut Frame, area: Rect, app: &Dashboard) {
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
@@ -145,7 +145,7 @@ fn draw_header(frame: &mut Frame, area: Rect, app: &App) {
 }
 
 /// Draw the statistics bar with system health.
-fn draw_stats_bar(frame: &mut Frame, area: Rect, app: &App) {
+fn draw_stats_bar(frame: &mut Frame, area: Rect, app: &Dashboard) {
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
@@ -259,7 +259,7 @@ fn get_system_health_info() -> (&'static str, Color, &'static str) {
 }
 
 /// Draw the main service table.
-fn draw_service_table(frame: &mut Frame, area: Rect, app: &mut App) {
+fn draw_service_table(frame: &mut Frame, area: Rect, app: &mut Dashboard) {
     let services = app.get_filtered_services();
 
     // Create header row
@@ -411,7 +411,7 @@ fn draw_service_table(frame: &mut Frame, area: Rect, app: &mut App) {
 }
 
 /// Draw the footer bar.
-fn draw_footer_bar(frame: &mut Frame, area: Rect, app: &App) {
+fn draw_footer_bar(frame: &mut Frame, area: Rect, app: &Dashboard) {
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Min(50), Constraint::Length(40)])
@@ -426,7 +426,7 @@ fn draw_footer_bar(frame: &mut Frame, area: Rect, app: &App) {
             Span::styled("ESC", Style::default().fg(Color::Yellow)),
             Span::raw(" Cancel | "),
             Span::styled("Enter", Style::default().fg(Color::Yellow)),
-            Span::raw(" Apply"),
+            Span::raw(" Dashboardly"),
         ])]
     } else {
         vec![Line::from(vec![

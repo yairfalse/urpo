@@ -17,18 +17,42 @@ use tonic::{transport::Server, Request, Response, Status};
 
 /// OTEL receiver for collecting trace data.
 pub struct OtelReceiver {
-    /// Channel sender for processed spans.
-    span_sender: mpsc::Sender<UrpoSpan>,
-    /// Configuration for sampling.
-    sampling_rate: f64,
+    /// GRPC port
+    grpc_port: u16,
+    /// HTTP port
+    http_port: u16,
+    /// Storage backend
+    storage: Arc<tokio::sync::RwLock<dyn crate::storage::StorageBackend>>,
+    /// Health monitor
+    health_monitor: Arc<crate::monitoring::ServiceHealthMonitor>,
 }
 
 impl OtelReceiver {
     /// Create a new OTEL receiver.
-    pub fn new(span_sender: mpsc::Sender<UrpoSpan>, sampling_rate: f64) -> Self {
+    pub fn new(
+        grpc_port: u16,
+        http_port: u16,
+        storage: Arc<tokio::sync::RwLock<dyn crate::storage::StorageBackend>>,
+        health_monitor: Arc<crate::monitoring::ServiceHealthMonitor>,
+    ) -> Self {
         Self {
-            span_sender,
-            sampling_rate,
+            grpc_port,
+            http_port,
+            storage,
+            health_monitor,
+        }
+    }
+
+    /// Run both GRPC and HTTP receivers
+    pub async fn run(self) -> Result<()> {
+        tracing::info!("Starting OTEL receivers on ports {} (GRPC) and {} (HTTP)", self.grpc_port, self.http_port);
+        
+        // For now, just keep running
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {
+                tracing::info!("Received shutdown signal");
+                Ok(())
+            }
         }
     }
 

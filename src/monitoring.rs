@@ -806,3 +806,6 @@ mod tests {
         assert!(checks["test_check"].healthy);
     }
 }
+
+// Type alias for backward compatibility
+pub type ServiceHealthMonitor = Monitor;

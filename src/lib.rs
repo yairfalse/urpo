@@ -52,7 +52,7 @@ pub mod ui;
 use crate::core::{Config, Result, Span, UrpoError};
 use crate::receiver::ReceiverManager;
 use crate::storage::StorageManager;
-use crate::ui::{App as UIApp, TerminalUI};
+use crate::ui::{Dashboard, TerminalUI};
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;

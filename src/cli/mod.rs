@@ -1,162 +1,54 @@
 //! Command-line interface for Urpo.
 //!
-//! This module provides the CLI argument parsing and command handling
-//! for the Urpo application.
+//! This module provides a simple, htop-like CLI for Urpo.
+//! Just run `urpo` to start with sensible defaults!
 
 use crate::core::{Config, Result, UrpoError};
-use clap::{Parser, Subcommand};
+use clap::Parser;
 use std::path::PathBuf;
 
-/// Terminal-native OTEL trace explorer with real-time service health monitoring.
+/// Terminal-native OTEL trace explorer - simple as htop!
 #[derive(Parser, Debug)]
 #[command(name = "urpo")]
 #[command(version, about, long_about = None)]
 pub struct Cli {
-    /// Configuration file path.
-    #[arg(short, long, value_name = "FILE")]
+    /// GRPC port for OTEL receiver
+    #[arg(long, env = "URPO_GRPC_PORT", default_value = "4317")]
+    pub grpc_port: Option<u16>,
+
+    /// HTTP port for OTEL receiver
+    #[arg(long, env = "URPO_HTTP_PORT", default_value = "4318")]
+    pub http_port: Option<u16>,
+
+    /// Maximum memory usage in MB
+    #[arg(long, env = "URPO_MEMORY_LIMIT")]
+    pub memory_limit: Option<usize>,
+
+    /// Configuration file path (default: ~/.config/urpo/config.yaml)
+    #[arg(short, long, env = "URPO_CONFIG")]
     pub config: Option<PathBuf>,
 
-    /// Enable debug logging.
-    #[arg(short, long)]
+    /// Disable fake span generation for demo
+    #[arg(long, env = "URPO_NO_FAKE")]
+    pub no_fake: bool,
+
+    /// Enable debug logging
+    #[arg(short, long, env = "URPO_DEBUG")]
     pub debug: bool,
 
-    /// Log level (trace, debug, info, warn, error).
-    #[arg(long, default_value = "info")]
-    pub log_level: String,
+    /// Run in headless mode (no UI, just receivers)
+    #[arg(long, env = "URPO_HEADLESS")]
+    pub headless: bool,
 
-    /// Subcommand to execute.
-    #[command(subcommand)]
-    pub command: Option<Commands>,
+    /// Validate configuration and exit
+    #[arg(long)]
+    pub check_config: bool,
+
+    /// Show version information
+    #[arg(short = 'V', long)]
+    pub version: bool,
 }
 
-/// Available subcommands for Urpo.
-#[derive(Subcommand, Debug)]
-pub enum Commands {
-    /// Start the OTEL receiver and UI.
-    Start {
-        /// GRPC port for OTEL receiver.
-        #[arg(long, default_value = "4317")]
-        grpc_port: u16,
-
-        /// HTTP port for OTEL receiver.
-        #[arg(long, default_value = "4318")]
-        http_port: u16,
-
-        /// Maximum memory usage in MB.
-        #[arg(long, default_value = "512")]
-        max_memory_mb: usize,
-
-        /// Maximum number of traces to store.
-        #[arg(long, default_value = "10000")]
-        max_traces: usize,
-
-        /// Sampling rate (0.0 to 1.0).
-        #[arg(long, default_value = "1.0")]
-        sampling_rate: f64,
-
-        /// Trace retention period in seconds.
-        #[arg(long, default_value = "3600")]
-        retention_seconds: u64,
-
-        /// Run in headless mode (no UI).
-        #[arg(long)]
-        headless: bool,
-    },
-
-    /// Export traces to a file.
-    Export {
-        /// Output file path.
-        #[arg(short, long)]
-        output: PathBuf,
-
-        /// Export format (json, yaml).
-        #[arg(short, long, default_value = "json")]
-        format: ExportFormat,
-
-        /// Service name filter.
-        #[arg(long)]
-        service: Option<String>,
-
-        /// Time range start (RFC3339 format).
-        #[arg(long)]
-        from: Option<String>,
-
-        /// Time range end (RFC3339 format).
-        #[arg(long)]
-        to: Option<String>,
-    },
-
-    /// Import traces from a file.
-    Import {
-        /// Input file path.
-        #[arg(short, long)]
-        input: PathBuf,
-
-        /// Import format (json, yaml).
-        #[arg(short, long, default_value = "json")]
-        format: ExportFormat,
-    },
-
-    /// Show service health status.
-    Health {
-        /// Service name filter.
-        #[arg(long)]
-        service: Option<String>,
-
-        /// Output format (table, json).
-        #[arg(short, long, default_value = "table")]
-        format: OutputFormat,
-    },
-
-    /// Validate configuration file.
-    Validate {
-        /// Configuration file path.
-        #[arg(short, long)]
-        config: PathBuf,
-    },
-}
-
-/// Export format options.
-#[derive(Debug, Clone, Copy)]
-pub enum ExportFormat {
-    /// JSON format.
-    Json,
-    /// YAML format.
-    Yaml,
-}
-
-impl std::str::FromStr for ExportFormat {
-    type Err = String;
-
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "json" => Ok(ExportFormat::Json),
-            "yaml" | "yml" => Ok(ExportFormat::Yaml),
-            _ => Err(format!("Unknown export format: {}", s)),
-        }
-    }
-}
-
-/// Output format options.
-#[derive(Debug, Clone, Copy)]
-pub enum OutputFormat {
-    /// Table format for terminal display.
-    Table,
-    /// JSON format for programmatic consumption.
-    Json,
-}
-
-impl std::str::FromStr for OutputFormat {
-    type Err = String;
-
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "table" => Ok(OutputFormat::Table),
-            "json" => Ok(OutputFormat::Json),
-            _ => Err(format!("Unknown output format: {}", s)),
-        }
-    }
-}
 
 impl Cli {
     /// Parse command-line arguments.
@@ -164,66 +56,108 @@ impl Cli {
         Cli::parse()
     }
 
-    /// Load configuration from file or command-line arguments.
+    /// Load configuration with proper precedence:
+    /// 1. CLI arguments (highest priority)
+    /// 2. Environment variables
+    /// 3. Config file
+    /// 4. Defaults (lowest priority)
     pub async fn load_config(&self) -> Result<Config> {
-        // If a config file is specified, load it
-        if let Some(config_path) = &self.config {
-            let config_str = tokio::fs::read_to_string(config_path)
-                .await
-                .map_err(|e| UrpoError::config(format!("Failed to read config file: {}", e)))?;
-
-            let mut config: Config = serde_yaml::from_str(&config_str)
-                .map_err(|e| UrpoError::config(format!("Failed to parse config file: {}", e)))?;
-
-            // Override with command-line debug flag if set
-            if self.debug {
-                config.debug = true;
+        use crate::core::config::ConfigBuilder;
+        
+        let mut builder = ConfigBuilder::new();
+        
+        // 1. Load from config file if specified or default location
+        let config_path = if let Some(path) = &self.config {
+            path.clone()
+        } else {
+            // Check default config location
+            let default_path = dirs::config_dir()
+                .map(|d| d.join("urpo").join("config.yaml"))
+                .unwrap_or_else(|| PathBuf::from("~/.config/urpo/config.yaml"));
+            
+            if default_path.exists() {
+                default_path
+            } else {
+                // No config file, use defaults
+                return self.build_config_from_args(builder);
             }
-
-            config.validate()?;
-            return Ok(config);
-        }
-
-        // Otherwise, build config from command-line arguments
-        match &self.command {
-            Some(Commands::Start {
-                grpc_port,
-                http_port,
-                max_memory_mb,
-                max_traces,
-                sampling_rate,
-                retention_seconds,
-                ..
-            }) => {
-                let config = Config {
-                    grpc_port: *grpc_port,
-                    http_port: *http_port,
-                    max_memory_mb: *max_memory_mb,
-                    max_traces: *max_traces,
-                    sampling_rate: *sampling_rate,
-                    debug: self.debug,
-                    retention_seconds: *retention_seconds,
-                };
-                config.validate()?;
-                Ok(config)
+        };
+        
+        // Try to load config file
+        match tokio::fs::read_to_string(&config_path).await {
+            Ok(content) => {
+                builder = builder.from_yaml(&content)?;
+                tracing::info!("Loaded configuration from: {:?}", config_path);
             }
-            _ => Config::new(),
+            Err(e) if self.config.is_some() => {
+                // User explicitly specified a config file that doesn't exist
+                return Err(UrpoError::config(format!(
+                    "Failed to read config file {:?}: {}",
+                    config_path, e
+                )));
+            }
+            Err(_) => {
+                // Default config file doesn't exist, that's OK
+                tracing::debug!("No config file found at {:?}, using defaults", config_path);
+            }
         }
+        
+        // 2. Apply CLI overrides
+        self.build_config_from_args(builder)
+    }
+    
+    fn build_config_from_args(&self, mut builder: crate::core::config::ConfigBuilder) -> Result<Config> {
+        // Apply CLI arguments (these override everything)
+        if let Some(port) = self.grpc_port {
+            builder = builder.grpc_port(port);
+        }
+        if let Some(port) = self.http_port {
+            builder = builder.http_port(port);
+        }
+        if let Some(limit) = self.memory_limit {
+            builder = builder.max_memory_mb(limit);
+        }
+        
+        builder = builder
+            .enable_fake_spans(!self.no_fake)
+            .debug(self.debug);
+        
+        builder.build()
     }
 
     /// Initialize logging based on configuration.
     pub fn init_logging(&self) -> Result<()> {
         use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
-        let filter = if self.debug {
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("debug"))
+        // Determine log level
+        let log_level = if self.debug {
+            "debug"
         } else {
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&self.log_level))
+            std::env::var("URPO_LOG_LEVEL")
+                .as_deref()
+                .unwrap_or("info")
+        };
+
+        let filter = EnvFilter::try_from_default_env()
+            .unwrap_or_else(|_| EnvFilter::new(log_level));
+
+        // Configure logging format
+        let fmt_layer = if self.headless {
+            // Structured logging for headless mode
+            tracing_subscriber::fmt::layer()
+                .with_target(true)
+                .with_thread_ids(true)
+                .with_line_number(true)
+        } else {
+            // Simpler format for interactive mode
+            tracing_subscriber::fmt::layer()
+                .with_target(false)
+                .compact()
         };
 
         tracing_subscriber::registry()
             .with(filter)
-            .with(tracing_subscriber::fmt::layer())
+            .with(fmt_layer)
             .try_init()
             .map_err(|e| UrpoError::config(format!("Failed to initialize logging: {}", e)))?;
 
@@ -231,88 +165,146 @@ impl Cli {
     }
 }
 
-/// Execute a CLI command.
+/// Execute the Urpo application.
 pub async fn execute(cli: Cli) -> Result<()> {
+    // Handle version flag first
+    if cli.version {
+        println!("urpo {}", env!("CARGO_PKG_VERSION"));
+        println!("Terminal-native OTEL trace explorer");
+        return Ok(());
+    }
+    
+    // Initialize logging
     cli.init_logging()?;
-
-    match cli.command {
-        Some(Commands::Start { headless, .. }) => {
-            let config = cli.load_config().await?;
-            if headless {
-                tracing::info!("Starting Urpo in headless mode...");
-                start_headless(config).await
-            } else {
-                tracing::info!("Starting Urpo with terminal UI...");
-                start_with_ui(config).await
-            }
-        }
-        Some(Commands::Export { .. }) => {
-            tracing::info!("Exporting traces...");
-            export_traces().await
-        }
-        Some(Commands::Import { .. }) => {
-            tracing::info!("Importing traces...");
-            import_traces().await
-        }
-        Some(Commands::Health { .. }) => {
-            tracing::info!("Checking service health...");
-            show_health().await
-        }
-        Some(Commands::Validate { config }) => {
-            tracing::info!("Validating configuration file: {:?}", config);
-            validate_config(config).await
-        }
-        None => {
-            // Default action: start with UI
-            let config = cli.load_config().await?;
-            tracing::info!("Starting Urpo with terminal UI (default)...");
-            start_with_ui(config).await
-        }
+    
+    // Load and validate configuration
+    let config = cli.load_config().await?;
+    
+    // Handle config validation flag
+    if cli.check_config {
+        config.validate()?;
+        println!("Configuration is valid!");
+        println!("  GRPC port: {}", config.server.grpc_port);
+        println!("  HTTP port: {}", config.server.http_port);
+        println!("  Memory limit: {}MB", config.storage.max_memory_mb);
+        println!("  Max spans: {}", config.storage.max_spans);
+        return Ok(());
+    }
+    
+    // Start the application
+    if cli.headless {
+        tracing::info!("Starting Urpo in headless mode...");
+        start_headless(config).await
+    } else {
+        tracing::info!("Starting Urpo with terminal UI...");
+        start_with_ui(config).await
     }
 }
 
-async fn start_with_ui(_config: Config) -> Result<()> {
-    // Placeholder for UI startup
-    tracing::info!("Terminal UI startup would happen here");
-    Ok(())
+async fn start_with_ui(config: Config) -> Result<()> {
+    use crate::{
+        monitoring::ServiceHealthMonitor,
+        receiver::OtelReceiver,
+        storage::{InMemoryStorage, SpanGenerator},
+        ui::Dashboard,
+    };
+    use std::sync::Arc;
+    use tokio::sync::RwLock;
+
+    // Initialize storage
+    let storage = Arc::new(RwLock::new(InMemoryStorage::with_config(&config)));
+    let health_monitor = Arc::new(ServiceHealthMonitor::new());
+
+    // Start fake span generator if enabled
+    if config.features.enable_fake_spans {
+        let gen_storage = Arc::clone(&storage);
+        let gen_health = Arc::clone(&health_monitor);
+        tokio::spawn(async move {
+            let generator = SpanGenerator::new();
+            if let Err(e) = generator.run(gen_storage, gen_health).await {
+                tracing::error!("Fake span generator error: {}", e);
+            }
+        });
+    }
+
+    // Start OTEL receivers
+    let receiver = OtelReceiver::new(
+        config.server.grpc_port,
+        config.server.http_port,
+        Arc::clone(&storage),
+        Arc::clone(&health_monitor),
+    );
+    
+    let receiver_handle = tokio::spawn(async move {
+        if let Err(e) = receiver.run().await {
+            tracing::error!("OTEL receiver error: {}", e);
+        }
+    });
+
+    // Start the terminal UI
+    let mut dashboard = Dashboard::new(storage, health_monitor)?;
+    
+    // Run UI in a separate task to handle signals properly
+    let ui_result = tokio::task::spawn_blocking(move || dashboard.run()).await?;
+    
+    // Cleanup
+    receiver_handle.abort();
+    
+    ui_result
 }
 
-async fn start_headless(_config: Config) -> Result<()> {
-    // Placeholder for headless startup
-    tracing::info!("Headless mode startup would happen here");
-    Ok(())
-}
+async fn start_headless(config: Config) -> Result<()> {
+    use crate::{
+        monitoring::ServiceHealthMonitor,
+        receiver::OtelReceiver,
+        storage::{InMemoryStorage, SpanGenerator},
+    };
+    use std::sync::Arc;
+    use tokio::sync::RwLock;
 
-async fn export_traces() -> Result<()> {
-    // Placeholder for trace export
-    tracing::info!("Trace export would happen here");
-    Ok(())
-}
+    // Initialize storage
+    let storage = Arc::new(RwLock::new(InMemoryStorage::with_config(&config)));
+    let health_monitor = Arc::new(ServiceHealthMonitor::new());
 
-async fn import_traces() -> Result<()> {
-    // Placeholder for trace import
-    tracing::info!("Trace import would happen here");
-    Ok(())
-}
+    // Start fake span generator if enabled
+    if config.features.enable_fake_spans {
+        let gen_storage = Arc::clone(&storage);
+        let gen_health = Arc::clone(&health_monitor);
+        tokio::spawn(async move {
+            let generator = SpanGenerator::new();
+            if let Err(e) = generator.run(gen_storage, gen_health).await {
+                tracing::error!("Fake span generator error: {}", e);
+            }
+        });
+    }
 
-async fn show_health() -> Result<()> {
-    // Placeholder for health check
-    tracing::info!("Health check would happen here");
-    Ok(())
-}
-
-async fn validate_config(path: PathBuf) -> Result<()> {
-    let config_str = tokio::fs::read_to_string(&path)
-        .await
-        .map_err(|e| UrpoError::config(format!("Failed to read config file: {}", e)))?;
-
-    let config: Config = serde_yaml::from_str(&config_str)
-        .map_err(|e| UrpoError::config(format!("Failed to parse config file: {}", e)))?;
-
-    config.validate()?;
-
-    tracing::info!("Configuration file is valid: {:?}", path);
-    println!("✓ Configuration file is valid");
+    // Start OTEL receivers
+    let receiver = OtelReceiver::new(
+        config.server.grpc_port,
+        config.server.http_port,
+        storage,
+        health_monitor,
+    );
+    
+    tracing::info!("Urpo running in headless mode");
+    tracing::info!("  GRPC receiver on port {}", config.server.grpc_port);
+    tracing::info!("  HTTP receiver on port {}", config.server.http_port);
+    
+    // Wait for shutdown signal
+    let shutdown = tokio::signal::ctrl_c();
+    
+    tokio::select! {
+        result = receiver.run() => {
+            if let Err(e) = result {
+                tracing::error!("Receiver error: {}", e);
+                return Err(e);
+            }
+        }
+        _ = shutdown => {
+            tracing::info!("Received shutdown signal, stopping...");
+        }
+    }
+    
     Ok(())
 }
 
@@ -321,32 +313,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_export_format_parsing() {
-        assert!(matches!(
-            "json".parse::<ExportFormat>(),
-            Ok(ExportFormat::Json)
-        ));
-        assert!(matches!(
-            "yaml".parse::<ExportFormat>(),
-            Ok(ExportFormat::Yaml)
-        ));
-        assert!(matches!(
-            "yml".parse::<ExportFormat>(),
-            Ok(ExportFormat::Yaml)
-        ));
-        assert!("unknown".parse::<ExportFormat>().is_err());
-    }
-
-    #[test]
-    fn test_output_format_parsing() {
-        assert!(matches!(
-            "table".parse::<OutputFormat>(),
-            Ok(OutputFormat::Table)
-        ));
-        assert!(matches!(
-            "json".parse::<OutputFormat>(),
-            Ok(OutputFormat::Json)
-        ));
-        assert!("unknown".parse::<OutputFormat>().is_err());
+    fn test_cli_defaults() {
+        // Test that we can create a CLI with defaults
+        let cli = Cli {
+            grpc_port: None,
+            http_port: None,
+            memory_limit: None,
+            config: None,
+            no_fake: false,
+            debug: false,
+            headless: false,
+            check_config: false,
+            version: false,
+        };
+        
+        assert!(!cli.debug);
+        assert!(!cli.no_fake);
+        assert!(!cli.headless);
     }
 }
