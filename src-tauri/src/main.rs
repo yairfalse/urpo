@@ -9,15 +9,15 @@ use tauri::State;
 use tokio::sync::RwLock;
 use urpo_lib::{
     core::{ServiceName, TraceId},
-    monitoring::SystemMonitor,
+    monitoring::Monitor,
     receiver::OtelReceiver,
     storage::{InMemoryStorage, StorageBackend},
 };
 
 struct AppState {
-    storage: Arc<InMemoryStorage>,
-    receiver: Arc<RwLock<Option<OtelReceiver>>>,
-    monitor: Arc<SystemMonitor>,
+    storage: Arc<RwLock<dyn StorageBackend>>,
+    receiver: Arc<RwLock<Option<Arc<OtelReceiver>>>>,
+    monitor: Arc<Monitor>,
     startup_time: Instant,
 }
 
@@ -58,6 +58,8 @@ struct SystemMetrics {
 async fn get_service_metrics(state: State<'_, AppState>) -> Result<Vec<ServiceMetrics>, String> {
     let metrics = state
         .storage
+        .read()
+        .await
         .get_service_metrics()
         .await
         .map_err(|e| e.to_string())?;
@@ -73,7 +75,7 @@ async fn get_service_metrics(state: State<'_, AppState>) -> Result<Vec<ServiceMe
             latency_p50: metric.latency_p50.as_millis() as u64,
             latency_p95: metric.latency_p95.as_millis() as u64,
             latency_p99: metric.latency_p99.as_millis() as u64,
-            active_spans: metric.active_spans,
+            active_spans: (metric.request_rate * metric.latency_p50.as_secs_f64()) as usize,
         });
     }
 
@@ -92,6 +94,8 @@ async fn get_service_metrics_batch(
 
     let metrics = state
         .storage
+        .read()
+        .await
         .get_service_metrics()
         .await
         .map_err(|e| e.to_string())?;
@@ -107,7 +111,7 @@ async fn get_service_metrics_batch(
                 latency_p50: metric.latency_p50.as_millis() as u64,
                 latency_p95: metric.latency_p95.as_millis() as u64,
                 latency_p99: metric.latency_p99.as_millis() as u64,
-                active_spans: metric.active_spans,
+                active_spans: (metric.request_rate * metric.latency_p50.as_secs_f64()) as usize,
             });
         }
     }
@@ -128,6 +132,8 @@ async fn list_recent_traces(
 
     let traces = state
         .storage
+        .read()
+        .await
         .list_recent_traces(limit, service.as_ref())
         .await
         .map_err(|e| e.to_string())?;
@@ -161,6 +167,8 @@ async fn get_error_traces(
 ) -> Result<Vec<TraceInfo>, String> {
     let traces = state
         .storage
+        .read()
+        .await
         .get_error_traces(limit)
         .await
         .map_err(|e| e.to_string())?;
@@ -196,6 +204,8 @@ async fn get_trace_spans(
     
     let spans = state
         .storage
+        .read()
+        .await
         .get_trace_spans(&trace_id)
         .await
         .map_err(|e| e.to_string())?;
@@ -217,6 +227,8 @@ async fn search_traces(
 ) -> Result<Vec<TraceInfo>, String> {
     let traces = state
         .storage
+        .read()
+        .await
         .search_traces(&query, limit)
         .await
         .map_err(|e| e.to_string())?;
@@ -245,20 +257,27 @@ async fn search_traces(
 
 #[tauri::command]
 async fn get_system_metrics(state: State<'_, AppState>) -> Result<SystemMetrics, String> {
-    let memory_usage = state.monitor.get_memory_usage();
-    let cpu_usage = state.monitor.get_cpu_usage();
-    let spans_per_second = state.monitor.get_spans_per_second();
+    // Get metrics from monitor
+    let system_metrics = state.monitor.get_metrics().await;
+    
+    // Calculate aggregate stats from resource metrics
+    let total_request_rate = system_metrics.performance.spans_per_second as f64;
+    
     let total_spans = state
         .storage
+        .read()
+        .await
         .get_span_count()
         .await
         .map_err(|e| e.to_string())?;
+    
     let uptime = state.startup_time.elapsed().as_secs();
 
+    // Get actual resource metrics
     Ok(SystemMetrics {
-        memory_usage_mb: memory_usage as f64 / (1024.0 * 1024.0),
-        cpu_usage_percent: cpu_usage,
-        spans_per_second,
+        memory_usage_mb: system_metrics.resources.memory_mb,
+        cpu_usage_percent: system_metrics.resources.cpu_percent,
+        spans_per_second: total_request_rate,
         total_spans,
         uptime_seconds: uptime,
     })
@@ -275,6 +294,8 @@ async fn stream_trace_data(
     
     let spans = state
         .storage
+        .read()
+        .await
         .get_trace_spans(&trace_id)
         .await
         .map_err(|e| e.to_string())?;
@@ -314,13 +335,18 @@ async fn start_receiver(state: State<'_, AppState>) -> Result<(), String> {
         return Ok(()); // Already running
     }
 
-    let receiver = OtelReceiver::new(state.storage.clone())
-        .map_err(|e| e.to_string())?;
+    // Create receiver with standard OTEL ports
+    let receiver = Arc::new(OtelReceiver::new(
+        4317, // GRPC port
+        4318, // HTTP port
+        state.storage.clone(),
+        state.monitor.clone(),
+    ));
 
     // Start receiver in background
     let receiver_clone = receiver.clone();
     tokio::spawn(async move {
-        if let Err(e) = receiver_clone.start().await {
+        if let Err(e) = receiver_clone.run().await {
             tracing::error!("Receiver error: {}", e);
         }
     });
@@ -333,9 +359,8 @@ async fn start_receiver(state: State<'_, AppState>) -> Result<(), String> {
 async fn stop_receiver(state: State<'_, AppState>) -> Result<(), String> {
     let mut receiver_guard = state.receiver.write().await;
     
-    if let Some(receiver) = receiver_guard.take() {
-        receiver.shutdown().await.map_err(|e| e.to_string())?;
-    }
+    // Simply drop the receiver to stop it
+    *receiver_guard = None;
     
     Ok(())
 }
@@ -350,28 +375,20 @@ fn main() {
         .init();
 
     // Create storage with performance settings
-    let storage = Arc::new(InMemoryStorage::new(100_000));
-    let monitor = Arc::new(SystemMonitor::new());
+    let storage = Arc::new(RwLock::new(InMemoryStorage::new(100_000)));
+    let storage_backend: Arc<RwLock<dyn StorageBackend>> = storage.clone();
+    
+    // Create monitor with performance manager
+    use urpo_lib::storage::PerformanceManager;
+    let perf_manager = Arc::new(PerformanceManager::new());
+    let monitor = Arc::new(Monitor::new(perf_manager));
     
     let app_state = AppState {
-        storage: storage.clone(),
+        storage: storage_backend,
         receiver: Arc::new(RwLock::new(None)),
         monitor: monitor.clone(),
         startup_time,
     };
-
-    // Start monitoring in background
-    let monitor_clone = monitor.clone();
-    let storage_clone = storage.clone();
-    std::thread::spawn(move || {
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        rt.block_on(async move {
-            loop {
-                monitor_clone.update_metrics(&storage_clone).await;
-                tokio::time::sleep(Duration::from_secs(1)).await;
-            }
-        });
-    });
 
     tauri::Builder::default()
         .manage(app_state)

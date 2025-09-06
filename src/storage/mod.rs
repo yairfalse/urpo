@@ -10,6 +10,7 @@ pub mod degradation;
 
 // Re-export commonly used types
 pub use fake_spans::SpanGenerator;
+pub use performance::PerformanceManager;
 
 use crate::core::{Config, Result, ServiceMetrics, ServiceName, Span, SpanId, TraceId};
 use dashmap::DashMap;
@@ -60,6 +61,39 @@ pub trait StorageBackend: Send + Sync {
     
     /// Enable downcasting for concrete types.
     fn as_any(&self) -> &dyn std::any::Any;
+    
+    /// List recent traces with optional filtering.
+    async fn list_recent_traces(&self, limit: usize, service_filter: Option<&ServiceName>) -> Result<Vec<TraceInfo>>;
+    
+    /// Search traces by operation name or attributes.
+    async fn search_traces(&self, query: &str, limit: usize) -> Result<Vec<TraceInfo>>;
+    
+    /// Get traces with errors.
+    async fn get_error_traces(&self, limit: usize) -> Result<Vec<TraceInfo>>;
+    
+    /// Get slow traces (P99 latency).
+    async fn get_slow_traces(&self, threshold: Duration, limit: usize) -> Result<Vec<TraceInfo>>;
+}
+
+/// Information about a trace for listing purposes.
+#[derive(Debug, Clone)]
+pub struct TraceInfo {
+    /// Unique trace identifier.
+    pub trace_id: TraceId,
+    /// Root service name.
+    pub root_service: ServiceName,
+    /// Root operation name.
+    pub root_operation: String,
+    /// Total number of spans in the trace.
+    pub span_count: usize,
+    /// Total duration of the trace.
+    pub duration: Duration,
+    /// Start time of the trace.
+    pub start_time: SystemTime,
+    /// Whether the trace contains errors.
+    pub has_error: bool,
+    /// Services involved in the trace.
+    pub services: Vec<ServiceName>,
 }
 
 /// Storage statistics with comprehensive monitoring.
@@ -712,6 +746,270 @@ impl StorageBackend for InMemoryStorage {
     
     fn as_any(&self) -> &dyn std::any::Any {
         self
+    }
+    
+    async fn list_recent_traces(&self, limit: usize, service_filter: Option<&ServiceName>) -> Result<Vec<TraceInfo>> {
+        let mut trace_infos = Vec::new();
+        
+        // Collect trace information
+        for entry in self.traces.iter() {
+            let trace_id = entry.key().clone();
+            let span_ids = entry.value();
+            
+            if span_ids.is_empty() {
+                continue;
+            }
+            
+            // Get all spans for this trace
+            let mut spans = Vec::new();
+            let mut services = std::collections::HashSet::new();
+            let mut has_error = false;
+            
+            for span_id in span_ids.iter() {
+                if let Some(span) = self.spans.get(span_id) {
+                    services.insert(span.service_name.clone());
+                    if span.status.is_error() {
+                        has_error = true;
+                    }
+                    spans.push(span.clone());
+                }
+            }
+            
+            if spans.is_empty() {
+                continue;
+            }
+            
+            // Find root span (no parent)
+            let root_span = spans.iter()
+                .find(|s| s.parent_span_id.is_none())
+                .or_else(|| spans.first())
+                .unwrap();
+            
+            // Apply service filter if provided
+            if let Some(filter) = service_filter {
+                if !services.contains(filter) {
+                    continue;
+                }
+            }
+            
+            // Calculate total duration (from earliest start to latest end)
+            let min_start = spans.iter().map(|s| s.start_time).min().unwrap();
+            let max_end = spans.iter()
+                .map(|s| s.start_time + s.duration)
+                .max()
+                .unwrap();
+            let duration = max_end.duration_since(min_start).unwrap_or(Duration::ZERO);
+            
+            trace_infos.push(TraceInfo {
+                trace_id,
+                root_service: root_span.service_name.clone(),
+                root_operation: root_span.operation_name.clone(),
+                span_count: spans.len(),
+                duration,
+                start_time: min_start,
+                has_error,
+                services: services.into_iter().collect(),
+            });
+        }
+        
+        // Sort by start time (most recent first)
+        trace_infos.sort_by(|a, b| b.start_time.cmp(&a.start_time));
+        
+        // Limit results
+        trace_infos.truncate(limit);
+        
+        Ok(trace_infos)
+    }
+    
+    async fn search_traces(&self, query: &str, limit: usize) -> Result<Vec<TraceInfo>> {
+        let query_lower = query.to_lowercase();
+        let mut matching_traces = Vec::new();
+        
+        for entry in self.traces.iter() {
+            let trace_id = entry.key();
+            let span_ids = entry.value();
+            
+            let mut match_found = false;
+            let mut spans = Vec::new();
+            let mut services = std::collections::HashSet::new();
+            let mut has_error = false;
+            
+            // Check if any span in the trace matches the query
+            for span_id in span_ids.iter() {
+                if let Some(span) = self.spans.get(span_id) {
+                    services.insert(span.service_name.clone());
+                    if span.status.is_error() {
+                        has_error = true;
+                    }
+                    
+                    // Search in operation name and attributes
+                    if span.operation_name.to_lowercase().contains(&query_lower) {
+                        match_found = true;
+                    }
+                    
+                    for (key, value) in &span.attributes {
+                        if key.to_lowercase().contains(&query_lower) || 
+                           value.to_lowercase().contains(&query_lower) {
+                            match_found = true;
+                            break;
+                        }
+                    }
+                    
+                    for (key, value) in &span.tags {
+                        if key.to_lowercase().contains(&query_lower) || 
+                           value.to_lowercase().contains(&query_lower) {
+                            match_found = true;
+                            break;
+                        }
+                    }
+                    
+                    spans.push(span.clone());
+                }
+            }
+            
+            if match_found && !spans.is_empty() {
+                let root_span = spans.iter()
+                    .find(|s| s.parent_span_id.is_none())
+                    .or_else(|| spans.first())
+                    .unwrap();
+                
+                let min_start = spans.iter().map(|s| s.start_time).min().unwrap();
+                let max_end = spans.iter()
+                    .map(|s| s.start_time + s.duration)
+                    .max()
+                    .unwrap();
+                let duration = max_end.duration_since(min_start).unwrap_or(Duration::ZERO);
+                
+                matching_traces.push(TraceInfo {
+                    trace_id: trace_id.clone(),
+                    root_service: root_span.service_name.clone(),
+                    root_operation: root_span.operation_name.clone(),
+                    span_count: spans.len(),
+                    duration,
+                    start_time: min_start,
+                    has_error,
+                    services: services.into_iter().collect(),
+                });
+            }
+        }
+        
+        // Sort by start time (most recent first)
+        matching_traces.sort_by(|a, b| b.start_time.cmp(&a.start_time));
+        matching_traces.truncate(limit);
+        
+        Ok(matching_traces)
+    }
+    
+    async fn get_error_traces(&self, limit: usize) -> Result<Vec<TraceInfo>> {
+        let mut error_traces = Vec::new();
+        
+        for entry in self.traces.iter() {
+            let trace_id = entry.key();
+            let span_ids = entry.value();
+            
+            let mut has_error = false;
+            let mut spans = Vec::new();
+            let mut services = std::collections::HashSet::new();
+            
+            for span_id in span_ids.iter() {
+                if let Some(span) = self.spans.get(span_id) {
+                    services.insert(span.service_name.clone());
+                    if span.status.is_error() {
+                        has_error = true;
+                    }
+                    spans.push(span.clone());
+                }
+            }
+            
+            if has_error && !spans.is_empty() {
+                let root_span = spans.iter()
+                    .find(|s| s.parent_span_id.is_none())
+                    .or_else(|| spans.first())
+                    .unwrap();
+                
+                let min_start = spans.iter().map(|s| s.start_time).min().unwrap();
+                let max_end = spans.iter()
+                    .map(|s| s.start_time + s.duration)
+                    .max()
+                    .unwrap();
+                let duration = max_end.duration_since(min_start).unwrap_or(Duration::ZERO);
+                
+                error_traces.push(TraceInfo {
+                    trace_id: trace_id.clone(),
+                    root_service: root_span.service_name.clone(),
+                    root_operation: root_span.operation_name.clone(),
+                    span_count: spans.len(),
+                    duration,
+                    start_time: min_start,
+                    has_error: true,
+                    services: services.into_iter().collect(),
+                });
+            }
+        }
+        
+        // Sort by start time (most recent first)
+        error_traces.sort_by(|a, b| b.start_time.cmp(&a.start_time));
+        error_traces.truncate(limit);
+        
+        Ok(error_traces)
+    }
+    
+    async fn get_slow_traces(&self, threshold: Duration, limit: usize) -> Result<Vec<TraceInfo>> {
+        let mut slow_traces = Vec::new();
+        
+        for entry in self.traces.iter() {
+            let trace_id = entry.key();
+            let span_ids = entry.value();
+            
+            let mut spans = Vec::new();
+            let mut services = std::collections::HashSet::new();
+            let mut has_error = false;
+            
+            for span_id in span_ids.iter() {
+                if let Some(span) = self.spans.get(span_id) {
+                    services.insert(span.service_name.clone());
+                    if span.status.is_error() {
+                        has_error = true;
+                    }
+                    spans.push(span.clone());
+                }
+            }
+            
+            if spans.is_empty() {
+                continue;
+            }
+            
+            let root_span = spans.iter()
+                .find(|s| s.parent_span_id.is_none())
+                .or_else(|| spans.first())
+                .unwrap();
+            
+            let min_start = spans.iter().map(|s| s.start_time).min().unwrap();
+            let max_end = spans.iter()
+                .map(|s| s.start_time + s.duration)
+                .max()
+                .unwrap();
+            let duration = max_end.duration_since(min_start).unwrap_or(Duration::ZERO);
+            
+            if duration >= threshold {
+                slow_traces.push(TraceInfo {
+                    trace_id: trace_id.clone(),
+                    root_service: root_span.service_name.clone(),
+                    root_operation: root_span.operation_name.clone(),
+                    span_count: spans.len(),
+                    duration,
+                    start_time: min_start,
+                    has_error,
+                    services: services.into_iter().collect(),
+                });
+            }
+        }
+        
+        // Sort by duration (slowest first)
+        slow_traces.sort_by(|a, b| b.duration.cmp(&a.duration));
+        slow_traces.truncate(limit);
+        
+        Ok(slow_traces)
     }
 }
 
