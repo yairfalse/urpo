@@ -6,8 +6,8 @@
 use std::collections::VecDeque;
 use std::sync::{Arc, atomic::{AtomicU64, AtomicUsize, AtomicBool, Ordering}};
 use std::time::{Duration, Instant, SystemTime};
-use tokio::sync::{RwLock, Mutex, Semaphore, mpsc};
-use tokio::time::{sleep, timeout};
+use tokio::sync::{RwLock, Mutex, Semaphore};
+use tokio::time::timeout;
 
 use crate::core::{Result, Span, UrpoError};
 

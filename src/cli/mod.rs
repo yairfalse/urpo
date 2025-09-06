@@ -11,6 +11,7 @@ use std::path::PathBuf;
 #[derive(Parser, Debug)]
 #[command(name = "urpo")]
 #[command(version, about, long_about = None)]
+#[command(disable_version_flag = true)]
 pub struct Cli {
     /// GRPC port for OTEL receiver
     #[arg(long, env = "URPO_GRPC_PORT", default_value = "4317")]
@@ -40,12 +41,16 @@ pub struct Cli {
     #[arg(long, env = "URPO_HEADLESS")]
     pub headless: bool,
 
+    /// Use terminal UI instead of GUI (default: GUI if available)
+    #[arg(long, env = "URPO_TERMINAL")]
+    pub terminal: bool,
+
     /// Validate configuration and exit
     #[arg(long)]
     pub check_config: bool,
 
     /// Show version information
-    #[arg(short = 'V', long)]
+    #[arg(short = 'V', long = "show-version")]
     pub version: bool,
 }
 
@@ -130,12 +135,11 @@ impl Cli {
         use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
         // Determine log level
+        let env_log_level = std::env::var("URPO_LOG_LEVEL").unwrap_or_else(|_| "info".to_string());
         let log_level = if self.debug {
             "debug"
         } else {
-            std::env::var("URPO_LOG_LEVEL")
-                .as_deref()
-                .unwrap_or("info")
+            env_log_level.as_str()
         };
 
         let filter = EnvFilter::try_from_default_env()
@@ -148,6 +152,7 @@ impl Cli {
                 .with_target(true)
                 .with_thread_ids(true)
                 .with_line_number(true)
+                .compact()
         } else {
             // Simpler format for interactive mode
             tracing_subscriber::fmt::layer()
@@ -203,49 +208,65 @@ pub async fn execute(cli: Cli) -> Result<()> {
 
 async fn start_with_ui(config: Config) -> Result<()> {
     use crate::{
-        monitoring::ServiceHealthMonitor,
+        monitoring::Monitor,
         receiver::OtelReceiver,
-        storage::{InMemoryStorage, SpanGenerator},
+        storage::{InMemoryStorage, SpanGenerator, StorageBackend, PerformanceManager},
         ui::Dashboard,
+        core::Span,
     };
     use std::sync::Arc;
     use tokio::sync::RwLock;
 
+    // Initialize performance manager
+    let perf_manager = Arc::new(PerformanceManager::new());
+    
     // Initialize storage
     let storage = Arc::new(RwLock::new(InMemoryStorage::with_config(&config)));
-    let health_monitor = Arc::new(ServiceHealthMonitor::new());
+    let storage_trait: Arc<RwLock<dyn StorageBackend>> = storage.clone();
+    
+    // Initialize health monitor with performance manager
+    let health_monitor = Arc::new(Monitor::new(perf_manager.clone()));
 
     // Start fake span generator if enabled
     if config.features.enable_fake_spans {
         let gen_storage = Arc::clone(&storage);
-        let gen_health = Arc::clone(&health_monitor);
         tokio::spawn(async move {
             let generator = SpanGenerator::new();
-            if let Err(e) = generator.run(gen_storage, gen_health).await {
+            let callback = move |span: Span| {
+                let storage = gen_storage.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = storage.write().await.store_span(span).await {
+                        tracing::error!("Failed to store generated span: {}", e);
+                    }
+                });
+            };
+            
+            if let Err(e) = generator.generate_spans_continuous(callback).await {
                 tracing::error!("Fake span generator error: {}", e);
             }
         });
     }
 
     // Start OTEL receivers
-    let receiver = OtelReceiver::new(
+    let receiver = Arc::new(OtelReceiver::new(
         config.server.grpc_port,
         config.server.http_port,
-        Arc::clone(&storage),
+        storage_trait.clone(),
         Arc::clone(&health_monitor),
-    );
+    ));
     
+    let receiver_clone = receiver.clone();
     let receiver_handle = tokio::spawn(async move {
-        if let Err(e) = receiver.run().await {
+        if let Err(e) = receiver_clone.run().await {
             tracing::error!("OTEL receiver error: {}", e);
         }
     });
 
     // Start the terminal UI
-    let mut dashboard = Dashboard::new(storage, health_monitor)?;
+    let mut dashboard = Dashboard::new(storage_trait, health_monitor)?;
     
-    // Run UI in a separate task to handle signals properly
-    let ui_result = tokio::task::spawn_blocking(move || dashboard.run()).await?;
+    // Run UI in the main async context
+    let ui_result = dashboard.run().await;
     
     // Cleanup
     receiver_handle.abort();
@@ -255,36 +276,51 @@ async fn start_with_ui(config: Config) -> Result<()> {
 
 async fn start_headless(config: Config) -> Result<()> {
     use crate::{
-        monitoring::ServiceHealthMonitor,
+        monitoring::Monitor,
         receiver::OtelReceiver,
-        storage::{InMemoryStorage, SpanGenerator},
+        storage::{InMemoryStorage, SpanGenerator, StorageBackend, PerformanceManager},
+        core::Span,
     };
     use std::sync::Arc;
     use tokio::sync::RwLock;
 
+    // Initialize performance manager
+    let perf_manager = Arc::new(PerformanceManager::new());
+    
     // Initialize storage
     let storage = Arc::new(RwLock::new(InMemoryStorage::with_config(&config)));
-    let health_monitor = Arc::new(ServiceHealthMonitor::new());
+    let storage_trait: Arc<RwLock<dyn StorageBackend>> = storage.clone();
+    
+    // Initialize health monitor with performance manager
+    let health_monitor = Arc::new(Monitor::new(perf_manager.clone()));
 
     // Start fake span generator if enabled
     if config.features.enable_fake_spans {
         let gen_storage = Arc::clone(&storage);
-        let gen_health = Arc::clone(&health_monitor);
         tokio::spawn(async move {
             let generator = SpanGenerator::new();
-            if let Err(e) = generator.run(gen_storage, gen_health).await {
+            let callback = move |span: Span| {
+                let storage = gen_storage.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = storage.write().await.store_span(span).await {
+                        tracing::error!("Failed to store generated span: {}", e);
+                    }
+                });
+            };
+            
+            if let Err(e) = generator.generate_spans_continuous(callback).await {
                 tracing::error!("Fake span generator error: {}", e);
             }
         });
     }
 
     // Start OTEL receivers
-    let receiver = OtelReceiver::new(
+    let receiver = Arc::new(OtelReceiver::new(
         config.server.grpc_port,
         config.server.http_port,
-        storage,
+        storage_trait,
         health_monitor,
-    );
+    ));
     
     tracing::info!("Urpo running in headless mode");
     tracing::info!("  GRPC receiver on port {}", config.server.grpc_port);

@@ -147,6 +147,60 @@ pub fn format_bytes(bytes: u64) -> String {
     }
 }
 
+/// Format a trace ID for display (shortened).
+pub fn format_trace_id(trace_id: &str) -> String {
+    if trace_id.len() > 8 {
+        format!("{}...", &trace_id[..8])
+    } else {
+        trace_id.to_string()
+    }
+}
+
+/// Format a span ID for display (shortened).
+pub fn format_span_id(span_id: &str) -> String {
+    if span_id.len() > 8 {
+        format!("{}...", &span_id[..8])
+    } else {
+        span_id.to_string()
+    }
+}
+
+/// Get tree connector characters for span hierarchy.
+pub fn get_tree_connectors(is_last: bool, has_children: bool) -> (&'static str, &'static str) {
+    match (is_last, has_children) {
+        (false, true) => ("├─", "│ "),
+        (false, false) => ("├─", "│ "),
+        (true, true) => ("└─", "  "),
+        (true, false) => ("└─", "  "),
+    }
+}
+
+/// Format span attributes for display.
+pub fn format_attributes(attrs: &std::collections::HashMap<String, String>, max_width: usize) -> String {
+    if attrs.is_empty() {
+        return String::new();
+    }
+    
+    let mut result = String::new();
+    let mut current_len = 0;
+    
+    for (key, value) in attrs.iter().take(3) {
+        let attr = format!("{}={}", key, value);
+        if current_len + attr.len() > max_width && current_len > 0 {
+            result.push_str("...");
+            break;
+        }
+        if !result.is_empty() {
+            result.push_str(", ");
+            current_len += 2;
+        }
+        result.push_str(&attr);
+        current_len += attr.len();
+    }
+    
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

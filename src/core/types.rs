@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{Duration, SystemTime};
+use std::fmt;
 use crate::core::error::{Result, UrpoError};
 
 /// Unique identifier for a trace
@@ -39,6 +40,12 @@ impl TraceId {
     }
 }
 
+impl fmt::Display for TraceId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 impl SpanId {
     /// Creates a new SpanId after validation
     pub fn new(id: String) -> Result<Self> {
@@ -63,6 +70,12 @@ impl SpanId {
     }
 }
 
+impl fmt::Display for SpanId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 impl ServiceName {
     /// Creates a new ServiceName after validation
     pub fn new(name: String) -> Result<Self> {
@@ -83,6 +96,12 @@ impl ServiceName {
     /// Returns the inner string value
     pub fn into_inner(self) -> String {
         self.0
+    }
+}
+
+impl fmt::Display for ServiceName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 
