@@ -285,13 +285,21 @@ mod tests {
 
     #[tokio::test]
     async fn test_retry_success() {
-        let mut attempts = 0;
-        let result = retry(|| async {
-            attempts += 1;
-            if attempts < 3 {
-                Err(UrpoError::network("temporary failure"))
-            } else {
-                Ok(42)
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicU32, Ordering};
+        
+        let attempts = Arc::new(AtomicU32::new(0));
+        let attempts_clone = attempts.clone();
+        
+        let result = retry(move || {
+            let attempts = attempts_clone.clone();
+            async move {
+                let count = attempts.fetch_add(1, Ordering::Relaxed) + 1;
+                if count < 3 {
+                    Err(UrpoError::network("temporary failure"))
+                } else {
+                    Ok(42)
+                }
             }
         })
         .await;
@@ -302,7 +310,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_retry_non_recoverable() {
-        let result = retry(|| async {
+        let result: Result<i32> = retry(|| async {
             Err(UrpoError::config("permanent failure"))
         })
         .await;
@@ -315,12 +323,12 @@ mod tests {
         let cb = CircuitBreaker::new(2, 2, Duration::from_millis(100));
 
         // First failure
-        let _ = cb.call(|| async {
+        let _: Result<i32> = cb.call(|| async {
             Err(UrpoError::network("failure 1"))
         }).await;
 
         // Second failure - should open circuit
-        let _ = cb.call(|| async {
+        let _: Result<i32> = cb.call(|| async {
             Err(UrpoError::network("failure 2"))
         }).await;
 

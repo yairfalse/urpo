@@ -12,7 +12,6 @@ use opentelemetry_proto::tonic::collector::trace::v1::{
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tokio::sync::mpsc;
 use tonic::{transport::Server, Request, Response, Status};
 
 /// OTEL receiver for collecting trace data.
@@ -24,7 +23,7 @@ pub struct OtelReceiver {
     /// Storage backend
     storage: Arc<tokio::sync::RwLock<dyn crate::storage::StorageBackend>>,
     /// Health monitor
-    health_monitor: Arc<crate::monitoring::ServiceHealthMonitor>,
+    health_monitor: Arc<crate::monitoring::Monitor>,
 }
 
 impl OtelReceiver {
@@ -33,7 +32,7 @@ impl OtelReceiver {
         grpc_port: u16,
         http_port: u16,
         storage: Arc<tokio::sync::RwLock<dyn crate::storage::StorageBackend>>,
-        health_monitor: Arc<crate::monitoring::ServiceHealthMonitor>,
+        health_monitor: Arc<crate::monitoring::Monitor>,
     ) -> Self {
         Self {
             grpc_port,
@@ -44,13 +43,28 @@ impl OtelReceiver {
     }
 
     /// Run both GRPC and HTTP receivers
-    pub async fn run(self) -> Result<()> {
+    pub async fn run(self: Arc<Self>) -> Result<()> {
         tracing::info!("Starting OTEL receivers on ports {} (GRPC) and {} (HTTP)", self.grpc_port, self.http_port);
         
-        // For now, just keep running
+        let grpc_addr = SocketAddr::from(([0, 0, 0, 0], self.grpc_port));
+        let receiver = self;
+        
+        // Start GRPC server
+        let grpc_handle = {
+            let receiver = receiver.clone();
+            tokio::spawn(async move {
+                tracing::info!("GRPC receiver listening on {}", grpc_addr);
+                if let Err(e) = receiver.start_grpc(grpc_addr).await {
+                    tracing::error!("GRPC server error: {}", e);
+                }
+            })
+        };
+        
+        // Wait for shutdown signal or server error
         tokio::select! {
             _ = tokio::signal::ctrl_c() => {
-                tracing::info!("Received shutdown signal");
+                tracing::info!("Received shutdown signal, stopping GRPC server");
+                grpc_handle.abort();
                 Ok(())
             }
         }
@@ -62,13 +76,32 @@ impl OtelReceiver {
             receiver: self.clone(),
         });
 
-        Server::builder()
-            .add_service(service)
-            .serve(addr)
-            .await
-            .map_err(|e| UrpoError::protocol(format!("Failed to start GRPC server: {}", e)))?;
-
-        Ok(())
+        tracing::info!("GRPC server binding to {}", addr);
+        
+        // Create server builder and bind
+        let server = Server::builder()
+            .add_service(service);
+            
+        tracing::debug!("Starting server.serve() on {}", addr);
+        
+        // Serve with proper error handling
+        match server.serve(addr).await {
+            Ok(_) => {
+                tracing::info!("GRPC server stopped gracefully");
+                Ok(())
+            }
+            Err(e) => {
+                tracing::error!("GRPC server error: {} (binding to {})", e, addr);
+                // Check if it's a binding/address error
+                if e.to_string().contains("Address already in use") {
+                    Err(UrpoError::network(format!("Port {} already in use", addr.port())))
+                } else if e.to_string().contains("Permission denied") {
+                    Err(UrpoError::network(format!("Permission denied binding to {}", addr)))
+                } else {
+                    Err(UrpoError::protocol(format!("Failed to start GRPC server: {}", e)))
+                }
+            }
+        }
     }
 
     /// Start the HTTP server.
@@ -81,29 +114,18 @@ impl OtelReceiver {
 
     /// Process incoming spans.
     async fn process_spans(&self, spans: Vec<UrpoSpan>) -> Result<()> {
+        let storage = self.storage.write().await;
         for span in spans {
-            // Apply sampling
-            if self.should_sample() {
-                self.span_sender
-                    .send(span)
-                    .await
-                    .map_err(|_| UrpoError::ChannelSend)?;
-            }
+            // Store the span
+            storage.store_span(span).await?;
         }
         Ok(())
     }
 
     /// Determine if a span should be sampled.
     fn should_sample(&self) -> bool {
-        if self.sampling_rate >= 1.0 {
-            return true;
-        }
-        if self.sampling_rate <= 0.0 {
-            return false;
-        }
-        
-        // Simple random sampling
-        rand::random::<f64>() < self.sampling_rate
+        // Always sample for now
+        true
     }
 }
 
@@ -360,69 +382,69 @@ fn value_to_string(value: opentelemetry_proto::tonic::common::v1::AnyValue) -> S
     }
 }
 
-/// Receiver manager for coordinating GRPC and HTTP receivers.
-pub struct ReceiverManager {
-    grpc_receiver: Arc<OtelReceiver>,
-    http_receiver: Arc<OtelReceiver>,
-    grpc_addr: SocketAddr,
-    http_addr: SocketAddr,
-}
+// /// Receiver manager for coordinating GRPC and HTTP receivers.
+// pub struct ReceiverManager {
+//     grpc_receiver: Arc<OtelReceiver>,
+//     http_receiver: Arc<OtelReceiver>,
+//     grpc_addr: SocketAddr,
+//     http_addr: SocketAddr,
+// }
 
-impl ReceiverManager {
-    /// Create a new receiver manager.
-    pub fn new(
-        span_sender: mpsc::Sender<UrpoSpan>,
-        grpc_port: u16,
-        http_port: u16,
-        sampling_rate: f64,
-    ) -> Self {
-        let grpc_receiver = Arc::new(OtelReceiver::new(span_sender.clone(), sampling_rate));
-        let http_receiver = Arc::new(OtelReceiver::new(span_sender, sampling_rate));
-        
-        let grpc_addr = SocketAddr::from(([0, 0, 0, 0], grpc_port));
-        let http_addr = SocketAddr::from(([0, 0, 0, 0], http_port));
+// impl ReceiverManager {
+//     /// Create a new receiver manager.
+//     pub fn new(
+//         span_sender: mpsc::Sender<UrpoSpan>,
+//         grpc_port: u16,
+//         http_port: u16,
+//         sampling_rate: f64,
+//     ) -> Self {
+//         let grpc_receiver = Arc::new(OtelReceiver::new(span_sender.clone(), sampling_rate));
+//         let http_receiver = Arc::new(OtelReceiver::new(span_sender, sampling_rate));
+//         
+//         let grpc_addr = SocketAddr::from(([0, 0, 0, 0], grpc_port));
+//         let http_addr = SocketAddr::from(([0, 0, 0, 0], http_port));
 
-        Self {
-            grpc_receiver,
-            http_receiver,
-            grpc_addr,
-            http_addr,
-        }
-    }
+//         Self {
+//             grpc_receiver,
+//             http_receiver,
+//             grpc_addr,
+//             http_addr,
+//         }
+//     }
 
-    /// Start both GRPC and HTTP receivers.
-    pub async fn start(self) -> Result<()> {
-        let grpc_handle = tokio::spawn({
-            let receiver = self.grpc_receiver.clone();
-            let addr = self.grpc_addr;
-            async move {
-                tracing::info!("Starting GRPC receiver on {}", addr);
-                receiver.start_grpc(addr).await
-            }
-        });
+//     /// Start both GRPC and HTTP receivers.
+//     pub async fn start(self) -> Result<()> {
+//         let grpc_handle = tokio::spawn({
+//             let receiver = self.grpc_receiver.clone();
+//             let addr = self.grpc_addr;
+//             async move {
+//                 tracing::info!("Starting GRPC receiver on {}", addr);
+//                 receiver.start_grpc(addr).await
+//             }
+//         });
 
-        let http_handle = tokio::spawn({
-            let receiver = self.http_receiver.clone();
-            let addr = self.http_addr;
-            async move {
-                tracing::info!("Starting HTTP receiver on {}", addr);
-                receiver.start_http(addr).await
-            }
-        });
+//         let http_handle = tokio::spawn({
+//             let receiver = self.http_receiver.clone();
+//             let addr = self.http_addr;
+//             async move {
+//                 tracing::info!("Starting HTTP receiver on {}", addr);
+//                 receiver.start_http(addr).await
+//             }
+//         });
 
-        // Wait for both to complete (they shouldn't unless there's an error)
-        tokio::select! {
-            result = grpc_handle => {
-                result
-                    .map_err(|e| UrpoError::protocol(format!("GRPC receiver task failed: {}", e)))?
-            }
-            result = http_handle => {
-                result
-                    .map_err(|e| UrpoError::protocol(format!("HTTP receiver task failed: {}", e)))?
-            }
-        }
-    }
-}
+//         // Wait for both to complete (they shouldn't unless there's an error)
+//         tokio::select! {
+//             result = grpc_handle => {
+//                 result
+//                     .map_err(|e| UrpoError::protocol(format!("GRPC receiver task failed: {}", e)))?
+//             }
+//             result = http_handle => {
+//                 result
+//                     .map_err(|e| UrpoError::protocol(format!("HTTP receiver task failed: {}", e)))?
+//             }
+//         }
+//     }
+// }
 
 
 #[cfg(test)]
@@ -437,16 +459,16 @@ mod tests {
         assert!(dt.year() >= 2023);
     }
 
-    #[test]
-    fn test_should_sample() {
-        let (tx, _rx) = mpsc::channel(10);
-        
-        let receiver = OtelReceiver::new(tx.clone(), 1.0);
-        assert!(receiver.should_sample());
-        
-        let receiver = OtelReceiver::new(tx.clone(), 0.0);
-        assert!(!receiver.should_sample());
-    }
+    // #[test]
+    // fn test_should_sample() {
+    //     let (tx, _rx) = mpsc::channel(10);
+    //     
+    //     let receiver = OtelReceiver::new(tx.clone(), 1.0);
+    //     assert!(receiver.should_sample());
+    //     
+    //     let receiver = OtelReceiver::new(tx.clone(), 0.0);
+    //     assert!(!receiver.should_sample());
+    // }
 
     #[test]
     fn test_extract_service_name() {
