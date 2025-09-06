@@ -1,3 +1,7 @@
+[workspace]
+members = [".", "src-tauri"]
+resolver = "2"
+
 [package]
 name = "urpo"
 version = "0.1.0"
@@ -51,8 +55,6 @@ async-trait = "0.1"
 dirs = "5.0"
 notify = "6.1"
 
-# Tauri dependencies (optional for GUI mode)
-tauri = { version = "1.5", features = ["shell-open"], optional = true }
 
 [dev-dependencies]
 tempfile = "3.0"
@@ -68,8 +70,6 @@ tonic-build = "0.12"
 
 [features]
 default = []
-gui = ["tauri", "custom-protocol"]
-custom-protocol = ["tauri/custom-protocol"]
 
 [lib]
 name = "urpo_lib"
@@ -78,11 +78,6 @@ crate-type = ["lib", "cdylib"]
 [[bin]]
 name = "urpo"
 path = "src/main.rs"
-
-[[bin]]
-name = "urpo-gui"
-path = "src/main_gui.rs"
-required-features = ["gui"]
 
 [profile.release]
 lto = true

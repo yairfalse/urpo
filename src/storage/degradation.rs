@@ -3,12 +3,11 @@
 //! This module implements various degradation strategies to maintain system
 //! stability under memory pressure and high load conditions.
 
-use std::sync::{Arc, atomic::{AtomicU64, AtomicBool, Ordering}};
-use std::time::{Duration, SystemTime, Instant};
+use std::sync::{Arc, atomic::{AtomicU64, Ordering}};
+use std::time::{Duration, Instant};
 use tokio::sync::{RwLock, Mutex};
 
-use crate::core::{Result, Span, ServiceName, UrpoError};
-use crate::storage::{StorageHealth, CleanupConfig};
+use crate::core::ServiceName;
 
 /// Degradation mode levels.
 #[derive(Debug, Clone, PartialEq)]
