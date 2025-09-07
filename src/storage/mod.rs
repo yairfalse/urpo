@@ -7,12 +7,15 @@ pub mod fake_spans;
 pub mod aggregator;
 pub mod performance;
 pub mod degradation;
+pub mod search;
+pub mod engine;
 
 // Re-export commonly used types
 pub use fake_spans::SpanGenerator;
 pub use performance::PerformanceManager;
 
 use crate::core::{Config, Result, ServiceMetrics, ServiceName, Span, SpanId, TraceId};
+use engine::{StorageEngine, StorageMode};
 use dashmap::DashMap;
 use std::collections::{VecDeque, HashMap};
 use std::sync::{Arc, atomic::{AtomicU64, AtomicUsize, Ordering}};
@@ -1016,13 +1019,43 @@ impl StorageBackend for InMemoryStorage {
 /// Storage manager for coordinating storage operations.
 pub struct StorageManager {
     backend: Arc<dyn StorageBackend>,
+    /// Persistent storage engine (optional)
+    persistent_engine: Option<Arc<RwLock<StorageEngine>>>,
 }
 
 impl StorageManager {
     /// Create a new storage manager with in-memory backend.
     pub fn new_in_memory(max_spans: usize) -> Self {
         let backend = Arc::new(InMemoryStorage::new(max_spans));
-        Self { backend }
+        Self { 
+            backend,
+            persistent_engine: None,
+        }
+    }
+    
+    /// Create a new storage manager with persistent backend.
+    pub fn new_persistent(config: &Config) -> Result<Self> {
+        let backend = Arc::new(InMemoryStorage::with_config(config));
+        
+        // Create persistent storage engine
+        let storage_mode = if config.storage.persistent {
+            StorageMode::Persistent {
+                hot_size: config.storage.max_spans / 10,  // 10% in hot ring
+                warm_path: config.storage.data_dir.join("warm"),
+                cold_path: config.storage.data_dir.join("cold"),
+            }
+        } else {
+            StorageMode::InMemory {
+                max_traces: config.storage.max_spans / 100, // Avg 100 spans per trace
+            }
+        };
+        
+        let engine = StorageEngine::new(storage_mode)?;
+        
+        Ok(Self {
+            backend,
+            persistent_engine: Some(Arc::new(RwLock::new(engine))),
+        })
     }
 
     /// Get the storage backend.
@@ -1032,7 +1065,16 @@ impl StorageManager {
 
     /// Store a span.
     pub async fn store_span(&self, span: Span) -> Result<()> {
-        self.backend.store_span(span).await
+        // Store in main backend
+        self.backend.store_span(span.clone()).await?;
+        
+        // Also store in persistent engine if enabled
+        if let Some(engine) = &self.persistent_engine {
+            let mut engine = engine.write().await;
+            engine.ingest_span(span)?;
+        }
+        
+        Ok(())
     }
 
     /// Get service metrics.
@@ -1046,7 +1088,89 @@ impl StorageManager {
         if removed > 0 {
             tracing::debug!("Cleaned up {} old spans", removed);
         }
+        
+        // Also trigger tier migration in persistent engine
+        if let Some(engine) = &self.persistent_engine {
+            let mut engine = engine.write().await;
+            engine.migrate_tiers()?;
+        }
+        
         Ok(())
+    }
+    
+    /// Query traces from persistent storage.
+    pub async fn query_persistent_traces(
+        &self,
+        service: Option<&ServiceName>,
+        start_time: Option<std::time::SystemTime>,
+        end_time: Option<std::time::SystemTime>,
+        limit: usize,
+    ) -> Result<Vec<TraceInfo>> {
+        if let Some(engine) = &self.persistent_engine {
+            let engine = engine.read().await;
+            let traces = engine.query_traces(
+                service.map(|s| s.as_str()),
+                start_time.map(|t| t.duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos() as u64),
+                end_time.map(|t| t.duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos() as u64),
+                limit,
+            )?;
+            
+            // Convert to TraceInfo
+            let mut trace_infos = Vec::new();
+            for trace_id in traces {
+                if let Ok(spans) = self.backend.get_trace_spans(&TraceId::new(format!("{:032x}", trace_id)).unwrap()).await {
+                    if !spans.is_empty() {
+                        let root_span = spans.iter()
+                            .find(|s| s.parent_span_id.is_none())
+                            .or_else(|| spans.first())
+                            .unwrap();
+                        
+                        let min_start = spans.iter().map(|s| s.start_time).min().unwrap();
+                        let max_end = spans.iter()
+                            .map(|s| s.start_time + s.duration)
+                            .max()
+                            .unwrap();
+                        let duration = max_end.duration_since(min_start).unwrap_or(Duration::ZERO);
+                        
+                        let services: std::collections::HashSet<_> = spans.iter()
+                            .map(|s| s.service_name.clone())
+                            .collect();
+                        
+                        let has_error = spans.iter().any(|s| s.status.is_error());
+                        
+                        trace_infos.push(TraceInfo {
+                            trace_id: TraceId::new(format!("{:032x}", trace_id)).unwrap(),
+                            root_service: root_span.service_name.clone(),
+                            root_operation: root_span.operation_name.clone(),
+                            span_count: spans.len(),
+                            duration,
+                            start_time: min_start,
+                            has_error,
+                            services: services.into_iter().collect(),
+                        });
+                    }
+                }
+            }
+            
+            Ok(trace_infos)
+        } else {
+            // Fallback to in-memory backend
+            self.backend.list_recent_traces(limit, service).await
+        }
+    }
+    
+    /// Get storage statistics including persistent storage.
+    pub async fn get_full_stats(&self) -> Result<(StorageStats, Option<engine::StorageStats>)> {
+        let backend_stats = self.get_stats().await?;
+        
+        let engine_stats = if let Some(engine) = &self.persistent_engine {
+            let engine = engine.read().await;
+            Some(engine.get_stats())
+        } else {
+            None
+        };
+        
+        Ok((backend_stats, engine_stats))
     }
 
     /// Get comprehensive storage statistics.

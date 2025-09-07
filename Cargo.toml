@@ -55,6 +55,18 @@ async-trait = "0.1"
 dirs = "5.0"
 notify = "6.1"
 
+# EXTREME PERFORMANCE OPTIMIZATIONS - OTEL FOCUSED
+roaring = "0.10"  # Compressed bitmaps for instant filtering
+memmap2 = "0.9"  # Memory-mapped files for huge datasets
+rayon = "1.10"  # Parallel processing
+parking_lot = "0.12"  # Faster locks than std
+ahash = "0.8"  # Faster hashing - MUCH faster than default
+rkyv = { version = "0.7", features = ["validation"] }  # Zero-copy serialization
+lz4 = "1.24"  # Fast compression for cold storage
+rocksdb = { version = "0.22", optional = true }  # Optional persistent storage
+crossbeam-channel = "0.5"  # Lock-free channels for trace ingestion
+speedy = "0.8"  # Even faster serialization than bincode
+
 
 [dev-dependencies]
 tempfile = "3.0"
@@ -70,6 +82,7 @@ tonic-build = "0.12"
 
 [features]
 default = []
+persistent = ["rocksdb"]
 
 [lib]
 name = "urpo_lib"

@@ -3,11 +3,13 @@ import { invoke } from '@tauri-apps/api/tauri';
 import ServiceHealthDashboard from './components/ServiceHealthDashboard';
 import TraceExplorer from './components/TraceExplorer';
 import SystemMetrics from './components/SystemMetrics';
+import InstantSearch from './components/InstantSearch';
 import { ServiceMetrics, TraceInfo, SystemMetrics as SystemMetricsType } from './types';
 
 // PERFORMANCE: Memoize the entire app to prevent unnecessary re-renders
 const App = memo(() => {
-  const [activeView, setActiveView] = useState<'health' | 'traces'>('health');
+  const [activeView, setActiveView] = useState<'health' | 'traces' | 'search'>('health');
+  const [selectedTrace, setSelectedTrace] = useState<TraceInfo | null>(null);
   const [services, setServices] = useState<ServiceMetrics[]>([]);
   const [traces, setTraces] = useState<TraceInfo[]>([]);
   const [systemMetrics, setSystemMetrics] = useState<SystemMetricsType | null>(null);
@@ -134,6 +136,20 @@ const App = memo(() => {
               }`}
             >
               Trace Explorer
+            </button>
+            <button
+              onClick={() => setActiveView('search')}
+              className={`px-4 py-2 rounded transition-colors flex items-center gap-2 ${
+                activeView === 'search'
+                  ? 'bg-green-600 text-white'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              Search
+              <kbd className="text-xs bg-slate-700 px-1 rounded">⌘K</kbd>
             </button>
           </nav>
 

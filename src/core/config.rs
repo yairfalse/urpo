@@ -66,6 +66,16 @@ pub struct StorageConfig {
     pub cleanup_interval: Duration,
     /// Enable compression
     pub compression_enabled: bool,
+    /// Enable persistent storage to disk
+    pub persistent: bool,
+    /// Data directory for persistent storage
+    pub data_dir: PathBuf,
+    /// Hot storage size (in-memory ring buffer)
+    pub hot_storage_size: usize,
+    /// Warm storage size in MB (memory-mapped files)
+    pub warm_storage_mb: usize,
+    /// Cold storage retention in hours
+    pub cold_retention_hours: usize,
 }
 
 /// UI configuration
@@ -221,6 +231,11 @@ impl Default for StorageConfig {
             retention_duration: Duration::from_secs(3600), // 1 hour
             cleanup_interval: Duration::from_secs(30),
             compression_enabled: false,
+            persistent: false,
+            data_dir: PathBuf::from("./urpo_data"),
+            hot_storage_size: 10_000,  // 10k spans in hot ring
+            warm_storage_mb: 512,       // 512MB warm storage
+            cold_retention_hours: 24,   // Keep cold data for 24 hours
         }
     }
 }
@@ -448,6 +463,18 @@ impl ConfigBuilder {
     /// Set max spans
     pub fn max_spans(mut self, count: usize) -> Self {
         self.config.storage.max_spans = count;
+        self
+    }
+
+    /// Enable persistent storage
+    pub fn persistent(mut self, enable: bool) -> Self {
+        self.config.storage.persistent = enable;
+        self
+    }
+
+    /// Set data directory
+    pub fn data_dir(mut self, path: PathBuf) -> Self {
+        self.config.storage.data_dir = path;
         self
     }
 
