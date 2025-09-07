@@ -48,7 +48,19 @@ logs/
 Thumbs.db
 desktop.ini
 
+# Node/JavaScript
+node_modules/
+dist/
+dist-ssr/
+*.local
+.pnp
+.pnp.js
+
+# Tauri
+src-tauri/target/
+
 # Project specific
 /data/
 /traces/
 *.trace
+/urpo_data/
