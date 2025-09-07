@@ -8,17 +8,19 @@ use std::time::{Duration, Instant};
 use tauri::State;
 use tokio::sync::RwLock;
 use urpo_lib::{
-    core::{ServiceName, TraceId},
+    core::{Config, ConfigBuilder, ServiceName, TraceId},
     monitoring::Monitor,
     receiver::OtelReceiver,
-    storage::{InMemoryStorage, StorageBackend},
+    storage::{InMemoryStorage, StorageBackend, StorageManager},
 };
 
 struct AppState {
     storage: Arc<RwLock<dyn StorageBackend>>,
+    storage_manager: Arc<StorageManager>,
     receiver: Arc<RwLock<Option<Arc<OtelReceiver>>>>,
     monitor: Arc<Monitor>,
     startup_time: Instant,
+    config: Arc<Config>,
 }
 
 #[derive(serde::Serialize)]
@@ -51,6 +53,19 @@ struct SystemMetrics {
     spans_per_second: f64,
     total_spans: usize,
     uptime_seconds: u64,
+}
+
+#[derive(serde::Serialize)]
+struct StorageInfo {
+    mode: String,
+    persistent_enabled: bool,
+    data_dir: String,
+    hot_size: usize,
+    warm_size_mb: usize,
+    cold_retention_hours: usize,
+    total_spans: usize,
+    memory_mb: f64,
+    health: String,
 }
 
 // Tauri command to get service metrics - BLAZING FAST with zero allocations in hot path
@@ -365,6 +380,31 @@ async fn stop_receiver(state: State<'_, AppState>) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+async fn get_storage_info(state: State<'_, AppState>) -> Result<StorageInfo, String> {
+    let stats = state.storage_manager.get_stats().await.map_err(|e| e.to_string())?;
+    
+    Ok(StorageInfo {
+        mode: if state.config.storage.persistent { "persistent".to_string() } else { "in-memory".to_string() },
+        persistent_enabled: state.config.storage.persistent,
+        data_dir: state.config.storage.data_dir.to_string_lossy().to_string(),
+        hot_size: state.config.storage.hot_storage_size,
+        warm_size_mb: state.config.storage.warm_storage_mb,
+        cold_retention_hours: state.config.storage.cold_retention_hours,
+        total_spans: stats.span_count,
+        memory_mb: stats.memory_mb,
+        health: format!("{:?}", stats.health_status),
+    })
+}
+
+#[tauri::command]
+async fn trigger_tier_migration(state: State<'_, AppState>) -> Result<String, String> {
+    // Trigger cleanup and tier migration
+    state.storage_manager.run_cleanup().await.map_err(|e| e.to_string())?;
+    
+    Ok("Tier migration triggered successfully".to_string())
+}
+
 fn main() {
     // Track startup time for <200ms target
     let startup_time = Instant::now();
@@ -374,9 +414,29 @@ fn main() {
         .with_env_filter("urpo=debug,tauri=info")
         .init();
 
-    // Create storage with performance settings
-    let storage = Arc::new(RwLock::new(InMemoryStorage::new(100_000)));
-    let storage_backend: Arc<RwLock<dyn StorageBackend>> = storage.clone();
+    // Load configuration with persistent storage support
+    let config = ConfigBuilder::new()
+        .persistent(std::env::var("URPO_PERSISTENT").unwrap_or_default() == "true")
+        .data_dir(std::path::PathBuf::from(
+            std::env::var("URPO_DATA_DIR").unwrap_or_else(|_| "./urpo_data".to_string())
+        ))
+        .max_spans(100_000)
+        .max_memory_mb(512)
+        .build()
+        .expect("Failed to build config");
+    
+    let config = Arc::new(config);
+    
+    // Create storage manager with optional persistence
+    let storage_manager = if config.storage.persistent {
+        tracing::info!("Starting with persistent storage at {:?}", config.storage.data_dir);
+        Arc::new(StorageManager::new_persistent(&config).expect("Failed to create persistent storage"))
+    } else {
+        tracing::info!("Starting with in-memory storage only");
+        Arc::new(StorageManager::new_in_memory(config.storage.max_spans))
+    };
+    
+    let storage_backend = storage_manager.backend();
     
     // Create monitor with performance manager
     use urpo_lib::storage::PerformanceManager;
@@ -385,9 +445,11 @@ fn main() {
     
     let app_state = AppState {
         storage: storage_backend,
+        storage_manager: storage_manager.clone(),
         receiver: Arc::new(RwLock::new(None)),
         monitor: monitor.clone(),
         startup_time,
+        config: config.clone(),
     };
 
     tauri::Builder::default()
@@ -403,6 +465,8 @@ fn main() {
             stream_trace_data,
             start_receiver,
             stop_receiver,
+            get_storage_info,
+            trigger_tier_migration,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
