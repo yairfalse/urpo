@@ -3,12 +3,14 @@ import { invoke } from '@tauri-apps/api/tauri';
 import ServiceHealthDashboard from './components/ServiceHealthDashboard';
 import TraceExplorer from './components/TraceExplorer';
 import SystemMetrics from './components/SystemMetrics';
-import InstantSearch from './components/InstantSearch';
+import ServiceGraph from './components/ServiceGraph';
+import FlowTable from './components/FlowTable';
 import { ServiceMetrics, TraceInfo, SystemMetrics as SystemMetricsType } from './types';
+import { Network, Activity, BarChart3, Layers, GitBranch, Table } from 'lucide-react';
 
 // PERFORMANCE: Memoize the entire app to prevent unnecessary re-renders
 const App = memo(() => {
-  const [activeView, setActiveView] = useState<'health' | 'traces' | 'search'>('health');
+  const [activeView, setActiveView] = useState<'graph' | 'flows' | 'health' | 'traces'>('graph');
   const [selectedTrace, setSelectedTrace] = useState<TraceInfo | null>(null);
   const [services, setServices] = useState<ServiceMetrics[]>([]);
   const [traces, setTraces] = useState<TraceInfo[]>([]);
@@ -103,53 +105,66 @@ const App = memo(() => {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      {/* Header - Unlike Jaeger's heavy header, ours is minimal */}
+    <div className="h-screen bg-slate-950 text-slate-100 flex flex-col">
+      {/* Hubble-style Header */}
       <header className="bg-slate-900 border-b border-slate-800 px-6 py-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            <h1 className="text-xl font-bold text-green-500">
-              URPO
-            </h1>
-            <span className="text-xs text-slate-500">
-              The Ferrari of Trace Explorers 🏎️
-            </span>
+            <div className="flex items-center gap-2">
+              <Network className="w-6 h-6 text-green-500" />
+              <h1 className="text-xl font-bold text-green-500">
+                URPO
+              </h1>
+            </div>
+            <div className="text-xs text-slate-500">
+              OpenTelemetry Observability • Hubble-Inspired Design
+            </div>
           </div>
           
-          <nav className="flex space-x-2">
+          <nav className="flex space-x-1">
             <button
-              onClick={() => setActiveView('health')}
-              className={`px-4 py-2 rounded transition-colors ${
-                activeView === 'health'
-                  ? 'bg-green-600 text-white'
+              onClick={() => setActiveView('graph')}
+              className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 ${
+                activeView === 'graph'
+                  ? 'bg-green-600 text-white shadow-lg'
                   : 'text-slate-400 hover:text-white hover:bg-slate-800'
               }`}
             >
-              Service Health
+              <GitBranch className="w-4 h-4" />
+              Service Map
+            </button>
+            <button
+              onClick={() => setActiveView('flows')}
+              className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 ${
+                activeView === 'flows'
+                  ? 'bg-green-600 text-white shadow-lg'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              <Activity className="w-4 h-4" />
+              Trace Flows
+            </button>
+            <button
+              onClick={() => setActiveView('health')}
+              className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 ${
+                activeView === 'health'
+                  ? 'bg-green-600 text-white shadow-lg'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              <BarChart3 className="w-4 h-4" />
+              Metrics
             </button>
             <button
               onClick={() => setActiveView('traces')}
-              className={`px-4 py-2 rounded transition-colors ${
+              className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 ${
                 activeView === 'traces'
-                  ? 'bg-green-600 text-white'
+                  ? 'bg-green-600 text-white shadow-lg'
                   : 'text-slate-400 hover:text-white hover:bg-slate-800'
               }`}
             >
-              Trace Explorer
-            </button>
-            <button
-              onClick={() => setActiveView('search')}
-              className={`px-4 py-2 rounded transition-colors flex items-center gap-2 ${
-                activeView === 'search'
-                  ? 'bg-green-600 text-white'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
-              }`}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              Search
-              <kbd className="text-xs bg-slate-700 px-1 rounded">⌘K</kbd>
+              <Layers className="w-4 h-4" />
+              Traces
             </button>
           </nav>
 
@@ -177,29 +192,57 @@ const App = memo(() => {
       )}
 
       {/* Main content */}
-      <main className="p-6">
-        {activeView === 'health' ? (
-          <>
+      <main className="flex-1 overflow-hidden">
+        {activeView === 'graph' && (
+          <div className="h-full p-6">
+            <ServiceGraph services={services} traces={traces} />
+          </div>
+        )}
+        
+        {activeView === 'flows' && (
+          <div className="h-full">
+            <FlowTable traces={traces} onRefresh={loadTraces} />
+          </div>
+        )}
+        
+        {activeView === 'health' && (
+          <div className="p-6">
             <ServiceHealthDashboard services={services} />
             {systemMetrics && <SystemMetrics metrics={systemMetrics} />}
-          </>
-        ) : (
-          <TraceExplorer 
-            traces={traces} 
-            onRefresh={loadTraces}
-          />
+          </div>
+        )}
+        
+        {activeView === 'traces' && (
+          <div className="p-6">
+            <TraceExplorer 
+              traces={traces} 
+              onRefresh={loadTraces}
+            />
+          </div>
         )}
       </main>
 
-      {/* Status bar - Shows we're NOT like Jaeger */}
-      <footer className="fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 px-6 py-2 text-xs text-slate-500">
-        <div className="flex justify-between">
-          <span>
-            {services.length} services • {traces.length} traces • {systemMetrics?.total_spans || 0} spans
-          </span>
-          <span>
-            Jaeger crying in the corner with its 30s startup time 😢
-          </span>
+      {/* Hubble-style Status bar */}
+      <footer className="bg-slate-900 border-t border-slate-800 px-6 py-2 text-xs text-slate-500">
+        <div className="flex justify-between items-center">
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+              <span>OTEL collector active</span>
+            </div>
+            <span>
+              {services.length} services • {traces.length} traces • {systemMetrics?.total_spans || 0} spans
+            </span>
+            {systemMetrics && (
+              <span>
+                {systemMetrics.spans_per_second.toFixed(0)} spans/s
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-4">
+            <span>OpenTelemetry observability powered by Urpo</span>
+            <span className="text-green-500">⚡ Hubble-inspired design</span>
+          </div>
         </div>
       </footer>
     </div>
