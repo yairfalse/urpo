@@ -11,11 +11,16 @@
   },
   "dependencies": {
     "@tauri-apps/api": "^1.5.0",
+    "@visx/visx": "^3.12.0",
+    "clsx": "^2.0.0",
+    "d3": "^7.9.0",
+    "date-fns": "^2.30.0",
+    "framer-motion": "^12.23.12",
+    "lucide-react": "^0.542.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "recharts": "^2.10.0",
-    "clsx": "^2.0.0",
-    "date-fns": "^2.30.0"
+    "react-flow-renderer": "^10.3.17",
+    "recharts": "^2.10.0"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^1.5.0",
