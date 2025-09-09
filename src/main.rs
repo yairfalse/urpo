@@ -1,7 +1,7 @@
 //! Urpo CLI entry point.
 
-use urpo::cli::{self, Cli};
-use urpo::core::Result;
+use urpo_lib::cli::{self, Cli};
+use urpo_lib::core::Result;
 
 #[tokio::main]
 async fn main() -> Result<()> {

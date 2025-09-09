@@ -3,17 +3,15 @@
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
-use std::path::Path;
-use std::fs::{File, OpenOptions};
+use std::fs::File;
 use std::io::{Write, BufWriter};
-use memmap2::{MmapOptions, MmapMut};
+use memmap2::MmapMut;
 use parking_lot::RwLock;
-use ahash::{AHashMap, AHashSet};
+use ahash::AHashMap;
 use roaring::RoaringBitmap;
 use crossbeam_channel::{bounded, Sender, Receiver};
-use lz4::{Encoder, EncoderBuilder};
-use rkyv::{Archive, Deserialize, Serialize, AlignedVec};
-use crate::core::{TraceId, SpanId, ServiceName};
+use rkyv::{Archive, Deserialize, Serialize};
+use crate::core::{Result, Span};
 
 // Cache-line aligned span for MAXIMUM performance
 #[repr(C, align(64))]
@@ -98,8 +96,30 @@ impl HotTraceRing {
     }
 }
 
+/// Storage mode configuration
+pub enum StorageMode {
+    InMemory {
+        max_traces: usize,
+    },
+    Persistent {
+        hot_size: usize,
+        warm_path: std::path::PathBuf,
+        cold_path: std::path::PathBuf,
+    },
+}
+
+/// Storage statistics
+pub struct StorageStats {
+    pub total_spans: u64,
+    pub spans_per_second: f64,
+    pub memory_usage_bytes: usize,
+    pub hot_spans: usize,
+    pub warm_spans: usize,
+    pub cold_spans: usize,
+}
+
 /// Main storage engine combining hot and cold storage
-pub struct OtelStorageEngine {
+pub struct StorageEngine {
     // HOT STORAGE - Last 15 minutes in memory
     hot_ring: Arc<HotTraceRing>,
     
@@ -133,6 +153,137 @@ pub struct OtelStorageEngine {
 pub struct StringIntern {
     strings: Vec<Arc<str>>,
     lookup: AHashMap<Arc<str>, u16>,
+}
+
+impl StorageEngine {
+    pub fn new(mode: StorageMode) -> Result<Self> {
+        let (tx, rx) = bounded(100_000);
+        
+        let (hot_capacity, cold_path) = match mode {
+            StorageMode::InMemory { max_traces } => {
+                (max_traces, "./urpo_data/cold".to_string())
+            },
+            StorageMode::Persistent { hot_size, warm_path, cold_path } => {
+                // Create directories if they don't exist
+                let _ = std::fs::create_dir_all(&warm_path);
+                let _ = std::fs::create_dir_all(&cold_path);
+                (hot_size, cold_path.to_string_lossy().to_string())
+            }
+        };
+        
+        Ok(Self {
+            hot_ring: Arc::new(HotTraceRing::new(hot_capacity)),
+            mmap_files: Arc::new(RwLock::new(Vec::new())),
+            current_mmap: Arc::new(RwLock::new(None)),
+            cold_storage_path: cold_path,
+            cold_writer: Arc::new(RwLock::new(None)),
+            trace_index: Arc::new(RwLock::new(AHashMap::with_capacity(100_000))),
+            service_index: Arc::new(RwLock::new(AHashMap::with_capacity(100))),
+            error_bitmap: Arc::new(RwLock::new(RoaringBitmap::new())),
+            string_pool: Arc::new(RwLock::new(StringIntern::new())),
+            ingestion_tx: tx,
+            ingestion_rx: rx,
+            total_spans: AtomicU64::new(0),
+            spans_per_second: AtomicU64::new(0),
+            last_stat_time: Arc::new(RwLock::new(std::time::Instant::now())),
+        })
+    }
+    
+    pub fn ingest_span(&self, span: Span) -> Result<()> {
+        // Convert Span to compact format and ingest
+        let trace_id_bytes = span.trace_id.as_str().as_bytes();
+        let trace_id = u128::from_be_bytes([
+            trace_id_bytes.get(0).copied().unwrap_or(0),
+            trace_id_bytes.get(1).copied().unwrap_or(0),
+            trace_id_bytes.get(2).copied().unwrap_or(0),
+            trace_id_bytes.get(3).copied().unwrap_or(0),
+            trace_id_bytes.get(4).copied().unwrap_or(0),
+            trace_id_bytes.get(5).copied().unwrap_or(0),
+            trace_id_bytes.get(6).copied().unwrap_or(0),
+            trace_id_bytes.get(7).copied().unwrap_or(0),
+            trace_id_bytes.get(8).copied().unwrap_or(0),
+            trace_id_bytes.get(9).copied().unwrap_or(0),
+            trace_id_bytes.get(10).copied().unwrap_or(0),
+            trace_id_bytes.get(11).copied().unwrap_or(0),
+            trace_id_bytes.get(12).copied().unwrap_or(0),
+            trace_id_bytes.get(13).copied().unwrap_or(0),
+            trace_id_bytes.get(14).copied().unwrap_or(0),
+            trace_id_bytes.get(15).copied().unwrap_or(0),
+        ]);
+        
+        let span_id_bytes = span.span_id.as_str().as_bytes();
+        let span_id = u64::from_be_bytes([
+            span_id_bytes.get(0).copied().unwrap_or(0),
+            span_id_bytes.get(1).copied().unwrap_or(0),
+            span_id_bytes.get(2).copied().unwrap_or(0),
+            span_id_bytes.get(3).copied().unwrap_or(0),
+            span_id_bytes.get(4).copied().unwrap_or(0),
+            span_id_bytes.get(5).copied().unwrap_or(0),
+            span_id_bytes.get(6).copied().unwrap_or(0),
+            span_id_bytes.get(7).copied().unwrap_or(0),
+        ]);
+        
+        let parent_id = if let Some(parent) = &span.parent_span_id {
+            let parent_bytes = parent.as_str().as_bytes();
+            u64::from_be_bytes([
+                parent_bytes.get(0).copied().unwrap_or(0),
+                parent_bytes.get(1).copied().unwrap_or(0),
+                parent_bytes.get(2).copied().unwrap_or(0),
+                parent_bytes.get(3).copied().unwrap_or(0),
+                parent_bytes.get(4).copied().unwrap_or(0),
+                parent_bytes.get(5).copied().unwrap_or(0),
+                parent_bytes.get(6).copied().unwrap_or(0),
+                parent_bytes.get(7).copied().unwrap_or(0),
+            ])
+        } else {
+            0
+        };
+        
+        let start_ns = span.start_time.duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default().as_nanos() as u64;
+        let duration_us = span.duration.as_micros() as u32;
+        let is_error = span.status.is_error();
+        
+        self.ingest_span_raw(
+            trace_id,
+            span_id,
+            parent_id,
+            span.service_name.as_str(),
+            &span.operation_name,
+            start_ns,
+            duration_us,
+            is_error,
+        );
+        
+        self.total_spans.fetch_add(1, Ordering::Relaxed);
+        Ok(())
+    }
+    
+    pub fn migrate_tiers(&mut self) -> Result<()> {
+        // Migrate hot -> warm -> cold
+        Ok(())
+    }
+    
+    pub fn query_traces(
+        &self,
+        service: Option<&str>,
+        start_time: Option<u64>,
+        end_time: Option<u64>,
+        limit: usize,
+    ) -> Result<Vec<u128>> {
+        Ok(Vec::new())
+    }
+    
+    pub fn get_stats(&self) -> StorageStats {
+        StorageStats {
+            total_spans: self.total_spans.load(Ordering::Relaxed),
+            spans_per_second: self.spans_per_second.load(Ordering::Relaxed) as f64,
+            memory_usage_bytes: 0,
+            hot_spans: 0,
+            warm_spans: 0,
+            cold_spans: 0,
+        }
+    }
 }
 
 impl StringIntern {
@@ -172,31 +323,11 @@ impl StringIntern {
     }
 }
 
-impl OtelStorageEngine {
-    pub fn new(hot_capacity: usize) -> Self {
-        let (tx, rx) = bounded(100_000); // Buffer for ingestion
-        
-        Self {
-            hot_ring: Arc::new(HotTraceRing::new(hot_capacity)),
-            mmap_files: Arc::new(RwLock::new(Vec::new())),
-            current_mmap: Arc::new(RwLock::new(None)),
-            cold_storage_path: "./traces".to_string(),
-            cold_writer: Arc::new(RwLock::new(None)),
-            trace_index: Arc::new(RwLock::new(AHashMap::with_capacity(100_000))),
-            service_index: Arc::new(RwLock::new(AHashMap::with_capacity(100))),
-            error_bitmap: Arc::new(RwLock::new(RoaringBitmap::new())),
-            string_pool: Arc::new(RwLock::new(StringIntern::new())),
-            ingestion_tx: tx,
-            ingestion_rx: rx,
-            total_spans: AtomicU64::new(0),
-            spans_per_second: AtomicU64::new(0),
-            last_stat_time: Arc::new(RwLock::new(std::time::Instant::now())),
-        }
-    }
-    
-    /// Ingest span - BLAZING FAST with zero blocking
+// Additional methods for StorageEngine
+impl StorageEngine {
+    /// Ingest span raw format - BLAZING FAST with zero blocking
     #[inline(always)]
-    pub fn ingest_span(
+    pub fn ingest_span_raw(
         &self,
         trace_id: u128,
         span_id: u64,
@@ -296,9 +427,9 @@ impl OtelStorageEngine {
         Vec::new() // Placeholder
     }
     
-    /// Get real-time stats
+    /// Get real-time stats (raw)
     #[inline(always)]
-    pub fn get_stats(&self) -> (u64, u64) {
+    pub fn get_raw_stats(&self) -> (u64, u64) {
         let total = self.total_spans.load(Ordering::Relaxed);
         let sps = self.spans_per_second.load(Ordering::Relaxed);
         (total, sps)
@@ -365,11 +496,11 @@ mod tests {
     
     #[test]
     fn test_ingestion_speed() {
-        let engine = OtelStorageEngine::new(1_000_000);
+        let engine = StorageEngine::new(StorageMode::InMemory { max_traces: 1_000_000 }).unwrap();
         
         let start = std::time::Instant::now();
         for i in 0..100_000 {
-            engine.ingest_span(
+            engine.ingest_span_raw(
                 i as u128,
                 i as u64,
                 0,

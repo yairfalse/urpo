@@ -1062,7 +1062,6 @@ impl StorageManager {
     pub fn backend(&self) -> Arc<dyn StorageBackend> {
         self.backend.clone()
     }
-
     /// Store a span.
     pub async fn store_span(&self, span: Span) -> Result<()> {
         // Store in main backend
@@ -1070,7 +1069,7 @@ impl StorageManager {
         
         // Also store in persistent engine if enabled
         if let Some(engine) = &self.persistent_engine {
-            let mut engine = engine.write().await;
+            let engine = engine.read().await;
             engine.ingest_span(span)?;
         }
         

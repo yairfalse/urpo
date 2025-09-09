@@ -1,5 +1,5 @@
 // Type definitions for Urpo frontend
-// These are optimized for performance - no unnecessary fields like Jaeger
+// These are optimized for performance with minimal overhead
 
 export interface ServiceMetrics {
   name: string;

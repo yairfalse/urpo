@@ -1,6 +1,6 @@
 //! Configuration example demonstrating various features.
 
-use urpo::core::{Config, ConfigBuilder, ConfigWatcher};
+use urpo_lib::core::{Config, ConfigBuilder, ConfigWatcher};
 use std::path::PathBuf;
 
 #[tokio::main]
