@@ -76,6 +76,8 @@ pub struct StorageConfig {
     pub warm_storage_mb: usize,
     /// Cold storage retention in hours
     pub cold_retention_hours: usize,
+    /// Enable archival storage for compressed historical data
+    pub enable_archival: bool,
 }
 
 /// UI configuration
@@ -236,6 +238,7 @@ impl Default for StorageConfig {
             hot_storage_size: 10_000,  // 10k spans in hot ring
             warm_storage_mb: 512,       // 512MB warm storage
             cold_retention_hours: 24,   // Keep cold data for 24 hours
+            enable_archival: false,     // Disabled by default
         }
     }
 }

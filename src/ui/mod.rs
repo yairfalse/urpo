@@ -6,6 +6,7 @@
 pub mod dashboard;
 mod fake_data;
 mod widgets;
+mod span_details;
 
 // Re-export commonly used types
 // Dashboard, Tab, FilterMode, DataCommand are all defined in this module
@@ -23,7 +24,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span as TextSpan},
-    widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState},
+    widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState, Wrap},
     Frame, Terminal,
 };
 use std::collections::VecDeque;
@@ -141,6 +142,10 @@ pub struct Dashboard {
     pub selected_service: Option<ServiceName>,
     /// Spans for the selected trace.
     pub trace_spans: Vec<Span>,
+    /// Currently selected span index in the spans view.
+    pub selected_span_index: Option<usize>,
+    /// State for span list navigation.
+    pub span_state: TableState,
     /// Search query.
     pub search_query: String,
     /// Whether search mode is active.
@@ -209,6 +214,8 @@ impl Dashboard {
             selected_tab: Tab::Services,
             service_state,
             trace_state,
+            span_state: TableState::default(),
+            selected_span_index: None,
             services: Vec::new(),
             rps_history: dashmap::DashMap::new(),
             traces: Vec::new(),
@@ -483,6 +490,22 @@ impl Dashboard {
                     self.selected_tab = Tab::Traces;
                 }
             }
+            // Copy span ID (y key)
+            KeyCode::Char('y') if self.selected_tab == Tab::Spans => {
+                if let Some(idx) = self.selected_span_index {
+                    if let Some(span) = self.trace_spans.get(idx) {
+                        let _ = span_details::copy_to_clipboard(span.span_id.as_str());
+                    }
+                }
+            }
+            // Copy trace ID (Y key)
+            KeyCode::Char('Y') if self.selected_tab == Tab::Spans => {
+                if let Some(idx) = self.selected_span_index {
+                    if let Some(span) = self.trace_spans.get(idx) {
+                        let _ = span_details::copy_to_clipboard(span.trace_id.as_str());
+                    }
+                }
+            }
             _ => {}
         }
     }
@@ -507,15 +530,33 @@ impl Dashboard {
 
     /// Move selection up in the current list.
     fn move_selection_up(&mut self) {
-        let state = match self.selected_tab {
-            Tab::Services => &mut self.service_state,
-            Tab::Traces => &mut self.trace_state,
-            Tab::Spans => return,
-        };
-
-        let selected = state.selected().unwrap_or(0);
-        if selected > 0 {
-            state.select(Some(selected - 1));
+        match self.selected_tab {
+            Tab::Services => {
+                let selected = self.service_state.selected().unwrap_or(0);
+                if selected > 0 {
+                    self.service_state.select(Some(selected - 1));
+                }
+            }
+            Tab::Traces => {
+                let selected = self.trace_state.selected().unwrap_or(0);
+                if selected > 0 {
+                    self.trace_state.select(Some(selected - 1));
+                }
+            }
+            Tab::Spans => {
+                if !self.trace_spans.is_empty() {
+                    if self.selected_span_index.is_none() {
+                        self.selected_span_index = Some(0);
+                        self.span_state.select(Some(0));
+                    } else {
+                        let selected = self.selected_span_index.unwrap();
+                        if selected > 0 {
+                            self.selected_span_index = Some(selected - 1);
+                            self.span_state.select(Some(selected - 1));
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -536,7 +577,19 @@ impl Dashboard {
                     self.trace_state.select(Some(selected + 1));
                 }
             }
-            Tab::Spans => {}
+            Tab::Spans => {
+                if !self.trace_spans.is_empty() {
+                    let max = self.trace_spans.len();
+                    let selected = self.selected_span_index.unwrap_or(0);
+                    if selected < max.saturating_sub(1) {
+                        self.selected_span_index = Some(selected + 1);
+                        self.span_state.select(Some(selected + 1));
+                    } else if self.selected_span_index.is_none() {
+                        self.selected_span_index = Some(0);
+                        self.span_state.select(Some(0));
+                    }
+                }
+            }
         }
     }
 
@@ -568,7 +621,14 @@ impl Dashboard {
                 let new_selected = (selected + 10).min(max.saturating_sub(1));
                 self.trace_state.select(Some(new_selected));
             }
-            Tab::Spans => {}
+            Tab::Spans => {
+                if !self.trace_spans.is_empty() {
+                    let selected = self.selected_span_index.unwrap_or(0);
+                    if selected > 0 {
+                        self.selected_span_index = Some(selected - 1);
+                    }
+                }
+            }
         }
     }
 
@@ -577,7 +637,14 @@ impl Dashboard {
         match self.selected_tab {
             Tab::Services => self.service_state.select(Some(0)),
             Tab::Traces => self.trace_state.select(Some(0)),
-            Tab::Spans => {}
+            Tab::Spans => {
+                if !self.trace_spans.is_empty() {
+                    let selected = self.selected_span_index.unwrap_or(0);
+                    if selected > 0 {
+                        self.selected_span_index = Some(selected - 1);
+                    }
+                }
+            }
         }
     }
 
@@ -595,7 +662,14 @@ impl Dashboard {
                     self.trace_state.select(Some(self.traces.len() - 1));
                 }
             }
-            Tab::Spans => {}
+            Tab::Spans => {
+                if !self.trace_spans.is_empty() {
+                    let selected = self.selected_span_index.unwrap_or(0);
+                    if selected > 0 {
+                        self.selected_span_index = Some(selected - 1);
+                    }
+                }
+            }
         }
     }
 
@@ -977,12 +1051,12 @@ fn draw_traces_view(frame: &mut Frame, app: &mut Dashboard) {
     draw_footer(frame, chunks[2], app);
 }
 
-/// Draw the spans view.
+/// Draw the spans view with details panel.
 fn draw_spans_view(frame: &mut Frame, app: &Dashboard) {
     let size = frame.area();
     
-    // Create layout
-    let chunks = Layout::default()
+    // Create vertical layout for header/content/footer
+    let main_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(3), // Header
@@ -990,10 +1064,19 @@ fn draw_spans_view(frame: &mut Frame, app: &Dashboard) {
             Constraint::Length(3), // Footer
         ])
         .split(size);
+    
+    // Split content area horizontally for tree view and details panel
+    let content_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(60), // Span tree
+            Constraint::Percentage(40), // Details panel
+        ])
+        .split(main_chunks[1]);
 
     // Draw header
     let title = if let Some(trace_id) = &app.selected_trace_id {
-        format!(" Trace: {} ({} spans) ", 
+        format!(" Trace: {} ({} spans) [y/Y] Copy IDs [↑↓] Navigate [Enter] Select ", 
             &trace_id.as_str()[..8.min(trace_id.as_str().len())],
             app.trace_spans.len()
         )
@@ -1006,7 +1089,7 @@ fn draw_spans_view(frame: &mut Frame, app: &Dashboard) {
         .title(title)
         .title_alignment(Alignment::Center)
         .border_style(Style::default().fg(Color::Cyan));
-    frame.render_widget(header, chunks[0]);
+    frame.render_widget(header, main_chunks[0]);
 
     if app.trace_spans.is_empty() {
         let paragraph = Paragraph::new("No spans available for this trace\nPress Tab to go back")
@@ -1016,17 +1099,28 @@ fn draw_spans_view(frame: &mut Frame, app: &Dashboard) {
                     .border_style(Style::default().fg(Color::Gray)),
             )
             .alignment(Alignment::Center);
-        frame.render_widget(paragraph, chunks[1]);
+        frame.render_widget(paragraph, content_chunks[0]);
     } else {
         // Build span tree structure
         let span_tree = build_span_tree(&app.trace_spans);
         
-        // Draw span tree
-        draw_span_tree(frame, chunks[1], &span_tree, &app.trace_spans);
+        // Draw span tree on the left
+        draw_span_tree_with_selection(frame, content_chunks[0], &span_tree, &app.trace_spans, app.selected_span_index);
+        
+        // Draw span details panel on the right
+        if let Some(selected_idx) = app.selected_span_index {
+            if let Some(span) = app.trace_spans.get(selected_idx) {
+                span_details::draw_span_details(frame, content_chunks[1], span);
+            } else {
+                draw_empty_details_panel(frame, content_chunks[1]);
+            }
+        } else {
+            draw_empty_details_panel(frame, content_chunks[1]);
+        }
     }
 
     // Draw footer
-    draw_footer(frame, chunks[2], app);
+    draw_footer(frame, main_chunks[2], app);
 }
 
 /// Node in the span tree.
@@ -1195,6 +1289,144 @@ fn draw_span_tree(frame: &mut Frame, area: Rect, tree: &[SpanTreeNode], spans: &
 }
 
 /// Draw the footer with help text.
+/// Draw span tree with selection support.
+fn draw_span_tree_with_selection(
+    frame: &mut Frame,
+    area: Rect,
+    tree: &[SpanTreeNode],
+    spans: &[Span],
+    selected_index: Option<usize>,
+) {
+    let mut lines = Vec::new();
+    let mut current_index = 0;
+    
+    // Recursively build lines with selection highlighting
+    fn add_node_lines_with_selection<'a>(
+        node: &SpanTreeNode,
+        spans: &'a [Span],
+        lines: &mut Vec<Line<'a>>,
+        prefix: String,
+        is_last: bool,
+        selected_index: Option<usize>,
+        current_index: &mut usize,
+    ) {
+        let span = &spans[node.span_index];
+        let is_selected = Some(*current_index) == selected_index;
+        *current_index += 1;
+        
+        // Build the tree prefix
+        let connector = if is_last { "└─" } else { "├─" };
+        let tree_prefix = format!("{}{} ", prefix, connector);
+        
+        // Format span info with selection highlighting
+        let base_style = if is_selected {
+            Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default()
+        };
+        
+        let status_style = if span.status.is_error() {
+            base_style.fg(Color::Red)
+        } else {
+            base_style.fg(Color::Green)
+        };
+        
+        let line = Line::from(vec![
+            TextSpan::styled(tree_prefix, base_style),
+            TextSpan::styled(
+                span.service_name.as_str(),
+                base_style.fg(Color::Cyan),
+            ),
+            TextSpan::styled(" / ", base_style),
+            TextSpan::styled(
+                &span.operation_name,
+                base_style.fg(Color::Yellow),
+            ),
+            TextSpan::styled(" ", base_style),
+            TextSpan::styled(
+                widgets::format_duration(span.duration),
+                base_style.fg(Color::Magenta),
+            ),
+            TextSpan::styled(" ", base_style),
+            TextSpan::styled(
+                if span.status.is_error() { "[ERROR]" } else { "[OK]" },
+                status_style,
+            ),
+        ]);
+        
+        lines.push(line);
+        
+        // Add children
+        let child_prefix = if is_last {
+            format!("{}   ", prefix)
+        } else {
+            format!("{}│  ", prefix)
+        };
+        
+        for (i, child) in node.children.iter().enumerate() {
+            let is_last_child = i == node.children.len() - 1;
+            add_node_lines_with_selection(
+                child,
+                spans,
+                lines,
+                child_prefix.clone(),
+                is_last_child,
+                selected_index,
+                current_index,
+            );
+        }
+    }
+    
+    // Build lines for all root nodes
+    for (i, node) in tree.iter().enumerate() {
+        let is_last = i == tree.len() - 1;
+        add_node_lines_with_selection(
+            node,
+            spans,
+            &mut lines,
+            String::new(),
+            is_last,
+            selected_index,
+            &mut current_index,
+        );
+    }
+    
+    let paragraph = Paragraph::new(lines)
+        .block(
+            Block::default()
+                .title(" Span Tree ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Blue)),
+        )
+        .wrap(Wrap { trim: false });
+    
+    frame.render_widget(paragraph, area);
+}
+
+/// Draw empty details panel.
+fn draw_empty_details_panel(frame: &mut Frame, area: Rect) {
+    let paragraph = Paragraph::new(vec![
+        Line::from(""),
+        Line::from("Select a span to view details"),
+        Line::from(""),
+        Line::from("Keys:"),
+        Line::from("  ↑/↓ - Navigate spans"),
+        Line::from("  Enter - Select span"),
+        Line::from("  y - Copy span ID"),
+        Line::from("  Y - Copy trace ID"),
+        Line::from("  Tab - Switch tabs"),
+    ])
+        .block(
+            Block::default()
+                .title(" Span Details ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::DarkGray)),
+        )
+        .alignment(Alignment::Center);
+    
+    frame.render_widget(paragraph, area);
+}
+
 fn draw_footer(frame: &mut Frame, area: Rect, app: &Dashboard) {
     let help_text = if app.search_active {
         format!("Search: {} | ESC: Cancel | Enter: Dashboardly", app.search_query)

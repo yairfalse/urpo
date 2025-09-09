@@ -105,7 +105,7 @@ enum ArchivalRequest {
 }
 
 /// Archive manager statistics.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct ManagerStats {
     /// Total partitions managed
     pub total_partitions: u64,
@@ -143,7 +143,7 @@ impl ArchiveManager {
             .map_err(|e| UrpoError::Storage(format!("Failed to create archive directory: {}", e)))?;
         
         // Create channels for background processing
-        let (archival_tx, archival_rx) = mpsc::unbounded_channel();
+        let (archival_tx, _archival_rx) = mpsc::unbounded_channel();
         
         let manager = Self {
             config: config.clone(),
@@ -166,7 +166,7 @@ impl ArchiveManager {
         let writer = self.writer.clone();
         let readers = self.readers.clone();
         let stats = self.stats.clone();
-        let mut archival_rx = {
+        let _archival_rx = {
             let (tx, rx) = mpsc::unbounded_channel();
             std::mem::replace(&mut self.archival_tx, tx);
             rx
@@ -174,7 +174,7 @@ impl ArchiveManager {
         
         // Start background task
         let handle = tokio::spawn(async move {
-            Self::background_task(config, writer, readers, stats, archival_rx).await;
+            Self::background_task(config, writer, readers, stats, _archival_rx).await;
         });
         
         self.bg_handle = Some(handle);
@@ -261,7 +261,8 @@ impl ArchiveManager {
 
     /// Get comprehensive archive statistics.
     pub fn get_stats(&self) -> ManagerStats {
-        let mut stats = self.stats.read().clone();
+        let stats = self.stats.read();
+        let mut stats = stats.clone();
         
         // Aggregate stats from all readers
         let readers = self.readers.read();
