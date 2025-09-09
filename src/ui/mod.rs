@@ -24,7 +24,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span as TextSpan},
-    widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState},
+    widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState, Wrap},
     Frame, Terminal,
 };
 use std::collections::VecDeque;
@@ -530,15 +530,33 @@ impl Dashboard {
 
     /// Move selection up in the current list.
     fn move_selection_up(&mut self) {
-        let state = match self.selected_tab {
-            Tab::Services => &mut self.service_state,
-            Tab::Traces => &mut self.trace_state,
-            Tab::Spans => return,
-        };
-
-        let selected = state.selected().unwrap_or(0);
-        if selected > 0 {
-            state.select(Some(selected - 1));
+        match self.selected_tab {
+            Tab::Services => {
+                let selected = self.service_state.selected().unwrap_or(0);
+                if selected > 0 {
+                    self.service_state.select(Some(selected - 1));
+                }
+            }
+            Tab::Traces => {
+                let selected = self.trace_state.selected().unwrap_or(0);
+                if selected > 0 {
+                    self.trace_state.select(Some(selected - 1));
+                }
+            }
+            Tab::Spans => {
+                if !self.trace_spans.is_empty() {
+                    if self.selected_span_index.is_none() {
+                        self.selected_span_index = Some(0);
+                        self.span_state.select(Some(0));
+                    } else {
+                        let selected = self.selected_span_index.unwrap();
+                        if selected > 0 {
+                            self.selected_span_index = Some(selected - 1);
+                            self.span_state.select(Some(selected - 1));
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -561,9 +579,14 @@ impl Dashboard {
             }
             Tab::Spans => {
                 if !self.trace_spans.is_empty() {
+                    let max = self.trace_spans.len();
                     let selected = self.selected_span_index.unwrap_or(0);
-                    if selected > 0 {
-                        self.selected_span_index = Some(selected - 1);
+                    if selected < max.saturating_sub(1) {
+                        self.selected_span_index = Some(selected + 1);
+                        self.span_state.select(Some(selected + 1));
+                    } else if self.selected_span_index.is_none() {
+                        self.selected_span_index = Some(0);
+                        self.span_state.select(Some(0));
                     }
                 }
             }
