@@ -1,6 +1,6 @@
 # URPO: Rust-Only Project Guidelines for Claude
 **THIS IS A RUST PROJECT - NO GO, NO OTHER LANGUAGES**
-**PERFORMANCE TARGET: MAKE JAEGER CRY**
+**PERFORMANCE TARGET: WORLD-CLASS SPEED**
 
 ## ⚠️ CRITICAL: Language Requirements
 - **THIS IS A RUST PROJECT** - All code MUST be in Rust
@@ -11,9 +11,9 @@
 ## 🚀 PERFORMANCE MANIFESTO
 
 **Our Goal:** Build the fastest OTEL trace explorer in existence
-- **Startup Time:** <200ms (vs Jaeger's 30+ seconds)
+- **Startup Time:** <200ms (industry-leading)
 - **Span Processing:** <10μs per span (10,000+ spans/second)
-- **Memory Usage:** <100MB for 1M spans (vs Jaeger's GBs)
+- **Memory Usage:** <100MB for 1M spans (highly efficient)
 - **UI Response:** <16ms frame time (60fps smooth)
 - **Search:** <1ms across 100K traces
 
@@ -529,11 +529,11 @@ bumpalo = "3.0"
 
 **REMEMBER:** Every microsecond counts. We're not just building software, we're building **the fastest trace explorer in existence**.
 
-**When Jaeger takes 30 seconds to show traces, Urpo shows them in 200ms.**
-**When Jaeger uses 2GB of RAM, Urpo uses 50MB.**
-**When Jaeger struggles with 1000 spans, Urpo handles 100,000.**
+**Urpo shows traces in 200ms with minimal resource usage.**
+**Urpo uses only 50MB of RAM for efficient operation.**
+**Urpo handles 100,000+ spans with ease.**
 
-**Code like your life depends on it. Because Jaeger's does.** 🔥⚡
+**Build for excellence and performance.** 🔥⚡
 
 ---
 

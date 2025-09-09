@@ -3,6 +3,8 @@
 //! This module implements GRPC and HTTP receivers for OpenTelemetry
 //! trace data following the OTLP specification.
 
+pub mod http;
+
 use crate::core::{Result, Span as UrpoSpan, SpanId, SpanStatus, TraceId, ServiceName, UrpoError};
 use chrono::{DateTime, Utc};
 use opentelemetry_proto::tonic::collector::trace::v1::{
@@ -47,15 +49,24 @@ impl OtelReceiver {
         tracing::info!("Starting OTEL receivers on ports {} (GRPC) and {} (HTTP)", self.grpc_port, self.http_port);
         
         let grpc_addr = SocketAddr::from(([0, 0, 0, 0], self.grpc_port));
-        let receiver = self;
+        let http_addr = SocketAddr::from(([0, 0, 0, 0], self.http_port));
         
         // Start GRPC server
-        let grpc_handle = {
-            let receiver = receiver.clone();
+        let mut grpc_handle = {
+            let receiver = self.clone();
             tokio::spawn(async move {
-                tracing::info!("GRPC receiver listening on {}", grpc_addr);
                 if let Err(e) = receiver.start_grpc(grpc_addr).await {
                     tracing::error!("GRPC server error: {}", e);
+                }
+            })
+        };
+
+        // Start HTTP server  
+        let mut http_handle = {
+            let receiver = self.clone();
+            tokio::spawn(async move {
+                if let Err(e) = receiver.start_http(http_addr).await {
+                    tracing::error!("HTTP server error: {}", e);
                 }
             })
         };
@@ -63,7 +74,18 @@ impl OtelReceiver {
         // Wait for shutdown signal or server error
         tokio::select! {
             _ = tokio::signal::ctrl_c() => {
-                tracing::info!("Received shutdown signal, stopping GRPC server");
+                tracing::info!("Received shutdown signal, stopping both servers");
+                grpc_handle.abort();
+                http_handle.abort();
+                Ok(())
+            }
+            result = &mut grpc_handle => {
+                tracing::warn!("GRPC server stopped unexpectedly");
+                http_handle.abort();
+                Ok(())
+            }
+            result = &mut http_handle => {
+                tracing::warn!("HTTP server stopped unexpectedly");
                 grpc_handle.abort();
                 Ok(())
             }
@@ -106,9 +128,18 @@ impl OtelReceiver {
 
     /// Start the HTTP server.
     pub async fn start_http(self: Arc<Self>, addr: SocketAddr) -> Result<()> {
-        // HTTP server implementation would go here
-        // For now, we'll just log that it would start
-        tracing::info!("HTTP server would start on {}", addr);
+        tracing::info!("Starting HTTP OTLP receiver on {}", addr);
+        
+        let app = http::create_http_router(self);
+        
+        let listener = tokio::net::TcpListener::bind(addr).await
+            .map_err(|e| UrpoError::network(format!("Failed to bind HTTP server to {}: {}", addr, e)))?;
+        
+        tracing::info!("HTTP OTLP receiver listening on {}", addr);
+        
+        axum::serve(listener, app).await
+            .map_err(|e| UrpoError::protocol(format!("HTTP server error: {}", e)))?;
+            
         Ok(())
     }
 

@@ -12,7 +12,7 @@ const ServiceHealthDashboard = memo(({ services }: Props) => {
     return [...services].sort((a, b) => b.request_rate - a.request_rate);
   }, [services]);
 
-  // Calculate health status (unlike Jaeger's slow calculations)
+  // Calculate health status efficiently
   const getHealthStatus = (errorRate: number) => {
     if (errorRate === 0) return { color: 'text-green-500', bg: 'bg-green-500/10', label: 'Healthy' };
     if (errorRate < 1) return { color: 'text-yellow-500', bg: 'bg-yellow-500/10', label: 'Warning' };
@@ -30,7 +30,7 @@ const ServiceHealthDashboard = memo(({ services }: Props) => {
       <div className="bg-slate-900 rounded-lg p-8 text-center">
         <p className="text-slate-500">No services detected yet...</p>
         <p className="text-slate-600 text-sm mt-2">
-          Waiting for spans (unlike Jaeger, we'll show them instantly when they arrive)
+          Waiting for spans (instant display when available)
         </p>
       </div>
     );
@@ -42,7 +42,7 @@ const ServiceHealthDashboard = memo(({ services }: Props) => {
         Service Health Dashboard
       </h2>
       
-      {/* Service Grid - Renders instantly, unlike Jaeger's sluggish UI */}
+      {/* Service Grid - Optimized rendering */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {sortedServices.map((service) => {
           const health = getHealthStatus(service.error_rate);

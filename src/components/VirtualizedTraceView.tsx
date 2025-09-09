@@ -7,7 +7,7 @@ interface Props {
 }
 
 // CRITICAL: This component uses virtualization to handle 100K+ spans
-// Jaeger DIES with >2000 spans. We handle 100,000+ without breaking a sweat.
+// We handle 100,000+ spans efficiently with virtualization.
 const VirtualizedTraceView = memo(({ trace, spans }: Props) => {
   const [expandedSpans, setExpandedSpans] = useState<Set<string>>(new Set());
   const [visibleRange, setVisibleRange] = useState({ start: 0, end: 50 });
@@ -129,7 +129,7 @@ const VirtualizedTraceView = memo(({ trace, spans }: Props) => {
     return { left: `${left}%`, width: `${Math.max(width, 0.1)}%` };
   };
 
-  // Get visible spans (VIRTUALIZATION - This is what Jaeger lacks!)
+  // Get visible spans using virtualization for performance
   const visibleSpans = flattenedSpans.slice(visibleRange.start, visibleRange.end);
 
   return (
@@ -148,7 +148,7 @@ const VirtualizedTraceView = memo(({ trace, spans }: Props) => {
           
           <div className="text-xs text-slate-500">
             <p>Showing {visibleRange.start}-{visibleRange.end} of {flattenedSpans.length}</p>
-            <p className="text-green-400">Virtualized (unlike Jaeger!)</p>
+            <p className="text-green-400">Virtualized rendering</p>
           </div>
         </div>
       </div>

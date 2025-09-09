@@ -135,7 +135,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, onComm
     },
     {
       id: 'export-jaeger',
-      label: 'Export to Jaeger Format (for the poor souls still using it)',
+      label: 'Export to Jaeger Format',
       icon: '📤',
       category: 'export',
       action: async () => {

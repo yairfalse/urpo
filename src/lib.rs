@@ -24,8 +24,8 @@
 //! # Example
 //!
 //! ```no_run
-//! use urpo::core::Config;
-//! use urpo::Application;
+//! use urpo_lib::core::Config;
+//! use urpo_lib::Application;
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {

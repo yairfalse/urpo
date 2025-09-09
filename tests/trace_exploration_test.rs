@@ -1,7 +1,7 @@
 //! Integration tests for trace exploration functionality.
 
-use urpo::core::{ServiceName, Span, SpanId, SpanStatus, TraceId};
-use urpo::storage::{InMemoryStorage, StorageBackend};
+use urpo_lib::core::{ServiceName, Span, SpanId, SpanStatus, TraceId};
+use urpo_lib::storage::{InMemoryStorage, StorageBackend};
 use std::time::{Duration, SystemTime};
 
 #[tokio::test]
@@ -337,7 +337,7 @@ async fn test_trace_aggregation_and_statistics() {
 
 #[tokio::test]
 async fn test_memory_pressure_and_cleanup() {
-    use urpo::storage::CleanupConfig;
+    use urpo_lib::storage::CleanupConfig;
     
     // Create storage with small capacity to trigger cleanup
     let small_storage = InMemoryStorage::with_cleanup_config(
