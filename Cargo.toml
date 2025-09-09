@@ -60,6 +60,7 @@ hex = "0.4"
 async-trait = "0.1"
 dirs = "5.0"
 notify = "6.1"
+regex = "1.10"
 
 # EXTREME PERFORMANCE OPTIMIZATIONS - OTEL FOCUSED
 roaring = "0.10"  # Compressed bitmaps for instant filtering

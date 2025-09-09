@@ -9,6 +9,8 @@ pub mod performance;
 pub mod degradation;
 pub mod search;
 pub mod engine;
+pub mod archive;
+pub mod archive_manager;
 
 // Re-export commonly used types
 pub use fake_spans::SpanGenerator;
@@ -1021,6 +1023,8 @@ pub struct StorageManager {
     backend: Arc<dyn StorageBackend>,
     /// Persistent storage engine (optional)
     persistent_engine: Option<Arc<RwLock<StorageEngine>>>,
+    /// Archive manager for long-term compressed storage (optional)
+    archive_manager: Option<Arc<RwLock<archive_manager::ArchiveManager>>>,
 }
 
 impl StorageManager {
