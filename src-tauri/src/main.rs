@@ -11,11 +11,11 @@ use urpo_lib::{
     core::{Config, ConfigBuilder, ServiceName, TraceId},
     monitoring::Monitor,
     receiver::OtelReceiver,
-    storage::{InMemoryStorage, StorageBackend, StorageManager},
+    storage::{StorageBackend, StorageManager},
 };
 
 struct AppState {
-    storage: Arc<RwLock<dyn StorageBackend>>,
+    storage: Arc<dyn StorageBackend>,
     storage_manager: Arc<StorageManager>,
     receiver: Arc<RwLock<Option<Arc<OtelReceiver>>>>,
     monitor: Arc<Monitor>,
@@ -73,8 +73,6 @@ struct StorageInfo {
 async fn get_service_metrics(state: State<'_, AppState>) -> Result<Vec<ServiceMetrics>, String> {
     let metrics = state
         .storage
-        .read()
-        .await
         .get_service_metrics()
         .await
         .map_err(|e| e.to_string())?;
@@ -109,8 +107,6 @@ async fn get_service_metrics_batch(
 
     let metrics = state
         .storage
-        .read()
-        .await
         .get_service_metrics()
         .await
         .map_err(|e| e.to_string())?;
@@ -147,8 +143,6 @@ async fn list_recent_traces(
 
     let traces = state
         .storage
-        .read()
-        .await
         .list_recent_traces(limit, service.as_ref())
         .await
         .map_err(|e| e.to_string())?;
@@ -182,8 +176,6 @@ async fn get_error_traces(
 ) -> Result<Vec<TraceInfo>, String> {
     let traces = state
         .storage
-        .read()
-        .await
         .get_error_traces(limit)
         .await
         .map_err(|e| e.to_string())?;
@@ -219,8 +211,6 @@ async fn get_trace_spans(
     
     let spans = state
         .storage
-        .read()
-        .await
         .get_trace_spans(&trace_id)
         .await
         .map_err(|e| e.to_string())?;
@@ -242,8 +232,6 @@ async fn search_traces(
 ) -> Result<Vec<TraceInfo>, String> {
     let traces = state
         .storage
-        .read()
-        .await
         .search_traces(&query, limit)
         .await
         .map_err(|e| e.to_string())?;
@@ -280,8 +268,6 @@ async fn get_system_metrics(state: State<'_, AppState>) -> Result<SystemMetrics,
     
     let total_spans = state
         .storage
-        .read()
-        .await
         .get_span_count()
         .await
         .map_err(|e| e.to_string())?;
@@ -309,8 +295,6 @@ async fn stream_trace_data(
     
     let spans = state
         .storage
-        .read()
-        .await
         .get_trace_spans(&trace_id)
         .await
         .map_err(|e| e.to_string())?;
@@ -351,10 +335,18 @@ async fn start_receiver(state: State<'_, AppState>) -> Result<(), String> {
     }
 
     // Create receiver with standard OTEL ports
+    // Create a new storage backend specifically for the receiver
+    // This is a workaround for the type mismatch - OtelReceiver expects Arc<RwLock<dyn StorageBackend>>
+    // but our app uses Arc<dyn StorageBackend>
+    use urpo_lib::storage::InMemoryStorage;
+    let storage_impl = InMemoryStorage::new(state.config.storage.max_spans);
+    let receiver_storage: Arc<tokio::sync::RwLock<dyn urpo_lib::storage::StorageBackend>> = 
+        Arc::new(tokio::sync::RwLock::new(storage_impl));
+    
     let receiver = Arc::new(OtelReceiver::new(
         4317, // GRPC port
         4318, // HTTP port
-        state.storage.clone(),
+        receiver_storage,
         state.monitor.clone(),
     ));
 

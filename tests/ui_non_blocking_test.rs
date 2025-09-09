@@ -3,9 +3,9 @@
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
-use urpo::storage::InMemoryStorage;
-use urpo::ui::{Dashboard, Tab};
-use urpo::monitoring::ServiceHealthMonitor;
+use urpo_lib::storage::InMemoryStorage;
+use urpo_lib::ui::{Dashboard, Tab};
+use urpo_lib::monitoring::ServiceHealthMonitor;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_ui_dashboard_creation() {
@@ -33,7 +33,7 @@ async fn test_ui_dashboard_creation() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_dashboard_tab_navigation() {
-    use urpo::ui::FilterMode;
+    use urpo_lib::ui::FilterMode;
     
     // Create storage
     let storage = Arc::new(RwLock::new(InMemoryStorage::new()));

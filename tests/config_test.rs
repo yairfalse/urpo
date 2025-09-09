@@ -1,6 +1,6 @@
 //! Configuration system tests.
 
-use urpo::core::{Config, ConfigBuilder};
+use urpo_lib::core::{Config, ConfigBuilder};
 
 #[test]
 fn test_default_config() {

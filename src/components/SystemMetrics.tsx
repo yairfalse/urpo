@@ -34,7 +34,7 @@ const SystemMetrics = memo(({ metrics }: Props) => {
   return (
     <div className="mt-6 bg-slate-900 rounded-lg p-4 border border-slate-800">
       <h3 className="text-sm font-medium text-slate-200 mb-3">
-        System Performance (Making Jaeger Cry 😢)
+        System Performance
       </h3>
       
       <div className="grid grid-cols-5 gap-4">
@@ -44,7 +44,7 @@ const SystemMetrics = memo(({ metrics }: Props) => {
             {metrics.memory_usage_mb.toFixed(1)}MB
           </p>
           <p className="text-xs text-slate-600 mt-1">
-            Jaeger: 2000MB+ 🤮
+            Target: <100MB
           </p>
         </div>
         
@@ -54,7 +54,7 @@ const SystemMetrics = memo(({ metrics }: Props) => {
             {metrics.cpu_usage_percent.toFixed(1)}%
           </p>
           <p className="text-xs text-slate-600 mt-1">
-            Jaeger: 80%+ 🔥
+            Efficient usage
           </p>
         </div>
         
@@ -64,7 +64,7 @@ const SystemMetrics = memo(({ metrics }: Props) => {
             {metrics.spans_per_second.toFixed(0)}/s
           </p>
           <p className="text-xs text-slate-600 mt-1">
-            10x Jaeger 🚀
+            High performance
           </p>
         </div>
         

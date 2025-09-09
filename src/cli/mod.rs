@@ -359,6 +359,7 @@ mod tests {
             no_fake: false,
             debug: false,
             headless: false,
+            terminal: true,
             check_config: false,
             version: false,
         };

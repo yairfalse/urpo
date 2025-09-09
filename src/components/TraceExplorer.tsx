@@ -8,7 +8,7 @@ interface Props {
   onRefresh: () => void;
 }
 
-// PERFORMANCE: Unlike Jaeger which dies with >2000 spans, we handle 100K+ spans smoothly
+// PERFORMANCE: We handle 100K+ spans smoothly with optimized rendering
 const TraceExplorer = memo(({ traces, onRefresh }: Props) => {
   const [selectedTrace, setSelectedTrace] = useState<TraceInfo | null>(null);
   const [traceSpans, setTraceSpans] = useState<SpanData[]>([]);
@@ -80,7 +80,7 @@ const TraceExplorer = memo(({ traces, onRefresh }: Props) => {
 
   return (
     <div className="space-y-4">
-      {/* Header with search - INSTANT unlike Jaeger's slow search */}
+      {/* Header with instant search */}
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold text-slate-200">
           Trace Explorer
@@ -89,7 +89,7 @@ const TraceExplorer = memo(({ traces, onRefresh }: Props) => {
         <div className="flex items-center space-x-2">
           <input
             type="text"
-            placeholder="Search traces... (instant, not like Jaeger)"
+            placeholder="Search traces..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="px-3 py-2 bg-slate-900 border border-slate-800 rounded text-sm text-slate-300 placeholder-slate-600 focus:border-green-500 focus:outline-none w-64"
@@ -189,7 +189,7 @@ const TraceExplorer = memo(({ traces, onRefresh }: Props) => {
                 <div className="animate-spin text-green-500 text-2xl mb-2">⚡</div>
                 <p className="text-slate-400">Loading spans...</p>
                 <p className="text-slate-600 text-xs mt-1">
-                  (Even 100K spans load fast, unlike Jaeger)
+                  (Optimized for 100K+ spans)
                 </p>
               </div>
             </div>
