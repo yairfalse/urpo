@@ -1,7 +1,7 @@
 //! Integration tests for storage backend with fake spans and metrics aggregation.
 
-use urpo::core::{ServiceMetrics, ServiceName};
-use urpo::storage::{StorageManager, fake_spans::FakeSpanGenerator};
+use urpo_lib::core::{ServiceMetrics, ServiceName};
+use urpo_lib::storage::{StorageManager, fake_spans::FakeSpanGenerator};
 use std::time::Duration;
 
 #[tokio::test]

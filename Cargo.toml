@@ -1,9 +1,9 @@
 [workspace]
-members = [".", "src-tauri"]
+members = ["src-tauri"]
 resolver = "2"
 
 [package]
-name = "urpo"
+name = "urpo_lib"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.70"
@@ -22,6 +22,12 @@ tonic = { version = "0.12", features = ["transport"] }
 prost = "0.13"
 opentelemetry = "0.26"
 opentelemetry-proto = { version = "0.26", features = ["gen-tonic"] }
+
+# HTTP Server for OTLP/HTTP
+axum = { version = "0.7", features = ["json"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+hyper = { version = "1.0", features = ["full"] }
 
 # Terminal UI
 ratatui = "0.29"
@@ -61,11 +67,12 @@ memmap2 = "0.9"  # Memory-mapped files for huge datasets
 rayon = "1.10"  # Parallel processing
 parking_lot = "0.12"  # Faster locks than std
 ahash = "0.8"  # Faster hashing - MUCH faster than default
-rkyv = { version = "0.7", features = ["validation"] }  # Zero-copy serialization
-lz4 = "1.24"  # Fast compression for cold storage
+rkyv = { version = "0.7", features = ["validation", "archive_le"] }  # Zero-copy serialization
+lz4 = "1.28"  # Fast compression for cold storage
 rocksdb = { version = "0.22", optional = true }  # Optional persistent storage
 crossbeam-channel = "0.5"  # Lock-free channels for trace ingestion
 speedy = "0.8"  # Even faster serialization than bincode
+object-pool = "0.4"  # Object pooling for performance
 
 
 [dev-dependencies]
@@ -74,6 +81,7 @@ wiremock = "0.6"
 criterion = "0.5"
 pretty_assertions = "1.4"
 opentelemetry-otlp = { version = "0.26", features = ["tonic", "trace"] }
+reqwest = { version = "0.11", features = ["json"] }
 opentelemetry_sdk = { version = "0.26", features = ["rt-tokio"] }
 tracing-subscriber = "0.3"
 

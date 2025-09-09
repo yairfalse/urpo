@@ -123,7 +123,7 @@ export default function FlowTable({ traces, onRefresh }: FlowTableProps) {
 
   return (
     <div className="h-full flex flex-col bg-slate-950">
-      {/* Hubble-style Header */}
+      {/* Header */}
       <div className="bg-slate-900 border-b border-slate-800 p-4">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">

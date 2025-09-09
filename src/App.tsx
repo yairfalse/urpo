@@ -72,7 +72,7 @@ const App = memo(() => {
     };
   }, []);
 
-  // Poll for metrics - unlike Jaeger, we update efficiently
+  // Poll for metrics - updates efficiently
   useEffect(() => {
     if (loading) return;
 
@@ -106,7 +106,7 @@ const App = memo(() => {
 
   return (
     <div className="h-screen bg-slate-950 text-slate-100 flex flex-col">
-      {/* Hubble-style Header */}
+      {/* Header */}
       <header className="bg-slate-900 border-b border-slate-800 px-6 py-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
@@ -117,7 +117,7 @@ const App = memo(() => {
               </h1>
             </div>
             <div className="text-xs text-slate-500">
-              OpenTelemetry Observability • Hubble-Inspired Design
+              OpenTelemetry Observability • Modern Design
             </div>
           </div>
           
@@ -222,7 +222,7 @@ const App = memo(() => {
         )}
       </main>
 
-      {/* Hubble-style Status bar */}
+      {/* Status bar */}
       <footer className="bg-slate-900 border-t border-slate-800 px-6 py-2 text-xs text-slate-500">
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-6">
@@ -241,7 +241,7 @@ const App = memo(() => {
           </div>
           <div className="flex items-center gap-4">
             <span>OpenTelemetry observability powered by Urpo</span>
-            <span className="text-green-500">⚡ Hubble-inspired design</span>
+            <span className="text-green-500">⚡ Modern design</span>
           </div>
         </div>
       </footer>

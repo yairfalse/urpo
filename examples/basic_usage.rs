@@ -9,8 +9,8 @@
 use chrono::Utc;
 use std::collections::HashMap;
 use tokio::time::sleep;
-use urpo::core::{Config, ServiceName, Span, SpanId, SpanKind, SpanStatus, TraceId};
-use urpo::storage::{InMemoryStorage, StorageBackend};
+use urpo_lib::core::{Config, ServiceName, Span, SpanId, SpanKind, SpanStatus, TraceId};
+use urpo_lib::storage::{InMemoryStorage, StorageBackend};
 
 /// Generate a test span with realistic data.
 fn generate_test_span(

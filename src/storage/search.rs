@@ -4,7 +4,7 @@
 use std::sync::Arc;
 use dashmap::DashMap;
 use std::collections::BTreeMap;
-use crate::core::{TraceId, SpanId, ServiceName};
+use crate::core::{TraceId, ServiceName};
 use std::sync::atomic::{AtomicU64, Ordering};
 use parking_lot::RwLock;
 
@@ -59,7 +59,7 @@ impl SearchIndex {
             .push(trace_id);
 
         // Index by operation (intern string for deduplication)
-        let op_key = Arc::from(operation);
+        let op_key: Arc<str> = Arc::from(operation);
         self.operation_index
             .entry(op_key.clone())
             .or_insert_with(|| Arc::new(RwLock::new(Vec::with_capacity(100))))
