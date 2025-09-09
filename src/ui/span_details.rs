@@ -8,7 +8,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span as TextSpan},
-    widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
+    widgets::{Block, Borders, List, ListItem, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState, Wrap},
     Frame,
 };
 use std::collections::BTreeMap;
@@ -19,20 +19,24 @@ pub fn draw_span_details(frame: &mut Frame, area: Rect, span: &Span) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(9),  // Basic info
-            Constraint::Min(5),     // Attributes
-            Constraint::Length(6),  // Events/Logs
+            Constraint::Length(10),  // Basic info (expanded)
+            Constraint::Percentage(35), // Attributes (scrollable)
+            Constraint::Percentage(25), // Tags
+            Constraint::Min(5),         // Events/Resource info
         ])
         .split(area);
 
     // Draw basic info section
     draw_basic_info(frame, chunks[0], span);
     
-    // Draw attributes section
+    // Draw attributes section (scrollable)
     draw_attributes(frame, chunks[1], span);
     
-    // Draw events section
-    draw_events(frame, chunks[2], span);
+    // Draw tags section
+    draw_tags(frame, chunks[2], span);
+    
+    // Draw resource attributes / events
+    draw_resource_info(frame, chunks[3], span);
 }
 
 /// Draw basic span information.
@@ -43,7 +47,7 @@ fn draw_basic_info(frame: &mut Frame, area: Rect, span: &Span) {
     lines.push(Line::from(vec![
         TextSpan::styled("Span ID: ", Style::default().fg(Color::Gray)),
         TextSpan::styled(
-            &span.span_id.as_str()[..16.min(span.span_id.as_str().len())],
+            span.span_id.as_str(),
             Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
         ),
         TextSpan::styled(" [y]", Style::default().fg(Color::DarkGray)),
@@ -53,18 +57,29 @@ fn draw_basic_info(frame: &mut Frame, area: Rect, span: &Span) {
     lines.push(Line::from(vec![
         TextSpan::styled("Trace ID: ", Style::default().fg(Color::Gray)),
         TextSpan::styled(
-            &span.trace_id.as_str()[..16.min(span.trace_id.as_str().len())],
+            span.trace_id.as_str(),
             Style::default().fg(Color::Yellow),
         ),
         TextSpan::styled(" [Y]", Style::default().fg(Color::DarkGray)),
     ]));
+    
+    // Parent Span ID (if exists)
+    if let Some(parent_id) = &span.parent_span_id {
+        lines.push(Line::from(vec![
+            TextSpan::styled("Parent ID: ", Style::default().fg(Color::Gray)),
+            TextSpan::styled(
+                parent_id.as_str(),
+                Style::default().fg(Color::DarkGray),
+            ),
+        ]));
+    }
     
     // Service
     lines.push(Line::from(vec![
         TextSpan::styled("Service: ", Style::default().fg(Color::Gray)),
         TextSpan::styled(
             span.service_name.as_str(),
-            Style::default().fg(Color::Green),
+            Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
         ),
     ]));
     
@@ -77,43 +92,53 @@ fn draw_basic_info(frame: &mut Frame, area: Rect, span: &Span) {
         ),
     ]));
     
-    // Duration
+    // Duration with microseconds and milliseconds
+    let duration_us = span.duration.as_micros();
+    let duration_ms = span.duration.as_millis();
+    let duration_str = if duration_ms > 0 {
+        format!("{}.{}ms ({}μs)", duration_ms, (duration_us % 1000) / 100, duration_us)
+    } else {
+        format!("{}μs", duration_us)
+    };
+    
     lines.push(Line::from(vec![
         TextSpan::styled("Duration: ", Style::default().fg(Color::Gray)),
         TextSpan::styled(
-            &format!("{}μs", span.duration),
-            Style::default().fg(Color::Blue),
+            &duration_str,
+            Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD),
         ),
     ]));
     
-    // Status
+    // Status with error message if available
     let status_style = if span.status.is_error() {
         Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
     } else {
         Style::default().fg(Color::Green)
     };
     
+    let status_text = match &span.status {
+        crate::core::SpanStatus::Ok => "OK",
+        crate::core::SpanStatus::Error(msg) => msg,
+    };
+    
     lines.push(Line::from(vec![
         TextSpan::styled("Status: ", Style::default().fg(Color::Gray)),
-        TextSpan::styled(
-            if span.status.is_error() { "ERROR" } else { "OK" },
-            status_style,
-        ),
+        TextSpan::styled(status_text, status_style),
     ]));
     
     // Timestamps
     lines.push(Line::from(vec![
-        TextSpan::styled("Start: ", Style::default().fg(Color::Gray)),
+        TextSpan::styled("Start Time: ", Style::default().fg(Color::Gray)),
         TextSpan::styled(
             &format_timestamp(span.start_time),
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(Color::White),
         ),
     ]));
     
     let paragraph = Paragraph::new(lines)
         .block(
             Block::default()
-                .title(" SPAN DETAILS ")
+                .title(" SPAN INFORMATION ")
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(Color::Cyan)),
         )
@@ -160,6 +185,121 @@ fn draw_attributes(frame: &mut Frame, area: Rect, span: &Span) {
     frame.render_widget(list, area);
 }
 
+/// Draw span tags.
+fn draw_tags(frame: &mut Frame, area: Rect, span: &Span) {
+    if span.tags.is_empty() {
+        let paragraph = Paragraph::new(vec![
+            Line::from(""),
+            Line::from(TextSpan::styled(
+                "  No tags available",
+                Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC),
+            )),
+        ])
+        .block(
+            Block::default()
+                .title(" TAGS ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Magenta)),
+        );
+        frame.render_widget(paragraph, area);
+        return;
+    }
+
+    // Convert tags to sorted BTreeMap for consistent ordering
+    let tags: BTreeMap<String, String> = span.tags
+        .iter()
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+    
+    let items: Vec<ListItem> = tags
+        .iter()
+        .map(|(key, value)| {
+            let content = Line::from(vec![
+                TextSpan::styled(
+                    &format!("{}=", key),
+                    Style::default().fg(Color::Magenta),
+                ),
+                TextSpan::styled(
+                    value,
+                    Style::default().fg(Color::White),
+                ),
+            ]);
+            ListItem::new(content)
+        })
+        .collect();
+    
+    let list = List::new(items)
+        .block(
+            Block::default()
+                .title(format!(" TAGS ({}) ", tags.len()))
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Magenta)),
+        )
+        .highlight_style(Style::default().add_modifier(Modifier::BOLD))
+        .highlight_symbol("→ ");
+    
+    frame.render_widget(list, area);
+}
+
+/// Draw resource attributes and events.
+fn draw_resource_info(frame: &mut Frame, area: Rect, span: &Span) {
+    // Split area into two columns
+    let chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(50),
+            Constraint::Percentage(50),
+        ])
+        .split(area);
+    
+    // Draw resource attributes on the left
+    draw_resource_attributes(frame, chunks[0], span);
+    
+    // Draw events on the right
+    draw_events(frame, chunks[1], span);
+}
+
+/// Draw resource attributes.
+fn draw_resource_attributes(frame: &mut Frame, area: Rect, span: &Span) {
+    let mut lines = vec![];
+    
+    // Show resource attributes if available
+    if !span.resource_attributes.is_empty() {
+        let sorted: BTreeMap<String, String> = span.resource_attributes.iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        
+        for (key, value) in sorted.iter().take(5) {
+            lines.push(Line::from(vec![
+                TextSpan::styled(&format!("{}: ", key), Style::default().fg(Color::Gray)),
+                TextSpan::styled(value, Style::default().fg(Color::White)),
+            ]));
+        }
+        
+        if span.resource_attributes.len() > 5 {
+            lines.push(Line::from(TextSpan::styled(
+                &format!("  ... and {} more", span.resource_attributes.len() - 5),
+                Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC),
+            )));
+        }
+    } else {
+        lines.push(Line::from(TextSpan::styled(
+            "No resource attributes",
+            Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC),
+        )));
+    }
+    
+    let paragraph = Paragraph::new(lines)
+        .block(
+            Block::default()
+                .title(" RESOURCE ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Yellow)),
+        );
+    
+    frame.render_widget(paragraph, area);
+}
+
 /// Draw span events/logs.
 fn draw_events(frame: &mut Frame, area: Rect, span: &Span) {
     let mut lines = vec![];
@@ -167,19 +307,30 @@ fn draw_events(frame: &mut Frame, area: Rect, span: &Span) {
     // For now, show some placeholder events
     // In a real implementation, these would come from span.events
     lines.push(Line::from(vec![
-        TextSpan::styled("10ms: ", Style::default().fg(Color::DarkGray)),
-        TextSpan::styled("Request started", Style::default().fg(Color::White)),
+        TextSpan::styled("Event Log:", Style::default().fg(Color::Gray).add_modifier(Modifier::BOLD)),
     ]));
     
     lines.push(Line::from(vec![
-        TextSpan::styled("15ms: ", Style::default().fg(Color::DarkGray)),
-        TextSpan::styled("Connected to database", Style::default().fg(Color::Green)),
+        TextSpan::styled("10ms: ", Style::default().fg(Color::DarkGray)),
+        TextSpan::styled("Started", Style::default().fg(Color::White)),
     ]));
+    
+    if span.duration.as_millis() > 100 {
+        lines.push(Line::from(vec![
+            TextSpan::styled("50ms: ", Style::default().fg(Color::DarkGray)),
+            TextSpan::styled("Processing", Style::default().fg(Color::Yellow)),
+        ]));
+    }
     
     if span.status.is_error() {
         lines.push(Line::from(vec![
-            TextSpan::styled("20ms: ", Style::default().fg(Color::DarkGray)),
-            TextSpan::styled("Error occurred", Style::default().fg(Color::Red)),
+            TextSpan::styled(&format!("{}ms: ", span.duration.as_millis()), Style::default().fg(Color::DarkGray)),
+            TextSpan::styled("Error!", Style::default().fg(Color::Red)),
+        ]));
+    } else {
+        lines.push(Line::from(vec![
+            TextSpan::styled(&format!("{}ms: ", span.duration.as_millis()), Style::default().fg(Color::DarkGray)),
+            TextSpan::styled("Complete", Style::default().fg(Color::Green)),
         ]));
     }
     
@@ -188,25 +339,19 @@ fn draw_events(frame: &mut Frame, area: Rect, span: &Span) {
             Block::default()
                 .title(" EVENTS ")
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Magenta)),
+                .border_style(Style::default().fg(Color::Cyan)),
         );
     
     frame.render_widget(paragraph, area);
 }
 
 /// Format a timestamp for display.
-fn format_timestamp(timestamp: u64) -> String {
-    use chrono::{DateTime, Local, TimeZone};
+fn format_timestamp(timestamp: std::time::SystemTime) -> String {
+    use chrono::{DateTime, Local};
     
-    // Convert nanoseconds to DateTime
-    let secs = (timestamp / 1_000_000_000) as i64;
-    let nanos = (timestamp % 1_000_000_000) as u32;
-    
-    if let Some(dt) = Local.timestamp_opt(secs, nanos).single() {
-        dt.format("%H:%M:%S.%3f").to_string()
-    } else {
-        format!("{}ns", timestamp)
-    }
+    // Convert SystemTime to DateTime
+    let datetime: DateTime<Local> = timestamp.into();
+    datetime.format("%Y-%m-%d %H:%M:%S.%3f").to_string()
 }
 
 /// Check if clipboard support is available and copy text.
