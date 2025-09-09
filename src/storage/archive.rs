@@ -9,14 +9,12 @@
 use crate::core::{Result, UrpoError, Span, TraceId, ServiceName};
 use ahash::{AHashMap, AHashSet};
 use chrono::{DateTime, Utc, TimeZone};
-use lz4::{Decoder, Encoder};
-use memmap2::{Mmap, MmapMut, MmapOptions};
+use lz4::EncoderBuilder;
 use parking_lot::RwLock;
 use roaring::RoaringBitmap;
-use rkyv::{Archive, Deserialize, Serialize, AlignedVec, archived_root};
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::fs::{File, OpenOptions};
-use std::io::{Read, Write, BufReader, BufWriter, Seek, SeekFrom};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -40,8 +38,9 @@ impl PartitionGranularity {
             Self::Hourly => datetime.format("%Y%m%d_%H").to_string(),
             Self::Daily => datetime.format("%Y%m%d").to_string(), 
             Self::Weekly => {
-                let week = datetime.iso_week();
-                format!("{}W{:02}", week.year(), week.week())
+                let week = datetime.format("%G").to_string();
+                let week_num = datetime.format("%V").to_string();
+                format!("{}W{}", week, week_num)
             }
         }
     }
@@ -85,7 +84,7 @@ impl PartitionGranularity {
 }
 
 /// Lightweight index entry for a single archive partition.
-#[derive(Debug, Clone, Archive, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArchiveIndex {
     /// Partition key (e.g., "20240315" for daily, "20240315_14" for hourly)
     pub partition_key: String,
@@ -241,7 +240,7 @@ impl ArchiveIndex {
     pub fn get_service_trace_ids(&self, service_name: &ServiceName) -> Result<Vec<u32>> {
         // Find service ID
         let service_id = self.service_names.iter()
-            .find(|(_, name)| name == service_name.as_str())
+            .find(|(_, name)| name.as_str() == service_name.as_str())
             .map(|(id, _)| *id);
             
         if let Some(id) = service_id {
@@ -326,7 +325,7 @@ impl ServiceInterning {
 }
 
 /// Compressed trace data for a single partition.
-#[derive(Debug, Archive, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ArchivePartition {
     /// Partition metadata
     pub index: ArchiveIndex,
@@ -461,19 +460,19 @@ impl ArchiveWriter {
         Ok(())
     }
 
-    /// Compress traces using LZ4.
+    /// Compress traces using JSON + LZ4.
     fn compress_traces(&self, traces: &[Vec<Span>]) -> Result<Vec<u8>> {
-        // Serialize traces using rkyv
-        let mut serialized = AlignedVec::new();
-        let pos = rkyv::to_bytes::<_, 256>(traces)
+        // For now, use simple JSON serialization 
+        let json = serde_json::to_vec(traces)
             .map_err(|e| UrpoError::Storage(format!("Failed to serialize traces: {}", e)))?;
         
         // Compress with LZ4
         let mut compressed = Vec::new();
         {
-            let mut encoder = Encoder::new(&mut compressed)
+            let mut encoder = EncoderBuilder::new()
+                .build(&mut compressed)
                 .map_err(|e| UrpoError::Storage(format!("Failed to create LZ4 encoder: {}", e)))?;
-            encoder.write_all(&pos)
+            encoder.write_all(&json)
                 .map_err(|e| UrpoError::Storage(format!("Failed to compress traces: {}", e)))?;
             encoder.finish().1
                 .map_err(|e| UrpoError::Storage(format!("Failed to finish compression: {}", e)))?;
@@ -488,13 +487,13 @@ impl ArchiveWriter {
         let index_path = self.archive_dir.join(format!("{}.index", partition_key));
         
         // Write main archive
-        let archive_data = rkyv::to_bytes::<_, 256>(partition)
+        let archive_data = serde_json::to_vec(partition)
             .map_err(|e| UrpoError::Storage(format!("Failed to serialize partition: {}", e)))?;
         std::fs::write(&archive_path, &archive_data)
             .map_err(|e| UrpoError::Storage(format!("Failed to write archive: {}", e)))?;
         
         // Write lightweight index
-        let index_data = rkyv::to_bytes::<_, 256>(&partition.index)
+        let index_data = serde_json::to_vec(&partition.index)
             .map_err(|e| UrpoError::Storage(format!("Failed to serialize index: {}", e)))?;
         std::fs::write(&index_path, &index_data)
             .map_err(|e| UrpoError::Storage(format!("Failed to write index: {}", e)))?;
@@ -559,11 +558,9 @@ impl ArchiveReader {
         let index_data = std::fs::read(&index_path)
             .map_err(|e| UrpoError::Storage(format!("Failed to read index file: {}", e)))?;
         
-        let archived = archived_root::<ArchiveIndex>(&index_data)
-            .map_err(|e| UrpoError::Storage(format!("Failed to deserialize index: {}", e)))?;
-        
-        Ok(archived.deserialize(&mut rkyv::Infallible)
-            .map_err(|e| UrpoError::Storage(format!("Failed to deserialize index: {:?}", e)))?)
+        // For now, use simple JSON deserialization 
+        serde_json::from_slice::<ArchiveIndex>(&index_data)
+            .map_err(|e| UrpoError::Storage(format!("Failed to deserialize index: {}", e)))
     }
 
     /// Query trace IDs for a service across time range.
@@ -577,7 +574,7 @@ impl ArchiveReader {
         let indices = self.indices.read();
         let mut matching_trace_ids = Vec::new();
         
-        for (partition_key, index) in indices.iter() {
+        for (_partition_key, index) in indices.iter() {
             if !index.covers_time_range(start_time, end_time) {
                 continue;
             }
