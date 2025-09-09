@@ -42,8 +42,10 @@
 #![allow(clippy::module_name_repetitions)]
 #![allow(clippy::must_use_candidate)]
 
+pub mod api;
 pub mod cli;
 pub mod core;
+pub mod export;
 pub mod monitoring;
 pub mod receiver;
 pub mod storage;
