@@ -4,7 +4,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::fs::File;
-use std::io::{Write, BufWriter};
+use std::io::BufWriter;
 use memmap2::MmapMut;
 use parking_lot::RwLock;
 use ahash::AHashMap;
@@ -266,10 +266,10 @@ impl StorageEngine {
     
     pub fn query_traces(
         &self,
-        service: Option<&str>,
-        start_time: Option<u64>,
-        end_time: Option<u64>,
-        limit: usize,
+        _service: Option<&str>,
+        _start_time: Option<u64>,
+        _end_time: Option<u64>,
+        _limit: usize,
     ) -> Result<Vec<u128>> {
         Ok(Vec::new())
     }
@@ -391,9 +391,9 @@ impl StorageEngine {
     pub fn query_spans(
         &self,
         trace_id: Option<u128>,
-        service: Option<&str>,
+        _service: Option<&str>,
         error_only: bool,
-        limit: usize,
+        _limit: usize,
     ) -> Vec<CompactSpan> {
         let mut result_bitmap = RoaringBitmap::new();
         let total = self.total_spans.load(Ordering::Relaxed) as u32;
@@ -410,7 +410,7 @@ impl StorageEngine {
             }
         }
         
-        if let Some(svc) = service {
+        if let Some(svc) = _service {
             if let Some(service_id) = self.string_pool.read().lookup.get(svc) {
                 if let Some(bitmap) = self.service_index.read().get(service_id) {
                     result_bitmap &= bitmap;

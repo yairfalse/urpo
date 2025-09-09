@@ -78,10 +78,34 @@ pub trait StorageBackend: Send + Sync {
     
     /// Get slow traces (P99 latency).
     async fn get_slow_traces(&self, threshold: Duration, limit: usize) -> Result<Vec<TraceInfo>>;
+    
+    /// List traces with filtering options.
+    async fn list_traces(
+        &self,
+        service: Option<&str>,
+        start_time: Option<u64>,
+        end_time: Option<u64>,
+        limit: usize,
+    ) -> Result<Vec<TraceInfo>>;
+    
+    /// Get service metrics as a map.
+    async fn get_service_metrics_map(&self) -> Result<HashMap<ServiceName, ServiceMetrics>>;
+    
+    /// Search spans by query with filters.
+    async fn search_spans(
+        &self,
+        query: &str,
+        service: Option<&str>,
+        attribute_key: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<Span>>;
+    
+    /// Get storage statistics for health check.
+    async fn get_stats(&self) -> Result<StorageStats>;
 }
 
 /// Information about a trace for listing purposes.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TraceInfo {
     /// Unique trace identifier.
     pub trace_id: TraceId,
@@ -102,7 +126,7 @@ pub struct TraceInfo {
 }
 
 /// Storage statistics with comprehensive monitoring.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct StorageStats {
     /// Total number of traces.
     pub trace_count: usize,
@@ -130,10 +154,12 @@ pub struct StorageStats {
     pub last_cleanup: Option<SystemTime>,
     /// Storage health status.
     pub health_status: StorageHealth,
+    /// Uptime in seconds.
+    pub uptime_seconds: u64,
 }
 
 /// Storage health status.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum StorageHealth {
     /// Healthy operation.
     Healthy,
@@ -1016,6 +1042,175 @@ impl StorageBackend for InMemoryStorage {
         
         Ok(slow_traces)
     }
+    
+    async fn list_traces(
+        &self,
+        service: Option<&str>,
+        start_time: Option<u64>,
+        end_time: Option<u64>,
+        limit: usize,
+    ) -> Result<Vec<TraceInfo>> {
+        let mut matching_traces = Vec::new();
+        
+        for entry in self.traces.iter() {
+            let trace_id = entry.key();
+            let span_ids = entry.value();
+            
+            let mut spans = Vec::new();
+            let mut services = std::collections::HashSet::new();
+            let mut has_error = false;
+            let mut match_found = true;
+            
+            for span_id in span_ids.iter() {
+                if let Some(span) = self.spans.get(span_id) {
+                    // Apply service filter
+                    if let Some(svc) = service {
+                        if span.service_name.as_str() != svc {
+                            match_found = false;
+                            break;
+                        }
+                    }
+                    
+                    // Apply time filter
+                    if let Some(start) = start_time {
+                        if span.start_time < start {
+                            match_found = false;
+                            break;
+                        }
+                    }
+                    
+                    if let Some(end) = end_time {
+                        if span.start_time > end {
+                            match_found = false;
+                            break;
+                        }
+                    }
+                    
+                    services.insert(span.service_name.clone());
+                    if span.status.is_error() {
+                        has_error = true;
+                    }
+                    spans.push(span.clone());
+                }
+            }
+            
+            if match_found && !spans.is_empty() {
+                let root_span = spans.iter()
+                    .find(|s| s.parent_span_id.is_none())
+                    .or_else(|| spans.first())
+                    .unwrap();
+                
+                let min_start = spans.iter().map(|s| s.start_time).min().unwrap();
+                let max_end = spans.iter()
+                    .map(|s| s.start_time + s.duration)
+                    .max()
+                    .unwrap();
+                let duration_ns = max_end - min_start;
+                let duration = Duration::from_nanos(duration_ns);
+                
+                matching_traces.push(TraceInfo {
+                    trace_id: trace_id.clone(),
+                    root_service: root_span.service_name.clone(),
+                    root_operation: root_span.operation_name.clone(),
+                    span_count: spans.len(),
+                    duration,
+                    start_time: SystemTime::UNIX_EPOCH + Duration::from_nanos(min_start),
+                    has_error,
+                    services: services.into_iter().collect(),
+                });
+            }
+        }
+        
+        // Sort by start time (most recent first)
+        matching_traces.sort_by(|a, b| b.start_time.cmp(&a.start_time));
+        matching_traces.truncate(limit);
+        
+        Ok(matching_traces)
+    }
+    
+    async fn get_service_metrics_map(&self) -> Result<HashMap<ServiceName, ServiceMetrics>> {
+        let metrics = self.get_service_metrics().await?;
+        let mut map = HashMap::new();
+        for metric in metrics {
+            map.insert(metric.name.clone(), metric);
+        }
+        Ok(map)
+    }
+    
+    async fn search_spans(
+        &self,
+        query: &str,
+        service: Option<&str>,
+        attribute_key: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<Span>> {
+        let mut matching_spans = Vec::new();
+        let query_lower = query.to_lowercase();
+        
+        for entry in self.spans.iter() {
+            let span = entry.value();
+            
+            // Apply service filter
+            if let Some(svc) = service {
+                if span.service_name.as_str() != svc {
+                    continue;
+                }
+            }
+            
+            // Search in operation name
+            let mut match_found = false;
+            if span.operation_name.to_lowercase().contains(&query_lower) {
+                match_found = true;
+            }
+            
+            // Search in attributes
+            if !match_found {
+                for (key, value) in &span.attributes {
+                    // Apply attribute key filter
+                    if let Some(attr_key) = attribute_key {
+                        if key != attr_key {
+                            continue;
+                        }
+                    }
+                    
+                    if key.to_lowercase().contains(&query_lower) || 
+                       value.to_lowercase().contains(&query_lower) {
+                        match_found = true;
+                        break;
+                    }
+                }
+            }
+            
+            if match_found {
+                matching_spans.push(span.clone());
+                if matching_spans.len() >= limit {
+                    break;
+                }
+            }
+        }
+        
+        Ok(matching_spans)
+    }
+    
+    async fn get_stats(&self) -> Result<StorageStats> {
+        let detailed_stats = self.get_storage_stats().await?;
+        Ok(StorageStats {
+            trace_count: detailed_stats.trace_count,
+            span_count: detailed_stats.span_count,
+            service_count: detailed_stats.service_count,
+            memory_bytes: detailed_stats.memory_bytes,
+            memory_mb: detailed_stats.memory_mb,
+            memory_pressure: detailed_stats.memory_pressure,
+            oldest_span: detailed_stats.oldest_span,
+            newest_span: detailed_stats.newest_span,
+            processing_rate: detailed_stats.processing_rate,
+            error_rate: detailed_stats.error_rate,
+            cleanup_count: detailed_stats.cleanup_count,
+            last_cleanup: detailed_stats.last_cleanup,
+            health_status: detailed_stats.health_status,
+            uptime_seconds: self.counters.start_time.elapsed().as_secs(),
+        })
+    }
 }
 
 /// Storage manager for coordinating storage operations.
@@ -1034,6 +1229,7 @@ impl StorageManager {
         Self { 
             backend,
             persistent_engine: None,
+            archive_manager: None,
         }
     }
     
@@ -1056,9 +1252,27 @@ impl StorageManager {
         
         let engine = StorageEngine::new(storage_mode)?;
         
+        // Create archive manager if archival is enabled
+        let archive_manager = if config.storage.enable_archival {
+            let archive_config = archive_manager::ArchiveConfig {
+                archive_dir: config.storage.data_dir.join("archives"),
+                granularity: archive::PartitionGranularity::Daily,
+                max_traces_per_partition: 100_000,
+                retention_period: std::time::Duration::from_secs(90 * 24 * 3600), // 90 days
+                ..Default::default()
+            };
+            
+            let mut manager = archive_manager::ArchiveManager::new(archive_config)?;
+            manager.start()?;
+            Some(Arc::new(RwLock::new(manager)))
+        } else {
+            None
+        };
+
         Ok(Self {
             backend,
             persistent_engine: Some(Arc::new(RwLock::new(engine))),
+            archive_manager,
         })
     }
 
