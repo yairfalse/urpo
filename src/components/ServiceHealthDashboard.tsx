@@ -12,35 +12,35 @@ const ServiceHealthDashboard = memo(({ services }: Props) => {
     return [...services].sort((a, b) => b.request_rate - a.request_rate);
   }, [services]);
 
-  // Calculate health status with knife-edge precision
+  // Calculate health status with enterprise precision
   const getHealthStatus = (errorRate: number) => {
     if (errorRate === 0) return { 
-      color: 'text-electric-green', 
-      bg: 'bg-electric-green/5', 
-      border: 'border-electric-green/20',
+      color: 'text-status-healthy', 
+      bg: 'bg-status-healthy bg-opacity-5', 
+      border: 'border-status-healthy border-opacity-20',
       indicator: 'healthy',
-      label: 'HEALTHY' 
+      label: 'Healthy' 
     };
     if (errorRate < 1) return { 
-      color: 'text-electric-amber', 
-      bg: 'bg-electric-amber/5', 
-      border: 'border-electric-amber/20',
+      color: 'text-status-warning', 
+      bg: 'bg-status-warning bg-opacity-5', 
+      border: 'border-status-warning border-opacity-20',
       indicator: 'warning',
-      label: 'WARNING' 
+      label: 'Warning' 
     };
     return { 
-      color: 'text-electric-red', 
-      bg: 'bg-electric-red/5', 
-      border: 'border-electric-red/20',
+      color: 'text-status-error', 
+      bg: 'bg-status-error bg-opacity-5', 
+      border: 'border-status-error border-opacity-20',
       indicator: 'critical',
-      label: 'CRITICAL' 
+      label: 'Critical' 
     };
   };
 
   const getLatencyColor = (p99: number) => {
-    if (p99 < 100) return 'text-electric-green';
-    if (p99 < 500) return 'text-electric-amber';
-    return 'text-electric-red';
+    if (p99 < 100) return 'text-status-healthy';
+    if (p99 < 500) return 'text-status-warning';
+    return 'text-status-error';
   };
 
   const getLatencyIndicator = (p99: number) => {
@@ -51,14 +51,16 @@ const ServiceHealthDashboard = memo(({ services }: Props) => {
 
   if (services.length === 0) {
     return (
-      <div className="glass-card p-8 text-center animate-scale-in">
-        <div className="knife-shimmer w-12 h-12 mx-auto mb-4 rounded-lg"></div>
-        <p className="text-steel-300 font-medium">No services detected yet...</p>
-        <p className="text-steel-400 text-xs font-mono mt-2">
-          Waiting for spans • Instant display when available
+      <div className="clean-card p-8 text-center animate-scale-in">
+        <div className="w-12 h-12 mx-auto mb-4 rounded-lg bg-surface-100 flex items-center justify-center">
+          <Network className="w-6 h-6 text-text-500" />
+        </div>
+        <p className="text-text-700 font-medium">No services detected</p>
+        <p className="text-text-500 text-xs font-mono mt-2">
+          Waiting for OpenTelemetry spans
         </p>
-        <div className="mt-4 h-0.5 bg-steel-800 rounded-full overflow-hidden">
-          <div className="h-full bg-electric-blue animate-knife-shine"></div>
+        <div className="mt-4 h-0.5 bg-surface-200 rounded-full overflow-hidden">
+          <div className="h-full bg-accent-blue animate-shine-subtle"></div>
         </div>
       </div>
     );
