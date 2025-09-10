@@ -413,55 +413,6 @@ fn value_to_string(value: opentelemetry_proto::tonic::common::v1::AnyValue) -> S
     }
 }
 
-// /// Receiver manager for coordinating GRPC and HTTP receivers.
-// pub struct ReceiverManager {
-//     grpc_receiver: Arc<OtelReceiver>,
-//     http_receiver: Arc<OtelReceiver>,
-//     grpc_addr: SocketAddr,
-//     http_addr: SocketAddr,
-// }
-
-// impl ReceiverManager {
-//     /// Create a new receiver manager.
-//     pub fn new(
-//         span_sender: mpsc::Sender<UrpoSpan>,
-//         grpc_port: u16,
-//         http_port: u16,
-//         sampling_rate: f64,
-//     ) -> Self {
-//         let grpc_receiver = Arc::new(OtelReceiver::new(span_sender.clone(), sampling_rate));
-//         let http_receiver = Arc::new(OtelReceiver::new(span_sender, sampling_rate));
-//         
-//         let grpc_addr = SocketAddr::from(([0, 0, 0, 0], grpc_port));
-//         let http_addr = SocketAddr::from(([0, 0, 0, 0], http_port));
-
-//         Self {
-//             grpc_receiver,
-//             http_receiver,
-//             grpc_addr,
-//             http_addr,
-//         }
-//     }
-
-//     /// Start both GRPC and HTTP receivers.
-//     pub async fn start(self) -> Result<()> {
-//         let grpc_handle = tokio::spawn({
-//             let receiver = self.grpc_receiver.clone();
-//             let addr = self.grpc_addr;
-//             async move {
-//                 tracing::info!("Starting GRPC receiver on {}", addr);
-//                 receiver.start_grpc(addr).await
-//             }
-//         });
-
-//         let http_handle = tokio::spawn({
-//             let receiver = self.http_receiver.clone();
-//             let addr = self.http_addr;
-//             async move {
-//                 tracing::info!("Starting HTTP receiver on {}", addr);
-//                 receiver.start_http(addr).await
-//             }
-//         });
 
 //         // Wait for both to complete (they shouldn't unless there's an error)
 //         tokio::select! {
@@ -490,7 +441,6 @@ mod tests {
         assert!(dt.year() >= 2023);
     }
 
-    // #[test]
     // fn test_should_sample() {
     //     let (tx, _rx) = mpsc::channel(10);
     //     

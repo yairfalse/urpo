@@ -25,52 +25,46 @@
   }
 }
 
-/* KNIFE-EDGE AESTHETICS */
+/* CLEAN PROFESSIONAL AESTHETICS */
 @layer base {
   :root {
-    /* Ultra-sharp dark theme variables */
-    --void-950: #050505;
-    --void-900: #0A0A0B;
-    --void-800: #0F0F10;
-    --void-700: #141416;
+    /* Clean color system variables */
+    --bg-primary: #FFFFFF;
+    --bg-secondary: #F8F9FA;
+    --bg-elevated: #F1F3F4;
+    --border-light: #E8EAED;
+    --border-medium: #E5E7EB;
     
-    --steel-900: #0C0C0D;
-    --steel-800: #111112;
-    --steel-700: #1A1A1C;
-    --steel-300: #8B8B8D;
-    --steel-100: #E8E8EA;
-    --steel-50: #FFFFFF;
+    --text-primary: #1F2937;
+    --text-secondary: #374151;
+    --text-muted: #6B7280;
+    --text-placeholder: #9CA3AF;
     
-    --electric-blue: #00D4FF;
-    --electric-cyan: #00FFFF;
-    --electric-green: #00FF88;
-    --electric-amber: #FFB800;
-    --electric-red: #FF0040;
+    --accent-blue: #3B82F6;
+    --accent-green: #10B981;
+    --accent-amber: #F59E0B;
+    --accent-red: #EF4444;
     
-    /* Glass morphism variables */
-    --glass-light: rgba(255, 255, 255, 0.05);
-    --glass-medium: rgba(255, 255, 255, 0.1);
-    --glass-heavy: rgba(255, 255, 255, 0.15);
-    
-    /* Noise texture for depth */
-    --noise-texture: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.03'/%3E%3C/svg%3E");
+    --status-healthy: #10B981;
+    --status-warning: #F59E0B;
+    --status-error: #EF4444;
+    --status-info: #3B82F6;
   }
 
-  /* Root element with deep void background */
+  /* Root element with clean white background */
   html {
-    background: var(--void-950);
+    background: var(--bg-primary);
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
     font-weight: 400;
     font-synthesis: none;
     text-rendering: optimizeLegibility;
     -webkit-text-size-adjust: 100%;
-    color-scheme: dark;
+    color-scheme: light;
   }
 
   body {
-    background: var(--void-950);
-    background-image: var(--noise-texture);
-    color: var(--steel-100);
+    background: var(--bg-primary);
+    color: var(--text-primary);
     font-family: 'Inter', system-ui, sans-serif;
     font-weight: 400;
     line-height: 1.5;
@@ -100,46 +94,47 @@
   }
 
   ::-webkit-scrollbar-track {
-    background: var(--void-900);
+    background: var(--bg-secondary);
   }
 
   ::-webkit-scrollbar-thumb {
-    background: var(--steel-700);
+    background: var(--border-medium);
     border-radius: 3px;
     transition: background 0.2s ease;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: var(--steel-600);
+    background: var(--text-muted);
   }
 
   /* Firefox scrollbar */
   * {
     scrollbar-width: thin;
-    scrollbar-color: var(--steel-700) var(--void-900);
+    scrollbar-color: var(--border-medium) var(--bg-secondary);
   }
 }
 
-/* ULTRA-SHARP COMPONENT STYLES */
+/* CLEAN PROFESSIONAL COMPONENT STYLES */
 @layer components {
-  /* Glass card base */
-  .glass-card {
-    @apply relative;
-    background: linear-gradient(135deg, 
-      rgba(255, 255, 255, 0.1) 0%, 
-      rgba(255, 255, 255, 0.05) 100%);
-    backdrop-filter: blur(8px);
-    border: 0.5px solid rgba(255, 255, 255, 0.1);
+  /* Clean card base */
+  .clean-card {
+    @apply relative bg-surface-50 border border-surface-300 rounded-lg;
     box-shadow: 
-      inset 0 1px 0 rgba(255, 255, 255, 0.1),
-      0 2px 8px rgba(0, 0, 0, 0.8);
+      0 1px 3px 0 rgba(0, 0, 0, 0.1),
+      0 1px 2px 0 rgba(0, 0, 0, 0.06);
+    transition: all 0.15s ease;
   }
 
-  /* Electric glow effect */
-  .electric-glow {
+  .clean-card:hover {
     box-shadow: 
-      0 0 8px rgba(0, 212, 255, 0.4),
-      inset 0 0 8px rgba(0, 212, 255, 0.1);
+      0 4px 6px -1px rgba(0, 0, 0, 0.1),
+      0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    transform: translateY(-1px);
+  }
+
+  /* Legacy glass-card for backward compatibility */
+  .glass-card {
+    @apply clean-card;
   }
 
   /* Knife-edge button */
