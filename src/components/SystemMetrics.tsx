@@ -44,7 +44,7 @@ const SystemMetrics = memo(({ metrics }: Props) => {
             {metrics.memory_usage_mb.toFixed(1)}MB
           </p>
           <p className="text-xs text-slate-600 mt-1">
-            Target: <100MB
+            Target: &lt;100MB
           </p>
         </div>
         
