@@ -160,7 +160,7 @@ const InstantSearch = memo(({ onTraceSelect }: SearchProps) => {
               onClick={() => setFilters(f => ({ ...f, last15Min: !f.last15Min, lastHour: false }))}
               className={`px-3 py-1 rounded-md text-sm font-medium transition-colors
                 ${filters.last15Min 
-                  ? 'bg-blue-600 text-white' 
+                  ? 'bg-text-900 text-white' 
                   : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
             >
               Last 15m
@@ -169,7 +169,7 @@ const InstantSearch = memo(({ onTraceSelect }: SearchProps) => {
               onClick={() => setFilters(f => ({ ...f, lastHour: !f.lastHour, last15Min: false }))}
               className={`px-3 py-1 rounded-md text-sm font-medium transition-colors
                 ${filters.lastHour 
-                  ? 'bg-blue-600 text-white' 
+                  ? 'bg-text-900 text-white' 
                   : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
             >
               Last Hour
@@ -181,7 +181,7 @@ const InstantSearch = memo(({ onTraceSelect }: SearchProps) => {
         {results.length > 0 && (
           <div className="mt-2 text-xs text-gray-500">
             Found {results.length} traces in {searchTime.toFixed(1)}ms
-            {searchTime < 10 && <span className="ml-2 text-green-500">⚡ BLAZING FAST!</span>}
+            {searchTime < 10 && <span className="ml-2 text-status-healthy">EXCELLENT</span>}
           </div>
         )}
       </div>

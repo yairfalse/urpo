@@ -354,7 +354,7 @@ async fn execute_export(
     
     // Create exporter
     let storage_guard = storage_trait.read().await;
-    let exporter = TraceExporter::new(&**storage_guard);
+    let exporter = TraceExporter::new(&*storage_guard);
     
     if let Some(trace_id_str) = trace_id {
         // Export specific trace
@@ -592,7 +592,7 @@ async fn start_headless(config: Config, cli: &Cli) -> Result<()> {
     let receiver = Arc::new(OtelReceiver::new(
         config.server.grpc_port,
         config.server.http_port,
-        storage_trait,
+        storage_trait.clone(),
         health_monitor,
     ));
     

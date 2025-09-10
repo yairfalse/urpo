@@ -143,7 +143,7 @@
     transition: all 0.15s ease;
     
     &:hover {
-      @apply bg-surface-100 border-accent-blue text-accent-blue;
+      @apply bg-surface-100 border-surface-300 text-text-700;
       transform: translateY(-1px);
       box-shadow: 
         0 4px 6px -1px rgba(0, 0, 0, 0.1),
@@ -155,7 +155,7 @@
     }
 
     &.active {
-      @apply bg-accent-blue text-white border-accent-blue;
+      @apply bg-text-900 text-white border-text-900;
     }
   }
 
@@ -174,7 +174,7 @@
     
     &:focus {
       outline: none;
-      @apply border-accent-blue ring-2 ring-accent-blue ring-opacity-20;
+      @apply border-surface-400 ring-2 ring-surface-400 ring-opacity-20;
     }
 
     &::placeholder {
@@ -209,7 +209,7 @@
       font-size: 11px;
       text-transform: uppercase;
       letter-spacing: 0.05em;
-      color: var(--steel-300);
+      color: var(--text-muted);
     }
 
     tbody tr {
@@ -259,13 +259,13 @@
   }
 
   /* Loading shimmer effect */
-  .knife-shimmer {
+  .clean-shimmer {
     background: linear-gradient(90deg, 
-      rgba(255, 255, 255, 0.05) 25%, 
-      rgba(255, 255, 255, 0.1) 50%, 
-      rgba(255, 255, 255, 0.05) 75%);
+      rgba(59, 130, 246, 0.05) 25%, 
+      rgba(59, 130, 246, 0.1) 50%, 
+      rgba(59, 130, 246, 0.05) 75%);
     background-size: 200% 100%;
-    animation: knife-shine 1.5s ease-in-out infinite;
+    animation: clean-shine 1.5s ease-in-out infinite;
   }
 }
 
@@ -294,12 +294,12 @@
     user-select: text;
   }
 
-  /* Precise borders */
-  .border-knife {
-    border: 0.5px solid rgba(255, 255, 255, 0.1);
+  /* Professional borders */
+  .border-subtle {
+    border: 0.5px solid var(--border-light);
   }
 
-  .border-electric {
-    border: 0.5px solid var(--electric-blue);
+  .border-accent {
+    border: 0.5px solid var(--border-medium);
   }
 }

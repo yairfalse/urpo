@@ -578,7 +578,7 @@ const ServiceDependencyGraph: React.FC = () => {
         <button
           onClick={() => setShowMetrics(!showMetrics)}
           className={`px-3 py-1 text-xs font-mono ${
-            showMetrics ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400'
+            showMetrics ? 'bg-text-900 text-white' : 'bg-surface-100 text-text-500'
           }`}
         >
           METRICS

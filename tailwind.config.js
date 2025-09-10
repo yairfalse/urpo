@@ -88,6 +88,7 @@ export default {
         'slide-down': 'slide-down 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
         'scale-in': 'scale-in 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
         'shine-subtle': 'shine-subtle 3s ease-in-out infinite',
+        'clean-shine': 'clean-shine 1.5s ease-in-out infinite',
       },
       // Subtle professional keyframes
       keyframes: {
@@ -138,6 +139,14 @@ export default {
           },
         },
         'shine-subtle': {
+          '0%': { 
+            backgroundPosition: '-200% 0' 
+          },
+          '100%': { 
+            backgroundPosition: '200% 0' 
+          },
+        },
+        'clean-shine': {
           '0%': { 
             backgroundPosition: '-200% 0' 
           },

@@ -407,11 +407,11 @@ impl InMemoryStorage {
         let pressure = self.get_memory_pressure();
         
         if pressure >= self.cleanup_config.emergency_threshold {
-            StorageHealth::Emergency
+            StorageHealth::Critical
         } else if pressure >= self.cleanup_config.critical_threshold {
             StorageHealth::Critical
         } else if pressure >= self.cleanup_config.warning_threshold {
-            StorageHealth::Warning
+            StorageHealth::Degraded
         } else {
             StorageHealth::Healthy
         }
