@@ -67,7 +67,7 @@ pub struct Cli {
 }
 
 /// Available subcommands
-#[derive(Subcommand, Debug)]
+#[derive(Subcommand, Debug, Clone)]
 pub enum Commands {
     /// Export traces to various formats
     Export {
@@ -233,8 +233,8 @@ pub async fn execute(cli: Cli) -> Result<()> {
     }
     
     // Handle subcommands
-    if let Some(command) = cli.command {
-        return execute_subcommand(command, &cli).await;
+    if let Some(ref command) = cli.command {
+        return execute_subcommand(command.clone(), &cli).await;
     }
     
     // Initialize logging
