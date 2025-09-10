@@ -146,19 +146,19 @@ export default {
           },
         },
       },
-      // Sharp box shadows
+      // Clean professional shadows
       boxShadow: {
-        'knife': '0 0 0 0.5px rgba(255, 255, 255, 0.1), 0 2px 8px rgba(0, 0, 0, 0.8)',
-        'knife-hover': '0 0 0 0.5px rgba(0, 212, 255, 0.3), 0 4px 16px rgba(0, 0, 0, 0.9)',
-        'electric': '0 0 8px rgba(0, 212, 255, 0.4), inset 0 0 8px rgba(0, 212, 255, 0.1)',
-        'glass': 'inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 2px 4px rgba(0, 0, 0, 0.5)',
-        'void': '0 8px 32px rgba(0, 0, 0, 0.8)',
+        'sm-clean': '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+        'md-clean': '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+        'lg-clean': '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+        'card': '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)',
+        'card-hover': '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+        'inset-clean': 'inset 0 2px 4px 0 rgba(0, 0, 0, 0.06)',
       },
-      // Glass gradients
+      // Clean gradients
       backgroundImage: {
-        'glass-gradient': 'linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%)',
-        'electric-gradient': 'linear-gradient(135deg, rgba(0, 212, 255, 0.1) 0%, rgba(0, 255, 136, 0.1) 100%)',
-        'knife-shine': 'linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.1) 50%, transparent 100%)',
+        'gradient-subtle': 'linear-gradient(135deg, rgba(59, 130, 246, 0.05) 0%, rgba(16, 185, 129, 0.05) 100%)',
+        'shine-subtle': 'linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.4) 50%, transparent 100%)',
       },
     },
   },
