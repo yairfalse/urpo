@@ -94,126 +94,147 @@ const App = memo(() => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-slate-950">
-        <div className="text-center">
-          <div className="animate-pulse text-green-500 text-2xl mb-2">⚡</div>
-          <p className="text-slate-400">Starting Urpo...</p>
-          <p className="text-slate-600 text-sm mt-2">Target: &lt;200ms</p>
+      <div className="flex items-center justify-center h-screen bg-void-950">
+        <div className="glass-card p-8 text-center animate-scale-in">
+          <div className="electric-glow w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center animate-pulse-electric">
+            <div className="text-electric-blue text-2xl font-mono font-bold">⚡</div>
+          </div>
+          <p className="text-steel-100 font-medium mb-2">Starting Urpo...</p>
+          <p className="text-steel-300 text-xs font-mono">Target: &lt;200ms • Ultra-fast initialization</p>
+          <div className="mt-4 h-0.5 bg-steel-800 rounded-full overflow-hidden">
+            <div className="h-full bg-electric-blue animate-knife-shine"></div>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="h-screen bg-slate-950 text-slate-100 flex flex-col">
-      {/* Header */}
-      <header className="bg-slate-900 border-b border-slate-800 px-6 py-3">
+    <div className="h-screen bg-void-950 text-steel-100 flex flex-col gpu-composite">
+      {/* Ultra-Sharp Header */}
+      <header className="glass-card border-0 border-b-0.5 border-steel-800 backdrop-blur-knife px-6 py-3 gpu-layer">
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <div className="flex items-center gap-2">
-              <Network className="w-6 h-6 text-green-500" />
-              <h1 className="text-xl font-bold text-green-500">
-                URPO
-              </h1>
+          {/* Brand Section */}
+          <div className="flex items-center space-x-6">
+            <div className="flex items-center gap-3">
+              <div className="electric-glow p-2 rounded-lg">
+                <Network className="w-5 h-5 text-electric-blue" />
+              </div>
+              <div>
+                <h1 className="text-lg font-display font-bold text-steel-50 tracking-tight">
+                  URPO
+                </h1>
+                <div className="text-[10px] text-steel-300 font-mono uppercase tracking-wide">
+                  Ultra-Fast OTEL Explorer
+                </div>
+              </div>
             </div>
-            <div className="text-xs text-slate-500">
-              OpenTelemetry Observability • Modern Design
+            
+            <div className="hidden md:block h-6 w-0.5 bg-steel-700"></div>
+            
+            <div className="hidden md:flex items-center gap-2 text-xs text-steel-300 font-mono">
+              <div className="status-indicator healthy animate-pulse-electric"></div>
+              <span>Collector Active</span>
             </div>
           </div>
           
-          <nav className="flex space-x-1">
-            <button
-              onClick={() => setActiveView('graph')}
-              className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 ${
-                activeView === 'graph'
-                  ? 'bg-green-600 text-white shadow-lg'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
-              }`}
-            >
-              <GitBranch className="w-4 h-4" />
-              Service Map
-            </button>
-            <button
-              onClick={() => setActiveView('flows')}
-              className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 ${
-                activeView === 'flows'
-                  ? 'bg-green-600 text-white shadow-lg'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
-              }`}
-            >
-              <Activity className="w-4 h-4" />
-              Trace Flows
-            </button>
-            <button
-              onClick={() => setActiveView('health')}
-              className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 ${
-                activeView === 'health'
-                  ? 'bg-green-600 text-white shadow-lg'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
-              }`}
-            >
-              <BarChart3 className="w-4 h-4" />
-              Metrics
-            </button>
-            <button
-              onClick={() => setActiveView('traces')}
-              className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 ${
-                activeView === 'traces'
-                  ? 'bg-green-600 text-white shadow-lg'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
-              }`}
-            >
-              <Layers className="w-4 h-4" />
-              Traces
-            </button>
+          {/* Sharp Navigation */}
+          <nav className="flex items-center gap-1">
+            {[
+              { key: 'graph', icon: GitBranch, label: 'Service Map', shortcut: '⌘1' },
+              { key: 'flows', icon: Activity, label: 'Trace Flows', shortcut: '⌘2' },
+              { key: 'health', icon: BarChart3, label: 'Metrics', shortcut: '⌘3' },
+              { key: 'traces', icon: Layers, label: 'Traces', shortcut: '⌘4' },
+            ].map(({ key, icon: Icon, label, shortcut }) => (
+              <button
+                key={key}
+                onClick={() => setActiveView(key as any)}
+                className={`knife-button px-3 py-2 rounded-lg flex items-center gap-2 text-xs font-medium micro-interaction ${
+                  activeView === key
+                    ? 'electric-glow bg-electric-blue/10 text-electric-blue border-electric-blue'
+                    : 'text-steel-300 hover:text-steel-100 border-knife'
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                <span className="hidden lg:inline">{label}</span>
+                <span className="hidden xl:inline text-[10px] text-steel-400 font-mono">{shortcut}</span>
+              </button>
+            ))}
           </nav>
 
+          {/* Live Metrics Display */}
           {systemMetrics && (
-            <div className="flex items-center space-x-4 text-xs text-slate-500">
-              <span>
-                Memory: {systemMetrics.memory_usage_mb.toFixed(1)}MB
-              </span>
-              <span>
-                CPU: {systemMetrics.cpu_usage_percent.toFixed(1)}%
-              </span>
-              <span>
-                {systemMetrics.spans_per_second.toFixed(0)} spans/s
-              </span>
+            <div className="glass-card px-3 py-1.5 flex items-center gap-4">
+              <div className="flex items-center gap-1.5 text-[10px] font-mono">
+                <div className="w-1.5 h-1.5 bg-electric-green rounded-full animate-pulse-electric"></div>
+                <span className="text-steel-300">MEM</span>
+                <span className="text-steel-100 font-medium">
+                  {systemMetrics.memory_usage_mb.toFixed(0)}MB
+                </span>
+              </div>
+              
+              <div className="w-0.5 h-3 bg-steel-700"></div>
+              
+              <div className="flex items-center gap-1.5 text-[10px] font-mono">
+                <div className="w-1.5 h-1.5 bg-electric-amber rounded-full animate-pulse-electric"></div>
+                <span className="text-steel-300">CPU</span>
+                <span className="text-steel-100 font-medium">
+                  {systemMetrics.cpu_usage_percent.toFixed(1)}%
+                </span>
+              </div>
+              
+              <div className="w-0.5 h-3 bg-steel-700"></div>
+              
+              <div className="flex items-center gap-1.5 text-[10px] font-mono">
+                <div className="w-1.5 h-1.5 bg-electric-blue rounded-full animate-pulse-electric"></div>
+                <span className="text-steel-300">RPS</span>
+                <span className="text-electric-blue font-medium">
+                  {systemMetrics.spans_per_second.toFixed(0)}
+                </span>
+              </div>
             </div>
           )}
         </div>
       </header>
 
-      {/* Error display */}
+      {/* Knife-Edge Error Display */}
       {error && (
-        <div className="bg-red-900/20 border border-red-800 text-red-400 px-4 py-2 m-4 rounded">
-          {error}
+        <div className="mx-6 mt-4 animate-slide-down">
+          <div className="glass-card border-electric-red bg-electric-red/5 p-4">
+            <div className="flex items-center gap-3">
+              <div className="status-indicator critical"></div>
+              <div>
+                <div className="text-electric-red font-medium text-sm">System Error</div>
+                <div className="text-steel-300 text-xs font-mono mt-1">{error}</div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* Main content */}
-      <main className="flex-1 overflow-hidden">
+      {/* Ultra-Sharp Main Content */}
+      <main className="flex-1 overflow-hidden gpu-layer">
         {activeView === 'graph' && (
-          <div className="h-full p-6">
+          <div className="h-full p-6 animate-slide-up">
             <ServiceGraph services={services} traces={traces} />
           </div>
         )}
         
         {activeView === 'flows' && (
-          <div className="h-full">
+          <div className="h-full animate-slide-up">
             <FlowTable traces={traces} onRefresh={loadTraces} />
           </div>
         )}
         
         {activeView === 'health' && (
-          <div className="p-6">
+          <div className="p-6 space-y-6 animate-slide-up">
             <ServiceHealthDashboard services={services} />
             {systemMetrics && <SystemMetrics metrics={systemMetrics} />}
           </div>
         )}
         
         {activeView === 'traces' && (
-          <div className="p-6">
+          <div className="p-6 animate-slide-up">
             <TraceExplorer 
               traces={traces} 
               onRefresh={loadTraces}
@@ -222,26 +243,53 @@ const App = memo(() => {
         )}
       </main>
 
-      {/* Status bar */}
-      <footer className="bg-slate-900 border-t border-slate-800 px-6 py-2 text-xs text-slate-500">
+      {/* Razor-Sharp Status Bar */}
+      <footer className="glass-card border-0 border-t-0.5 border-steel-800 px-6 py-2 backdrop-blur-knife gpu-layer">
         <div className="flex justify-between items-center">
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-6 text-[10px] font-mono">
             <div className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-              <span>OTEL collector active</span>
+              <div className="status-indicator healthy animate-pulse-electric"></div>
+              <span className="text-steel-300">OTEL Collector</span>
+              <span className="text-electric-green">ACTIVE</span>
             </div>
-            <span>
-              {services.length} services • {traces.length} traces • {systemMetrics?.total_spans || 0} spans
-            </span>
-            {systemMetrics && (
-              <span>
-                {systemMetrics.spans_per_second.toFixed(0)} spans/s
+            
+            <div className="flex items-center gap-4 text-steel-400">
+              <span className="flex items-center gap-1">
+                <span className="text-steel-300">SERVICES</span>
+                <span className="text-steel-100 font-medium">{services.length}</span>
               </span>
+              <span className="flex items-center gap-1">
+                <span className="text-steel-300">TRACES</span>
+                <span className="text-steel-100 font-medium">{traces.length}</span>
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="text-steel-300">SPANS</span>
+                <span className="text-steel-100 font-medium">
+                  {(systemMetrics?.total_spans || 0).toLocaleString()}
+                </span>
+              </span>
+            </div>
+            
+            {systemMetrics && (
+              <div className="flex items-center gap-1">
+                <span className="text-steel-300">THROUGHPUT</span>
+                <span className="text-electric-blue font-medium">
+                  {systemMetrics.spans_per_second.toFixed(0)} spans/s
+                </span>
+              </div>
             )}
           </div>
-          <div className="flex items-center gap-4">
-            <span>OpenTelemetry observability powered by Urpo</span>
-            <span className="text-green-500">⚡ Modern design</span>
+          
+          <div className="flex items-center gap-4 text-[10px] text-steel-400 font-mono">
+            <div className="flex items-center gap-2">
+              <span>Powered by</span>
+              <span className="text-steel-100 font-medium">Urpo</span>
+            </div>
+            <div className="w-0.5 h-3 bg-steel-700"></div>
+            <div className="flex items-center gap-1">
+              <span className="text-electric-blue">⚡</span>
+              <span className="text-electric-blue font-medium">Ultra-Fast OTEL</span>
+            </div>
           </div>
         </div>
       </footer>

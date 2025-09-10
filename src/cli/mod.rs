@@ -4,7 +4,7 @@
 //! Just run `urpo` to start with sensible defaults!
 
 use crate::core::{Config, Result, UrpoError};
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
 /// Terminal-native OTEL trace explorer - simple as htop!
@@ -13,6 +13,10 @@ use std::path::PathBuf;
 #[command(version, about, long_about = None)]
 #[command(disable_version_flag = true)]
 pub struct Cli {
+    /// Optional subcommand
+    #[command(subcommand)]
+    pub command: Option<Commands>,
+    
     /// GRPC port for OTEL receiver
     #[arg(long, env = "URPO_GRPC_PORT", default_value = "4317")]
     pub grpc_port: Option<u16>,
@@ -52,8 +56,57 @@ pub struct Cli {
     /// Show version information
     #[arg(short = 'V', long = "show-version")]
     pub version: bool,
+    
+    /// Enable HTTP API server (port 8080)
+    #[arg(long, env = "URPO_API")]
+    pub api: bool,
+    
+    /// HTTP API server port (default: 8080)
+    #[arg(long, env = "URPO_API_PORT", default_value = "8080")]
+    pub api_port: u16,
 }
 
+/// Available subcommands
+#[derive(Subcommand, Debug)]
+pub enum Commands {
+    /// Export traces to various formats
+    Export {
+        /// Trace ID to export (if not specified, exports based on filters)
+        trace_id: Option<String>,
+        
+        /// Export format (json, jaeger, otel, csv)
+        #[arg(short, long, default_value = "json")]
+        format: String,
+        
+        /// Filter by service name
+        #[arg(short, long)]
+        service: Option<String>,
+        
+        /// Export traces from the last duration (e.g., "1h", "30m", "24h")
+        #[arg(short, long)]
+        last: Option<String>,
+        
+        /// Start time for export (ISO 8601 or Unix timestamp)
+        #[arg(long)]
+        start: Option<String>,
+        
+        /// End time for export (ISO 8601 or Unix timestamp)
+        #[arg(long)]
+        end: Option<String>,
+        
+        /// Output file (default: stdout)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+        
+        /// Only export traces with errors
+        #[arg(long)]
+        errors_only: bool,
+        
+        /// Maximum number of traces to export
+        #[arg(long, default_value = "1000")]
+        limit: usize,
+    },
+}
 
 impl Cli {
     /// Parse command-line arguments.
@@ -179,6 +232,11 @@ pub async fn execute(cli: Cli) -> Result<()> {
         return Ok(());
     }
     
+    // Handle subcommands
+    if let Some(command) = cli.command {
+        return execute_subcommand(command, &cli).await;
+    }
+    
     // Initialize logging
     cli.init_logging()?;
     
@@ -199,15 +257,207 @@ pub async fn execute(cli: Cli) -> Result<()> {
     // Start the application
     if cli.headless {
         tracing::info!("Starting Urpo in headless mode...");
-        start_headless(config).await
+        start_headless(config, &cli).await
     } else {
         tracing::info!("Starting Urpo with terminal UI...");
-        start_with_ui(config).await
+        start_with_ui(config, &cli).await
     }
 }
 
-async fn start_with_ui(config: Config) -> Result<()> {
+/// Execute a subcommand
+async fn execute_subcommand(command: Commands, cli: &Cli) -> Result<()> {
+    // Initialize logging for subcommands
+    cli.init_logging()?;
+    
+    match command {
+        Commands::Export {
+            trace_id,
+            format,
+            service,
+            last,
+            start,
+            end,
+            output,
+            errors_only,
+            limit,
+        } => {
+            execute_export(
+                trace_id,
+                format,
+                service,
+                last,
+                start,
+                end,
+                output,
+                errors_only,
+                limit,
+                cli,
+            ).await
+        }
+    }
+}
+
+/// Execute the export command
+async fn execute_export(
+    trace_id: Option<String>,
+    format: String,
+    service: Option<String>,
+    last: Option<String>,
+    start: Option<String>,
+    end: Option<String>,
+    output: Option<PathBuf>,
+    errors_only: bool,
+    limit: usize,
+    cli: &Cli,
+) -> Result<()> {
     use crate::{
+        core::TraceId,
+        export::{ExportFormat, ExportOptions, TraceExporter},
+        storage::{InMemoryStorage, StorageBackend},
+    };
+    use std::sync::Arc;
+    use tokio::sync::RwLock;
+    use std::time::{Duration, SystemTime};
+    
+    // Load configuration
+    let config = cli.load_config().await?;
+    
+    // Initialize storage (read-only for export)
+    let storage = Arc::new(RwLock::new(InMemoryStorage::with_config(&config)));
+    let storage_trait: Arc<RwLock<dyn StorageBackend>> = storage.clone();
+    
+    // Parse export format
+    let export_format = format.parse::<ExportFormat>()
+        .map_err(|_| UrpoError::config(format!("Invalid export format: {}", format)))?;
+    
+    // Handle time filtering
+    let (start_time, end_time) = if let Some(last_str) = last {
+        // Parse duration string (e.g., "1h", "30m", "24h")
+        let duration = parse_duration(&last_str)
+            .ok_or_else(|| UrpoError::config(format!("Invalid duration: {}", last_str)))?;
+        
+        let now = SystemTime::now();
+        let start = now - duration;
+        (Some(start.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos() as u64), None)
+    } else {
+        // Parse explicit start/end times
+        let start_time = start.as_ref().map(|s| parse_timestamp(s))
+            .transpose()
+            .map_err(|e| UrpoError::config(format!("Invalid start time: {}", e)))?;
+        
+        let end_time = end.as_ref().map(|s| parse_timestamp(s))
+            .transpose()
+            .map_err(|e| UrpoError::config(format!("Invalid end time: {}", e)))?;
+        
+        (start_time, end_time)
+    };
+    
+    // Create exporter
+    let storage_guard = storage_trait.read().await;
+    let exporter = TraceExporter::new(&**storage_guard);
+    
+    if let Some(trace_id_str) = trace_id {
+        // Export specific trace
+        let trace_id = TraceId::new(trace_id_str)?;
+        
+        // Get trace spans
+        let spans = storage_guard.get_trace_spans(&trace_id).await
+            .map_err(|e| UrpoError::config(format!("Failed to get trace: {}", e)))?;
+        
+        if spans.is_empty() {
+            return Err(UrpoError::config(format!("Trace not found: {}", trace_id.as_str())));
+        }
+        
+        // Export the trace
+        let export_options = ExportOptions {
+            format: export_format,
+            output: output.clone(),
+            service: None,
+            start_time: None,
+            end_time: None,
+            limit: Some(1),
+            errors_only: false,
+        };
+        
+        let exported = exporter.export_single_trace(&trace_id, &spans, &export_options).await?;
+        
+        // Write output
+        if let Some(output_path) = output {
+            tokio::fs::write(output_path, exported).await
+                .map_err(|e| UrpoError::config(format!("Failed to write output: {}", e)))?;
+        } else {
+            print!("{}", exported);
+        }
+    } else {
+        // Export multiple traces based on filters
+        let export_options = ExportOptions {
+            format: export_format,
+            output: output.clone(),
+            service,
+            start_time,
+            end_time,
+            limit: Some(limit),
+            errors_only,
+        };
+        
+        let exported = exporter.export_traces(&export_options).await?;
+        
+        // Write output
+        if let Some(output_path) = output {
+            tokio::fs::write(output_path, exported).await
+                .map_err(|e| UrpoError::config(format!("Failed to write output: {}", e)))?;
+        } else {
+            print!("{}", exported);
+        }
+    }
+    
+    Ok(())
+}
+
+/// Parse a duration string like "1h", "30m", "24h"
+fn parse_duration(s: &str) -> Option<std::time::Duration> {
+    use std::time::Duration;
+    
+    let s = s.trim();
+    if s.is_empty() {
+        return None;
+    }
+    
+    let (num_str, unit) = s.split_at(s.len() - 1);
+    let num: u64 = num_str.parse().ok()?;
+    
+    match unit {
+        "s" => Some(Duration::from_secs(num)),
+        "m" => Some(Duration::from_secs(num * 60)),
+        "h" => Some(Duration::from_secs(num * 3600)),
+        "d" => Some(Duration::from_secs(num * 86400)),
+        _ => None,
+    }
+}
+
+/// Parse a timestamp string (ISO 8601 or Unix timestamp)
+fn parse_timestamp(s: &str) -> Result<u64> {
+    // Try parsing as Unix timestamp
+    if let Ok(ts) = s.parse::<u64>() {
+        // Assume it's in seconds if it's a reasonable Unix timestamp
+        if ts < 10_000_000_000 {
+            return Ok(ts * 1_000_000_000); // Convert to nanoseconds
+        } else {
+            return Ok(ts); // Already in milliseconds or nanoseconds
+        }
+    }
+    
+    // Try parsing as ISO 8601
+    use chrono::DateTime;
+    let dt = DateTime::parse_from_rfc3339(s)
+        .map_err(|e| UrpoError::config(format!("Invalid timestamp: {}", e)))?;
+    
+    Ok(dt.timestamp_nanos() as u64)
+}
+
+async fn start_with_ui(config: Config, cli: &Cli) -> Result<()> {
+    use crate::{
+        api::{ApiConfig, start_server as start_api_server},
         monitoring::Monitor,
         receiver::OtelReceiver,
         storage::{InMemoryStorage, SpanGenerator, StorageBackend, PerformanceManager},
@@ -261,6 +511,26 @@ async fn start_with_ui(config: Config) -> Result<()> {
             tracing::error!("OTEL receiver error: {}", e);
         }
     });
+    
+    // Start HTTP API server if enabled
+    let api_handle = if cli.api {
+        let api_storage = storage_trait.clone();
+        let api_config = ApiConfig {
+            port: cli.api_port,
+            enable_cors: true,
+            max_results: 1000,
+        };
+        
+        tracing::info!("Starting HTTP API server on port {}...", cli.api_port);
+        
+        Some(tokio::spawn(async move {
+            if let Err(e) = start_api_server(api_storage, api_config).await {
+                tracing::error!("API server error: {}", e);
+            }
+        }))
+    } else {
+        None
+    };
 
     // Start the terminal UI
     let mut dashboard = Dashboard::new(storage_trait, health_monitor)?;
@@ -270,12 +540,16 @@ async fn start_with_ui(config: Config) -> Result<()> {
     
     // Cleanup
     receiver_handle.abort();
+    if let Some(handle) = api_handle {
+        handle.abort();
+    }
     
     ui_result
 }
 
-async fn start_headless(config: Config) -> Result<()> {
+async fn start_headless(config: Config, cli: &Cli) -> Result<()> {
     use crate::{
+        api::{ApiConfig, start_server as start_api_server},
         monitoring::Monitor,
         receiver::OtelReceiver,
         storage::{InMemoryStorage, SpanGenerator, StorageBackend, PerformanceManager},
@@ -326,6 +600,23 @@ async fn start_headless(config: Config) -> Result<()> {
     tracing::info!("  GRPC receiver on port {}", config.server.grpc_port);
     tracing::info!("  HTTP receiver on port {}", config.server.http_port);
     
+    // Start API server if enabled
+    if cli.api {
+        tracing::info!("  HTTP API server on port {}", cli.api_port);
+        let api_storage = storage_trait.clone();
+        let api_config = ApiConfig {
+            port: cli.api_port,
+            enable_cors: true,
+            max_results: 1000,
+        };
+        
+        tokio::spawn(async move {
+            if let Err(e) = start_api_server(api_storage, api_config).await {
+                tracing::error!("API server error: {}", e);
+            }
+        });
+    }
+    
     // Wait for shutdown signal
     let shutdown = tokio::signal::ctrl_c();
     
@@ -347,11 +638,13 @@ async fn start_headless(config: Config) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration;
 
     #[test]
     fn test_cli_defaults() {
         // Test that we can create a CLI with defaults
         let cli = Cli {
+            command: None,
             grpc_port: None,
             http_port: None,
             memory_limit: None,
@@ -362,10 +655,23 @@ mod tests {
             terminal: true,
             check_config: false,
             version: false,
+            api: false,
+            api_port: 8080,
         };
         
         assert!(!cli.debug);
         assert!(!cli.no_fake);
         assert!(!cli.headless);
+        assert!(!cli.api);
+        assert_eq!(cli.api_port, 8080);
+    }
+    
+    #[test]
+    fn test_parse_duration() {
+        assert_eq!(parse_duration("1s"), Some(Duration::from_secs(1)));
+        assert_eq!(parse_duration("5m"), Some(Duration::from_secs(300)));
+        assert_eq!(parse_duration("2h"), Some(Duration::from_secs(7200)));
+        assert_eq!(parse_duration("1d"), Some(Duration::from_secs(86400)));
+        assert_eq!(parse_duration("invalid"), None);
     }
 }
