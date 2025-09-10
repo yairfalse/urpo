@@ -12,6 +12,7 @@ mod span_details;
 // Dashboard, Tab, FilterMode, DataCommand are all defined in this module
 
 use crate::core::{Result, ServiceMetrics, Span, TraceId, ServiceName, UrpoError};
+use crate::service_map::{ServiceMap, ServiceMapBuilder};
 use crate::storage::{StorageBackend, TraceInfo};
 use crossterm::{
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
@@ -176,6 +177,27 @@ pub struct Dashboard {
     data_tx: Option<mpsc::UnboundedSender<DataCommand>>,
     /// Channel to receive updates from data fetcher.
     data_rx: Option<mpsc::UnboundedReceiver<DataUpdate>>,
+    /// Service dependency map
+    pub service_map: Option<ServiceMap>,
+    /// Last time the map was refreshed
+    pub map_last_refresh: Instant,
+    /// Selected service in map view
+    pub map_selected_service: Option<ServiceName>,
+    /// Map view mode
+    pub map_view_mode: MapViewMode,
+}
+
+/// Map view modes
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MapViewMode {
+    /// Show full topology
+    Topology,
+    /// Show dependencies of selected service
+    ServiceFocus,
+    /// Show hottest paths
+    HotPaths,
+    /// Show error paths
+    ErrorPaths,
 }
 
 /// Status of the GRPC receiver.
@@ -239,6 +261,10 @@ impl Dashboard {
             receiver_status: ReceiverStatus::Connected,
             data_tx: None,  // Will be set in run()
             data_rx: None,  // Will be set in run()
+            service_map: None,
+            map_last_refresh: Instant::now(),
+            map_selected_service: None,
+            map_view_mode: MapViewMode::Topology,
         };
 
         // Initialize with fake data for now
