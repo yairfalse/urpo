@@ -245,10 +245,10 @@ export default function ServiceGraph({ services, traces }: ServiceGraphProps) {
 
   const getServiceIcon = (type: ServiceNode['type']) => {
     switch (type) {
-      case 'database': return '🗄️';
-      case 'cache': return '⚡';
-      case 'external': return '🌐';
-      default: return '📦';
+      case 'database': return 'DB';
+      case 'cache': return 'CACHE';
+      case 'external': return 'EXT';
+      default: return 'SVC';
     }
   };
 

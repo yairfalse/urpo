@@ -119,6 +119,8 @@ fn draw_basic_info(frame: &mut Frame, area: Rect, span: &Span) {
     let status_text = match &span.status {
         crate::core::SpanStatus::Ok => "OK",
         crate::core::SpanStatus::Error(msg) => msg,
+        crate::core::SpanStatus::Cancelled => "Cancelled",
+        crate::core::SpanStatus::Unknown => "Unknown",
     };
     
     lines.push(Line::from(vec![
@@ -127,10 +129,11 @@ fn draw_basic_info(frame: &mut Frame, area: Rect, span: &Span) {
     ]));
     
     // Timestamps
+    let formatted_timestamp = format_timestamp(span.start_time);
     lines.push(Line::from(vec![
         TextSpan::styled("Start Time: ", Style::default().fg(Color::Gray)),
         TextSpan::styled(
-            &format_timestamp(span.start_time),
+            formatted_timestamp,
             Style::default().fg(Color::White),
         ),
     ]));
@@ -160,11 +163,11 @@ fn draw_attributes(frame: &mut Frame, area: Rect, span: &Span) {
         .map(|(key, value)| {
             let content = Line::from(vec![
                 TextSpan::styled(
-                    &format!("{}: ", key),
+                    format!("{}: ", key),
                     Style::default().fg(Color::Yellow),
                 ),
                 TextSpan::styled(
-                    value,
+                    value.clone(),
                     Style::default().fg(Color::White),
                 ),
             ]);
@@ -216,11 +219,11 @@ fn draw_tags(frame: &mut Frame, area: Rect, span: &Span) {
         .map(|(key, value)| {
             let content = Line::from(vec![
                 TextSpan::styled(
-                    &format!("{}=", key),
+                    format!("{}=", key),
                     Style::default().fg(Color::Magenta),
                 ),
                 TextSpan::styled(
-                    value,
+                    value.clone(),
                     Style::default().fg(Color::White),
                 ),
             ]);
@@ -271,14 +274,14 @@ fn draw_resource_attributes(frame: &mut Frame, area: Rect, span: &Span) {
         
         for (key, value) in sorted.iter().take(5) {
             lines.push(Line::from(vec![
-                TextSpan::styled(&format!("{}: ", key), Style::default().fg(Color::Gray)),
-                TextSpan::styled(value, Style::default().fg(Color::White)),
+                TextSpan::styled(format!("{}: ", key), Style::default().fg(Color::Gray)),
+                TextSpan::styled(value.clone(), Style::default().fg(Color::White)),
             ]));
         }
         
         if span.resource_attributes.len() > 5 {
             lines.push(Line::from(TextSpan::styled(
-                &format!("  ... and {} more", span.resource_attributes.len() - 5),
+                format!("  ... and {} more", span.resource_attributes.len() - 5),
                 Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC),
             )));
         }
@@ -324,12 +327,12 @@ fn draw_events(frame: &mut Frame, area: Rect, span: &Span) {
     
     if span.status.is_error() {
         lines.push(Line::from(vec![
-            TextSpan::styled(&format!("{}ms: ", span.duration.as_millis()), Style::default().fg(Color::DarkGray)),
+            TextSpan::styled(format!("{}ms: ", span.duration.as_millis()), Style::default().fg(Color::DarkGray)),
             TextSpan::styled("Error!", Style::default().fg(Color::Red)),
         ]));
     } else {
         lines.push(Line::from(vec![
-            TextSpan::styled(&format!("{}ms: ", span.duration.as_millis()), Style::default().fg(Color::DarkGray)),
+            TextSpan::styled(format!("{}ms: ", span.duration.as_millis()), Style::default().fg(Color::DarkGray)),
             TextSpan::styled("Complete", Style::default().fg(Color::Green)),
         ]));
     }

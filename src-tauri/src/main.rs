@@ -3,6 +3,10 @@
     windows_subsystem = "windows"
 )]
 
+// EXTREME PERFORMANCE: Use mimalloc for blazing fast memory allocation
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tauri::State;
@@ -190,7 +194,7 @@ async fn list_recent_traces(
             start_time: trace
                 .start_time
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .unwrap_or_default()
                 .as_secs() as i64,
             duration: trace.duration.as_millis() as u64,
             span_count: trace.span_count,
@@ -223,7 +227,7 @@ async fn get_error_traces(
             start_time: trace
                 .start_time
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .unwrap_or_default()
                 .as_secs() as i64,
             duration: trace.duration.as_millis() as u64,
             span_count: trace.span_count,
@@ -279,7 +283,7 @@ async fn search_traces(
             start_time: trace
                 .start_time
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .unwrap_or_default()
                 .as_secs() as i64,
             duration: trace.duration.as_millis() as u64,
             span_count: trace.span_count,
@@ -337,10 +341,12 @@ async fn stream_trace_data(
     let chunks: Vec<_> = spans.chunks(CHUNK_SIZE).collect();
 
     for (i, chunk) in chunks.iter().enumerate() {
-        let chunk_data: Vec<_> = chunk
+        let chunk_data: Result<Vec<_>, _> = chunk
             .iter()
-            .map(|span| serde_json::to_value(span).unwrap())
+            .map(|span| serde_json::to_value(span))
             .collect();
+        
+        let chunk_data = chunk_data.map_err(|e| format!("Failed to serialize span: {}", e))?;
 
         window
             .emit("trace-chunk", &chunk_data)

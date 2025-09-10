@@ -79,28 +79,32 @@ const TraceExplorer = memo(({ traces, onRefresh }: Props) => {
   };
 
   return (
-    <div className="space-y-4">
-      {/* Header with instant search */}
+    <div className="space-y-6">
+      {/* Clean Professional Header */}
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold text-slate-200">
-          Trace Explorer
-        </h2>
+        <div className="flex items-center gap-4">
+          <h2 className="text-xl font-display font-bold text-text-900 tracking-tight">
+            Trace Explorer
+          </h2>
+          <div className="status-indicator healthy"></div>
+          <span className="text-xs text-text-500 font-mono uppercase tracking-wide">
+            Real-time Analysis
+          </span>
+        </div>
         
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-3">
           <input
             type="text"
             placeholder="Search traces..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="px-3 py-2 bg-slate-900 border border-slate-800 rounded text-sm text-slate-300 placeholder-slate-600 focus:border-green-500 focus:outline-none w-64"
+            className="clean-input w-64 text-sm"
           />
           
           <button
             onClick={() => setFilterError(!filterError)}
-            className={`px-3 py-2 rounded text-sm transition-colors ${
-              filterError
-                ? 'bg-red-600 text-white'
-                : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+            className={`clean-button text-sm ${
+              filterError ? 'active' : ''
             }`}
           >
             Errors Only
@@ -108,68 +112,71 @@ const TraceExplorer = memo(({ traces, onRefresh }: Props) => {
           
           <button
             onClick={onRefresh}
-            className="px-3 py-2 bg-slate-900 text-slate-400 hover:text-white border border-slate-800 rounded text-sm transition-colors"
+            className="clean-button text-sm"
           >
             Refresh
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Trace List - Renders instantly even with thousands of traces */}
-        <div className="space-y-2 max-h-[calc(100vh-200px)] overflow-y-auto">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Professional Trace List */}
+        <div className="space-y-3 max-h-[calc(100vh-200px)] overflow-y-auto">
           {filteredTraces.length === 0 ? (
-            <div className="bg-slate-900 rounded-lg p-8 text-center">
-              <p className="text-slate-500">No traces found</p>
+            <div className="clean-card p-8 text-center">
+              <p className="text-text-500">No traces found</p>
+              <p className="text-text-300 text-xs mt-2 font-mono">Try adjusting your search criteria</p>
             </div>
           ) : (
             filteredTraces.map((trace) => (
               <div
                 key={trace.trace_id}
                 onClick={() => loadTraceSpans(trace)}
-                className={`bg-slate-900 rounded-lg p-3 border border-slate-800 hover:border-slate-700 cursor-pointer transition-colors ${
-                  selectedTrace?.trace_id === trace.trace_id ? 'border-green-500' : ''
+                className={`clean-card p-4 cursor-pointer micro-interaction ${
+                  selectedTrace?.trace_id === trace.trace_id 
+                    ? 'ring-2 ring-status-info border-status-info' 
+                    : 'hover:border-surface-400'
                 }`}
               >
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center space-x-2">
-                      <span className="font-mono text-xs text-slate-500">
+                      <span className="font-mono text-xs text-text-500">
                         {trace.trace_id.slice(0, 16)}...
                       </span>
                       {trace.has_error && (
-                        <span className="text-xs px-1.5 py-0.5 bg-red-500/20 text-red-400 rounded">
+                        <span className="text-xs px-2 py-0.5 bg-status-error bg-opacity-10 text-status-error rounded border border-status-error border-opacity-20">
                           ERROR
                         </span>
                       )}
                     </div>
                     
-                    <p className="text-sm text-slate-300 mt-1">
+                    <p className="text-sm text-text-900 font-medium mt-2">
                       {trace.root_operation}
                     </p>
                     
-                    <div className="flex items-center space-x-3 mt-2 text-xs text-slate-500">
-                      <span>{trace.root_service}</span>
+                    <div className="flex items-center space-x-3 mt-3 text-xs text-text-500">
+                      <span className="font-medium">{trace.root_service}</span>
                       <span>•</span>
-                      <span>{formatDuration(trace.duration)}</span>
+                      <span className="font-mono">{formatDuration(trace.duration)}</span>
                       <span>•</span>
                       <span>{trace.span_count} spans</span>
                       <span>•</span>
                       <span>{formatTime(trace.start_time)}</span>
                     </div>
                     
-                    {/* Service badges */}
-                    <div className="flex flex-wrap gap-1 mt-2">
+                    {/* Professional Service badges */}
+                    <div className="flex flex-wrap gap-1 mt-3">
                       {trace.services.slice(0, 3).map((service) => (
                         <span
                           key={service}
-                          className="text-xs px-1.5 py-0.5 bg-slate-800 text-slate-400 rounded"
+                          className="text-xs px-2 py-0.5 bg-surface-200 text-text-700 rounded border border-surface-300"
                         >
                           {service}
                         </span>
                       ))}
                       {trace.services.length > 3 && (
-                        <span className="text-xs px-1.5 py-0.5 bg-slate-800 text-slate-500 rounded">
+                        <span className="text-xs px-2 py-0.5 bg-surface-100 text-text-500 rounded border border-surface-300">
                           +{trace.services.length - 3}
                         </span>
                       )}
@@ -181,16 +188,20 @@ const TraceExplorer = memo(({ traces, onRefresh }: Props) => {
           )}
         </div>
 
-        {/* Trace Details - Uses virtualization for large traces */}
-        <div className="bg-slate-900 rounded-lg border border-slate-800 h-[calc(100vh-200px)]">
+        {/* Professional Trace Details */}
+        <div className="clean-card h-[calc(100vh-200px)]">
           {loading ? (
             <div className="flex items-center justify-center h-full">
-              <div className="text-center">
-                <div className="animate-spin text-green-500 text-2xl mb-2">⚡</div>
-                <p className="text-slate-400">Loading spans...</p>
-                <p className="text-slate-600 text-xs mt-1">
-                  (Optimized for 100K+ spans)
-                </p>
+              <div className="text-center space-y-4">
+                <div className="w-8 h-8 mx-auto">
+                  <div className="status-indicator info animate-pulse-subtle"></div>
+                </div>
+                <div>
+                  <p className="text-text-700 font-medium">Loading spans...</p>
+                  <p className="text-text-500 text-xs mt-1 font-mono">
+                    Optimized for 100K+ spans
+                  </p>
+                </div>
               </div>
             </div>
           ) : selectedTrace ? (
@@ -200,7 +211,13 @@ const TraceExplorer = memo(({ traces, onRefresh }: Props) => {
             />
           ) : (
             <div className="flex items-center justify-center h-full">
-              <p className="text-slate-500">Select a trace to view details</p>
+              <div className="text-center space-y-2">
+                <div className="w-12 h-12 mx-auto rounded-lg bg-surface-200 flex items-center justify-center">
+                  <span className="text-text-500 text-lg">📊</span>
+                </div>
+                <p className="text-text-500">Select a trace to view details</p>
+                <p className="text-text-300 text-xs font-mono">High-performance span analysis</p>
+              </div>
             </div>
           )}
         </div>

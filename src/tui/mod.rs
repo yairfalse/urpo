@@ -587,6 +587,9 @@ impl Dashboard {
                     }
                 }
             }
+            Tab::Map => {
+                // Map view navigation - no selection movement needed
+            }
         }
     }
 
@@ -620,6 +623,9 @@ impl Dashboard {
                     }
                 }
             }
+            Tab::Map => {
+                // Map view navigation - no selection movement needed
+            }
         }
     }
 
@@ -629,6 +635,7 @@ impl Dashboard {
             Tab::Services => &mut self.service_state,
             Tab::Traces => &mut self.trace_state,
             Tab::Spans => return,
+            Tab::Map => return,
         };
 
         let selected = state.selected().unwrap_or(0);
@@ -659,6 +666,9 @@ impl Dashboard {
                     }
                 }
             }
+            Tab::Map => {
+                // Map view navigation - no selection movement needed
+            }
         }
     }
 
@@ -674,6 +684,9 @@ impl Dashboard {
                         self.selected_span_index = Some(selected - 1);
                     }
                 }
+            }
+            Tab::Map => {
+                // Map view navigation - no selection movement needed
             }
         }
     }
@@ -699,6 +712,9 @@ impl Dashboard {
                         self.selected_span_index = Some(selected - 1);
                     }
                 }
+            }
+            Tab::Map => {
+                // Map view navigation - no selection movement needed
             }
         }
     }
@@ -735,6 +751,9 @@ impl Dashboard {
             }
             Tab::Spans => {
                 // Already in detail view - could expand/collapse span details
+            }
+            Tab::Map => {
+                // Map view selection - could select services/connections
             }
         }
     }
@@ -973,6 +992,7 @@ fn draw_ui(frame: &mut Frame, app: &mut Dashboard) {
         Tab::Services => dashboard::draw_dashboard(frame, app),
         Tab::Traces => draw_traces_view(frame, app),
         Tab::Spans => draw_spans_view(frame, app),
+        Tab::Map => draw_map_view(frame, app),
     }
 
     // Draw help overlay if active
@@ -1471,6 +1491,7 @@ fn draw_footer(frame: &mut Frame, area: Rect, app: &Dashboard) {
             }
             Tab::Traces => "[q]uit [Tab]switch [↑↓]navigate [Enter]spans [/]search [f]filter".to_string(),
             Tab::Spans => "[q]uit [Tab]switch [↑↓]scroll".to_string(),
+            Tab::Map => "[q]uit [Tab]switch [↑↓]zoom [Enter]select".to_string(),
         }
     };
 
@@ -1484,6 +1505,34 @@ fn draw_footer(frame: &mut Frame, area: Rect, app: &Dashboard) {
         .style(Style::default().fg(Color::White));
 
     frame.render_widget(footer, area);
+}
+
+/// Draw the service map view.
+fn draw_map_view(frame: &mut Frame, _app: &mut Dashboard) {
+    let area = frame.area();
+    
+    // Create a simple placeholder for map view
+    let map_text = vec![
+        Line::from("📊 Service Map View"),
+        Line::from(""),
+        Line::from("This feature will show a visual map of your services"),
+        Line::from("and their connections based on trace data."),
+        Line::from(""),
+        Line::from("Coming soon..."),
+    ];
+    
+    let map_paragraph = Paragraph::new(map_text)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Service Map ")
+                .title_alignment(Alignment::Center)
+                .border_style(Style::default().fg(Color::Green)),
+        )
+        .alignment(Alignment::Center)
+        .style(Style::default().fg(Color::White));
+    
+    frame.render_widget(map_paragraph, area);
 }
 
 /// Draw help overlay.

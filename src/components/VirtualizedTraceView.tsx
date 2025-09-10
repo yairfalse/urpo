@@ -134,31 +134,31 @@ const VirtualizedTraceView = memo(({ trace, spans }: Props) => {
 
   return (
     <div className="h-full flex flex-col">
-      {/* Header */}
-      <div className="p-3 border-b border-slate-800">
+      {/* Professional Header */}
+      <div className="p-4 border-b border-surface-300">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium text-slate-300">
+            <p className="text-sm font-medium text-text-900">
               {trace.root_operation}
             </p>
-            <p className="text-xs text-slate-500 mt-1">
+            <p className="text-xs text-text-500 mt-1 font-mono">
               {trace.span_count} spans • {formatDuration(trace.duration)}
             </p>
           </div>
           
-          <div className="text-xs text-slate-500">
-            <p>Showing {visibleRange.start}-{visibleRange.end} of {flattenedSpans.length}</p>
-            <p className="text-green-400">Virtualized rendering</p>
+          <div className="text-xs text-text-500">
+            <p className="font-mono">Showing {visibleRange.start}-{visibleRange.end} of {flattenedSpans.length}</p>
+            <p className="text-status-healthy font-mono">Virtualized rendering</p>
           </div>
         </div>
       </div>
 
       {/* Timeline header */}
-      <div className="h-8 bg-slate-950 border-b border-slate-800 relative px-3">
-        <div className="absolute inset-x-3 top-0 h-full flex items-center">
-          <span className="text-xs text-slate-500">0ms</span>
+      <div className="h-8 bg-surface-100 border-b border-surface-300 relative px-4">
+        <div className="absolute inset-x-4 top-0 h-full flex items-center">
+          <span className="text-xs text-text-500 font-mono">0ms</span>
           <div className="flex-1" />
-          <span className="text-xs text-slate-500">{formatDuration(trace.duration)}</span>
+          <span className="text-xs text-text-500 font-mono">{formatDuration(trace.duration)}</span>
         </div>
       </div>
 
@@ -180,8 +180,8 @@ const VirtualizedTraceView = memo(({ trace, spans }: Props) => {
             return (
               <div
                 key={span.span_id}
-                className={`absolute w-full h-8 border-b border-slate-850 hover:bg-slate-800/50 transition-colors ${
-                  selectedSpan === span.span_id ? 'bg-slate-800' : ''
+                className={`absolute w-full h-8 border-b border-surface-200 hover:bg-surface-100 transition-colors cursor-pointer ${
+                  selectedSpan === span.span_id ? 'bg-surface-200 border-status-info' : ''
                 }`}
                 style={{ top: `${actualIndex * 32}px` }}
                 onClick={() => setSelectedSpan(span.span_id)}
@@ -204,27 +204,27 @@ const VirtualizedTraceView = memo(({ trace, spans }: Props) => {
                       </button>
                     )}
                     
-                    <span className="text-xs text-slate-300 truncate">
+                    <span className="text-xs text-text-900 truncate font-medium">
                       {span.operation_name}
                     </span>
                     
                     {span.status === 'error' && (
-                      <span className="ml-2 text-xs px-1 py-0.5 bg-red-500/20 text-red-400 rounded">
+                      <span className="ml-2 text-xs px-1.5 py-0.5 bg-status-error bg-opacity-10 text-status-error rounded border border-status-error border-opacity-20">
                         ERR
                       </span>
                     )}
                   </div>
 
                   {/* Service name */}
-                  <div className="w-150 px-2">
-                    <span className="text-xs text-slate-500 truncate">
+                  <div className="w-32 px-2">
+                    <span className="text-xs text-text-500 truncate">
                       {span.service_name}
                     </span>
                   </div>
 
                   {/* Duration */}
-                  <div className="w-80 px-2">
-                    <span className="text-xs text-slate-400 font-mono">
+                  <div className="w-20 px-2">
+                    <span className="text-xs text-text-700 font-mono">
                       {formatDuration(span.duration)}
                     </span>
                   </div>
@@ -250,7 +250,7 @@ const VirtualizedTraceView = memo(({ trace, spans }: Props) => {
 
       {/* Selected span details */}
       {selectedSpan && (
-        <div className="h-48 border-t border-slate-800 p-3 overflow-y-auto bg-slate-950">
+        <div className="h-48 border-t border-surface-300 p-4 overflow-y-auto bg-surface-50">
           {(() => {
             const span = spanTree.spanMap.get(selectedSpan);
             if (!span) return null;
@@ -258,52 +258,52 @@ const VirtualizedTraceView = memo(({ trace, spans }: Props) => {
             return (
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-medium text-slate-300">
+                  <h4 className="text-sm font-medium text-text-900">
                     {span.operation_name}
                   </h4>
                   <button
                     onClick={() => setSelectedSpan(null)}
-                    className="text-slate-500 hover:text-slate-300"
+                    className="text-text-500 hover:text-text-700 p-1"
                   >
                     ✕
                   </button>
                 </div>
                 
-                <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="grid grid-cols-2 gap-3 text-xs">
                   <div>
-                    <span className="text-slate-500">Service:</span>
-                    <span className="ml-2 text-slate-300">{span.service_name}</span>
+                    <span className="text-text-500">Service:</span>
+                    <span className="ml-2 text-text-900 font-medium">{span.service_name}</span>
                   </div>
                   <div>
-                    <span className="text-slate-500">Duration:</span>
-                    <span className="ml-2 text-slate-300">{formatDuration(span.duration)}</span>
+                    <span className="text-text-500">Duration:</span>
+                    <span className="ml-2 text-text-900 font-mono">{formatDuration(span.duration)}</span>
                   </div>
                   <div>
-                    <span className="text-slate-500">Span ID:</span>
-                    <span className="ml-2 text-slate-400 font-mono">{span.span_id}</span>
+                    <span className="text-text-500">Span ID:</span>
+                    <span className="ml-2 text-text-700 font-mono">{span.span_id}</span>
                   </div>
                   <div>
-                    <span className="text-slate-500">Status:</span>
-                    <span className={`ml-2 ${span.status === 'error' ? 'text-red-400' : 'text-green-400'}`}>
+                    <span className="text-text-500">Status:</span>
+                    <span className={`ml-2 font-medium ${span.status === 'error' ? 'text-status-error' : 'text-status-healthy'}`}>
                       {span.status}
                     </span>
                   </div>
                 </div>
 
                 {span.error_message && (
-                  <div className="text-xs bg-red-900/20 border border-red-800 rounded p-2 text-red-400">
+                  <div className="text-xs bg-status-error bg-opacity-5 border border-status-error border-opacity-20 rounded p-3 text-status-error">
                     {span.error_message}
                   </div>
                 )}
 
                 {Object.keys(span.attributes).length > 0 && (
                   <div className="text-xs">
-                    <p className="text-slate-500 mb-1">Attributes:</p>
-                    <div className="bg-slate-900 rounded p-2 space-y-1">
+                    <p className="text-text-500 mb-2 font-medium">Attributes:</p>
+                    <div className="bg-surface-100 rounded-lg p-3 space-y-2 border border-surface-300">
                       {Object.entries(span.attributes).map(([key, value]) => (
-                        <div key={key}>
-                          <span className="text-slate-500">{key}:</span>
-                          <span className="ml-2 text-slate-300">{value}</span>
+                        <div key={key} className="flex justify-between">
+                          <span className="text-text-500 font-mono">{key}:</span>
+                          <span className="text-text-900 font-mono text-right">{value}</span>
                         </div>
                       ))}
                     </div>

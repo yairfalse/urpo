@@ -86,7 +86,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, onComm
         return {
           id: 'compare',
           label: `Compare traces ${traceIds[0].substring(0, 8)}... with ${traceIds[1].substring(0, 8)}...`,
-          icon: '⚖️',
+          icon: 'CMP',
           category: 'compare',
           action: async () => {
             await invoke('compare_traces', { 
@@ -107,7 +107,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, onComm
       id: 'show-live-map',
       label: 'Show Live Service Map',
       shortcut: '⌘L',
-      icon: '🗺️',
+      icon: 'MAP',
       category: 'view',
       action: () => {
         window.dispatchEvent(new CustomEvent('show-view', { detail: 'map' }));
@@ -117,7 +117,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, onComm
       id: 'show-heatmap',
       label: 'Show Latency Heatmap',
       shortcut: '⌘H',
-      icon: '🔥',
+      icon: 'HOT',
       category: 'view',
       action: () => {
         window.dispatchEvent(new CustomEvent('show-view', { detail: 'heatmap' }));
@@ -127,7 +127,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, onComm
       id: 'split-view',
       label: 'Split View Mode',
       shortcut: '⌘\\',
-      icon: '⚡',
+      icon: 'FAST',
       category: 'view',
       action: () => {
         window.dispatchEvent(new CustomEvent('toggle-split-view'));
@@ -156,7 +156,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, onComm
       id: 'clear-all',
       label: 'Clear All Traces',
       shortcut: '⌘⇧K',
-      icon: '🗑️',
+      icon: 'DEL',
       category: 'filter',
       action: async () => {
         await invoke('clear_traces');
