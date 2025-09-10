@@ -195,6 +195,8 @@ pub enum Tab {
     Traces,
     /// Detailed span view.
     Spans,
+    /// Service dependency map.
+    Map,
 }
 
 impl Dashboard {
@@ -515,16 +517,18 @@ impl Dashboard {
         self.selected_tab = match self.selected_tab {
             Tab::Services => Tab::Traces,
             Tab::Traces => Tab::Spans,
-            Tab::Spans => Tab::Services,
+            Tab::Spans => Tab::Map,
+            Tab::Map => Tab::Services,
         };
     }
 
     /// Move to the previous tab.
     fn previous_tab(&mut self) {
         self.selected_tab = match self.selected_tab {
-            Tab::Services => Tab::Spans,
+            Tab::Services => Tab::Map,
             Tab::Traces => Tab::Services,
             Tab::Spans => Tab::Traces,
+            Tab::Map => Tab::Spans,
         };
     }
 

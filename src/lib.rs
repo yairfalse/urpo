@@ -48,6 +48,7 @@ pub mod core;
 pub mod export;
 pub mod monitoring;
 pub mod receiver;
+pub mod service_map;
 pub mod storage;
 pub mod ui;
 
