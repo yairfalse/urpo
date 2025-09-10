@@ -5,6 +5,7 @@
 
 use crate::core::{Result, UrpoError};
 use crate::export::{ExportFormat, ExportOptions, TraceExporter};
+use crate::service_map::ServiceMapBuilder;
 use crate::storage::StorageBackend;
 use axum::{
     extract::{Path, Query, State},
@@ -110,6 +111,7 @@ pub async fn start_server(
         .route("/api/traces", get(list_traces_handler))
         .route("/api/traces/:id", get(get_trace_handler))
         .route("/api/services", get(list_services_handler))
+        .route("/api/service-map", get(get_service_map_handler))
         .route("/api/search", get(search_handler))
         .with_state(state);
 
@@ -324,6 +326,28 @@ async fn list_services_handler(
     }).collect();
 
     Json(service_list).into_response()
+}
+
+/// GET /api/service-map - Get current service dependency map
+async fn get_service_map_handler(
+    State(state): State<ApiState>,
+) -> impl IntoResponse {
+    let storage_guard = state.storage.read().await;
+    let mut builder = ServiceMapBuilder::new(&**storage_guard);
+    
+    match builder.build_from_recent_traces(1000, 3600).await {
+        Ok(map) => Json(map).into_response(),
+        Err(e) => {
+            tracing::error!("Failed to build service map: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: format!("Failed to build service map: {}", e),
+                    code: 500,
+                }),
+            ).into_response()
+        }
+    }
 }
 
 /// GET /api/search - Search spans by attributes or text
