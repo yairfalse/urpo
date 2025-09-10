@@ -461,7 +461,7 @@ async fn start_with_ui(config: Config, cli: &Cli) -> Result<()> {
         monitoring::Monitor,
         receiver::OtelReceiver,
         storage::{InMemoryStorage, SpanGenerator, StorageBackend, PerformanceManager},
-        ui::Dashboard,
+        tui::Dashboard,
         core::Span,
     };
     use std::sync::Arc;
