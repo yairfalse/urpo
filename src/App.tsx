@@ -151,11 +151,11 @@ const App = memo(() => {
     return (
       <div className="flex items-center justify-center h-screen bg-background-50">
         <div className="clean-card p-8 text-center animate-scale-in">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center bg-accent-blue bg-opacity-10 animate-pulse-subtle">
-            <div className="text-accent-blue text-2xl font-mono font-bold">⚡</div>
+          <div className="w-16 h-16 mx-auto mb-4 rounded-lg flex items-center justify-center bg-accent-blue bg-opacity-10">
+            <Network className="w-8 h-8 text-accent-blue" />
           </div>
-          <p className="text-text-900 font-medium mb-2">Starting Urpo...</p>
-          <p className="text-text-500 text-xs font-mono">Target: {'<'}200ms • Ultra-fast initialization</p>
+          <p className="text-text-900 font-medium mb-2">Starting URPO</p>
+          <p className="text-text-500 text-xs font-mono">Ultra-Fast OTEL Explorer</p>
           <div className="mt-4 h-0.5 bg-surface-200 rounded-full overflow-hidden">
             <div className="h-full bg-accent-blue animate-shine-subtle"></div>
           </div>
@@ -351,7 +351,7 @@ const App = memo(() => {
             </div>
             <div className="w-0.5 h-3 bg-surface-400"></div>
             <div className="flex items-center gap-1">
-              <span className="text-accent-blue">⚡</span>
+              <Network className="w-3 h-3 text-accent-blue" />
               <span className="text-accent-blue font-medium">Ultra-Fast OTEL</span>
             </div>
           </div>

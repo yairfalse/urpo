@@ -154,21 +154,21 @@ impl<'a> TraceExporter<'a> {
     /// Export spans as native JSON.
     fn export_json(&self, spans: &[Span]) -> Result<String> {
         serde_json::to_string_pretty(spans)
-            .map_err(|e| UrpoError::Serialization(e.to_string()))
+            .map_err(|e| UrpoError::SerializationError(e.to_string()))
     }
     
     /// Export spans as Jaeger-compatible JSON.
     fn export_jaeger(&self, spans: &[Span]) -> Result<String> {
         let jaeger_trace = convert_to_jaeger_format(spans);
         serde_json::to_string_pretty(&jaeger_trace)
-            .map_err(|e| UrpoError::Serialization(e.to_string()))
+            .map_err(|e| UrpoError::SerializationError(e.to_string()))
     }
     
     /// Export spans as OpenTelemetry JSON.
     fn export_otel(&self, spans: &[Span]) -> Result<String> {
         let otel_trace = convert_to_otel_format(spans);
         serde_json::to_string_pretty(&otel_trace)
-            .map_err(|e| UrpoError::Serialization(e.to_string()))
+            .map_err(|e| UrpoError::SerializationError(e.to_string()))
     }
     
     /// Export spans as CSV.
@@ -187,8 +187,8 @@ impl<'a> TraceExporter<'a> {
                 span.parent_span_id.as_ref().map(|p| p.as_str()).unwrap_or(""),
                 span.service_name.as_str(),
                 span.operation_name,
-                span.start_time,
-                span.duration,
+                span.start_time.duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos(),
+                span.duration.as_nanos(),
                 if span.status.is_error() { "ERROR" } else { "OK" },
                 serde_json::to_string(&span.attributes).unwrap_or_default(),
             ));
@@ -216,7 +216,7 @@ impl<'a> TraceExporter<'a> {
         }
         
         serde_json::to_string_pretty(&all_traces)
-            .map_err(|e| UrpoError::Serialization(e.to_string()))
+            .map_err(|e| UrpoError::SerializationError(e.to_string()))
     }
     
     /// Export multiple traces as Jaeger format.
@@ -229,7 +229,7 @@ impl<'a> TraceExporter<'a> {
         }
         
         serde_json::to_string_pretty(&jaeger_traces)
-            .map_err(|e| UrpoError::Serialization(e.to_string()))
+            .map_err(|e| UrpoError::SerializationError(e.to_string()))
     }
     
     /// Export multiple traces as OpenTelemetry format.
@@ -242,7 +242,7 @@ impl<'a> TraceExporter<'a> {
         }
         
         serde_json::to_string_pretty(&otel_traces)
-            .map_err(|e| UrpoError::Serialization(e.to_string()))
+            .map_err(|e| UrpoError::SerializationError(e.to_string()))
     }
     
     /// Export multiple traces as CSV.
@@ -262,8 +262,8 @@ impl<'a> TraceExporter<'a> {
                     span.parent_span_id.as_ref().map(|p| p.as_str()).unwrap_or(""),
                     span.service_name.as_str(),
                     span.operation_name,
-                    span.start_time,
-                    span.duration,
+                    span.start_time.duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos(),
+                    span.duration.as_nanos(),
                     if span.status.is_error() { "ERROR" } else { "OK" },
                     serde_json::to_string(&span.attributes).unwrap_or_default(),
                 ));
