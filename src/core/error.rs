@@ -35,6 +35,12 @@ pub enum UrpoError {
     #[error("Serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
     
+    #[error("Serialization error: {0}")]
+    SerializationError(String),
+    
+    #[error("Not found: {0}")]
+    NotFound(String),
+    
     #[error("GRPC error: {0}")]
     Grpc(#[from] tonic::Status),
     
@@ -125,11 +131,11 @@ impl UrpoError {
             Self::Storage(_) => "storage",
             Self::Config(_) => "config",
             Self::Render(_) | Self::Terminal(_) => "ui",
-            Self::ServiceNotFound(_) | Self::TraceNotFound(_) => "not_found",
+            Self::ServiceNotFound(_) | Self::TraceNotFound(_) | Self::NotFound(_) => "not_found",
             Self::InvalidSpan(_) | Self::InvalidSamplingRate(_) => "validation",
             Self::MemoryLimitExceeded { .. } => "resource",
             Self::Io(_) => "io",
-            Self::Serialization(_) | Self::Parse { .. } => "serialization",
+            Self::Serialization(_) | Self::SerializationError(_) | Self::Parse { .. } => "serialization",
             Self::Grpc(_) | Self::Network(_) => "network",
             Self::Join(_) => "async",
             Self::ChannelSend | Self::ChannelReceive => "channel",
