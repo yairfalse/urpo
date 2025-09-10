@@ -50,7 +50,7 @@ pub mod monitoring;
 pub mod receiver;
 pub mod service_map;
 pub mod storage;
-pub mod ui;
+pub mod tui;
 
 // Re-export core types for convenience
 pub use crate::core::{Config, Result};
