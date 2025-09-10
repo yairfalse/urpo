@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, memo } from 'react';
-import { invoke } from '@tauri-apps/api/tauri';
 import ServiceHealthDashboard from './components/ServiceHealthDashboard';
 import TraceExplorer from './components/TraceExplorer';
 import SystemMetrics from './components/SystemMetrics';
@@ -7,6 +6,12 @@ import ServiceGraph from './components/ServiceGraph';
 import FlowTable from './components/FlowTable';
 import { ServiceMetrics, TraceInfo, SystemMetrics as SystemMetricsType } from './types';
 import { Network, Activity, BarChart3, Layers, GitBranch, Table } from 'lucide-react';
+import { isTauriAvailable, safeTauriInvoke } from './utils/tauri';
+import { 
+  getUpdatedMockServices, 
+  getUpdatedMockSystemMetrics, 
+  mockTraces 
+} from './services/mockData';
 
 // PERFORMANCE: Memoize the entire app to prevent unnecessary re-renders
 const App = memo(() => {
@@ -21,46 +26,93 @@ const App = memo(() => {
   // PERFORMANCE: Use requestAnimationFrame for smooth 60fps updates
   const updateMetrics = useCallback(async () => {
     try {
-      const [serviceData, systemData] = await Promise.all([
-        invoke<ServiceMetrics[]>('get_service_metrics'),
-        invoke<SystemMetricsType>('get_system_metrics'),
-      ]);
+      if (isTauriAvailable()) {
+        // Use real Tauri backend when available
+        const [serviceData, systemData] = await Promise.all([
+          safeTauriInvoke<ServiceMetrics[]>('get_service_metrics'),
+          safeTauriInvoke<SystemMetricsType>('get_system_metrics'),
+        ]);
 
-      // Batch state updates for better performance
+        if (serviceData && systemData) {
+          // Batch state updates for better performance
+          requestAnimationFrame(() => {
+            setServices(serviceData);
+            setSystemMetrics(systemData);
+            setError(null);
+          });
+        }
+      } else {
+        // Use mock data when Tauri is not available
+        const serviceData = getUpdatedMockServices();
+        const systemData = getUpdatedMockSystemMetrics();
+
+        requestAnimationFrame(() => {
+          setServices(serviceData);
+          setSystemMetrics(systemData);
+          setError(null);
+        });
+      }
+    } catch (err) {
+      console.error('Error updating metrics:', err);
+      // Fallback to mock data on error
+      const serviceData = getUpdatedMockServices();
+      const systemData = getUpdatedMockSystemMetrics();
+
       requestAnimationFrame(() => {
         setServices(serviceData);
         setSystemMetrics(systemData);
-        setError(null);
+        setError(`Backend unavailable - showing demo data`);
       });
-    } catch (err) {
-      setError(String(err));
     }
   }, []);
 
   const loadTraces = useCallback(async () => {
     try {
-      const traceData = await invoke<TraceInfo[]>('list_recent_traces', {
-        limit: 100,
-      });
-      
-      requestAnimationFrame(() => {
-        setTraces(traceData);
-        setError(null);
-      });
+      if (isTauriAvailable()) {
+        const traceData = await safeTauriInvoke<TraceInfo[]>('list_recent_traces', {
+          limit: 100,
+        });
+        
+        if (traceData) {
+          requestAnimationFrame(() => {
+            setTraces(traceData);
+            setError(null);
+          });
+        }
+      } else {
+        // Use mock trace data when Tauri is not available
+        requestAnimationFrame(() => {
+          setTraces(mockTraces);
+          setError(null);
+        });
+      }
     } catch (err) {
-      setError(String(err));
+      console.error('Error loading traces:', err);
+      // Fallback to mock data
+      requestAnimationFrame(() => {
+        setTraces(mockTraces);
+        setError(`Backend unavailable - showing demo traces`);
+      });
     }
   }, []);
 
   // Start OTEL receiver on mount
   useEffect(() => {
     const startReceiver = async () => {
-      try {
-        await invoke('start_receiver');
+      if (isTauriAvailable()) {
+        try {
+          await safeTauriInvoke('start_receiver');
+          setLoading(false);
+          setError(null);
+        } catch (err) {
+          setError(`Failed to start OTEL receiver: ${err}`);
+          setLoading(false);
+        }
+      } else {
+        // Running in web mode - skip backend initialization
+        console.log('Running in web mode with demo data');
         setLoading(false);
-      } catch (err) {
-        setError(`Failed to start receiver: ${err}`);
-        setLoading(false);
+        setError(null);
       }
     };
 
@@ -68,7 +120,9 @@ const App = memo(() => {
 
     // Cleanup on unmount
     return () => {
-      invoke('stop_receiver').catch(console.error);
+      if (isTauriAvailable()) {
+        safeTauriInvoke('stop_receiver').catch(console.error);
+      }
     };
   }, []);
 
@@ -133,8 +187,8 @@ const App = memo(() => {
             <div className="hidden md:block h-6 w-0.5 bg-steel-700"></div>
             
             <div className="hidden md:flex items-center gap-2 text-xs text-steel-300 font-mono">
-              <div className="status-indicator healthy animate-pulse-electric"></div>
-              <span>Collector Active</span>
+              <div className={`status-indicator animate-pulse-electric ${isTauriAvailable() ? 'healthy' : 'warning'}`}></div>
+              <span>{isTauriAvailable() ? 'Collector Active' : 'Demo Mode'}</span>
             </div>
           </div>
           
@@ -248,9 +302,11 @@ const App = memo(() => {
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-6 text-[10px] font-mono">
             <div className="flex items-center gap-2">
-              <div className="status-indicator healthy animate-pulse-electric"></div>
-              <span className="text-steel-300">OTEL Collector</span>
-              <span className="text-electric-green">ACTIVE</span>
+              <div className={`status-indicator animate-pulse-electric ${isTauriAvailable() ? 'healthy' : 'warning'}`}></div>
+              <span className="text-steel-300">{isTauriAvailable() ? 'OTEL Collector' : 'Demo Mode'}</span>
+              <span className={isTauriAvailable() ? 'text-electric-green' : 'text-electric-amber'}>
+                {isTauriAvailable() ? 'ACTIVE' : 'OFFLINE'}
+              </span>
             </div>
             
             <div className="flex items-center gap-4 text-steel-400">
