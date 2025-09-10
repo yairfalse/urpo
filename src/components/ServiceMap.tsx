@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, memo } from 'react';
 import { ServiceMap as ServiceMapType, ServiceNode, ServiceEdge } from '../types';
-import { isTauriAvailable, safeTauriInvoke } from '../utils/tauri';
+import { isTauriAvailable, getServiceMap } from '../utils/tauri';
 
 interface ServiceMapProps {
   className?: string;
@@ -24,8 +24,13 @@ const ServiceMap = memo(({ className = '' }: ServiceMapProps) => {
       let mapData: ServiceMapType;
 
       if (isTauriAvailable()) {
-        // Use real Tauri backend
-        mapData = await safeTauriInvoke<ServiceMapType>('get_service_map');
+        // Use real Tauri backend with new getServiceMap helper
+        const result = await getServiceMap();
+        if (result) {
+          mapData = result;
+        } else {
+          throw new Error('Failed to get service map from backend');
+        }
       } else {
         // Use mock data for demo
         mapData = generateMockServiceMap();
@@ -414,8 +419,7 @@ const ErrorPathsView = memo(({ edges }: { edges: ServiceEdge[] }) => (
                 </div>
               </div>
             );
-          })
-        )}
+          })}
       </div>
     )}
   </div>

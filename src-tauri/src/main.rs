@@ -11,6 +11,7 @@ use urpo_lib::{
     core::{Config, ConfigBuilder, ServiceName, TraceId},
     monitoring::Monitor,
     receiver::OtelReceiver,
+    service_map::ServiceMapBuilder,
     storage::{StorageBackend, StorageManager},
 };
 
@@ -66,6 +67,38 @@ struct StorageInfo {
     total_spans: usize,
     memory_mb: f64,
     health: String,
+}
+
+// Service map structures for serialization
+#[derive(serde::Serialize)]
+struct ServiceMapResponse {
+    nodes: Vec<ServiceNodeResponse>,
+    edges: Vec<ServiceEdgeResponse>,
+    generated_at: i64,
+    trace_count: u64,
+    time_window_seconds: u64,
+}
+
+#[derive(serde::Serialize)]
+struct ServiceNodeResponse {
+    name: String,
+    request_count: u64,
+    error_rate: f64,
+    avg_latency_us: u64,
+    is_root: bool,
+    is_leaf: bool,
+    tier: u32,
+}
+
+#[derive(serde::Serialize)]
+struct ServiceEdgeResponse {
+    from: String,
+    to: String,
+    call_count: u64,
+    error_count: u64,
+    avg_latency_us: u64,
+    p99_latency_us: u64,
+    operations: Vec<String>,
 }
 
 // Tauri command to get service metrics - BLAZING FAST with zero allocations in hot path
@@ -397,6 +430,68 @@ async fn trigger_tier_migration(state: State<'_, AppState>) -> Result<String, St
     Ok("Tier migration triggered successfully".to_string())
 }
 
+// BLAZING FAST service map generation - optimized for <10ms response time
+#[tauri::command]
+async fn get_service_map(
+    state: State<'_, AppState>,
+    limit: Option<usize>,
+    time_window_seconds: Option<u64>,
+) -> Result<ServiceMapResponse, String> {
+    // Use optimized defaults for maximum performance
+    let limit = limit.unwrap_or(1000);
+    let time_window = time_window_seconds.unwrap_or(3600);
+    
+    // Create builder with zero-allocation storage access
+    let mut builder = ServiceMapBuilder::new(&**state.storage);
+    
+    // Build map from recent traces with bounded memory usage
+    let service_map = builder
+        .build_from_recent_traces(limit, time_window)
+        .await
+        .map_err(|e| format!("Failed to build service map: {}", e))?;
+    
+    // Convert to response format with pre-allocated vectors for speed
+    let nodes = service_map.nodes
+        .into_iter()
+        .map(|node| ServiceNodeResponse {
+            name: node.name.to_string(),
+            request_count: node.request_count,
+            error_rate: node.error_rate,
+            avg_latency_us: node.avg_latency_us,
+            is_root: node.is_root,
+            is_leaf: node.is_leaf,
+            tier: node.tier,
+        })
+        .collect();
+    
+    let edges = service_map.edges
+        .into_iter()
+        .map(|edge| ServiceEdgeResponse {
+            from: edge.from.to_string(),
+            to: edge.to.to_string(),
+            call_count: edge.call_count,
+            error_count: edge.error_count,
+            avg_latency_us: edge.avg_latency_us,
+            p99_latency_us: edge.p99_latency_us,
+            operations: edge.operations.into_iter().collect(),
+        })
+        .collect();
+    
+    // Convert SystemTime to unix timestamp for frontend compatibility
+    let generated_at = service_map.generated_at
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+    
+    Ok(ServiceMapResponse {
+        nodes,
+        edges,
+        generated_at,
+        trace_count: service_map.trace_count,
+        time_window_seconds: service_map.time_window_seconds,
+    })
+}
+
 fn main() {
     // Track startup time for <200ms target
     let startup_time = Instant::now();
@@ -459,6 +554,7 @@ fn main() {
             stop_receiver,
             get_storage_info,
             trigger_tier_migration,
+            get_service_map,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

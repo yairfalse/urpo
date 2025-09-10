@@ -16,7 +16,7 @@ import {
 
 // PERFORMANCE: Memoize the entire app to prevent unnecessary re-renders
 const App = memo(() => {
-  const [activeView, setActiveView] = useState<'graph' | 'flows' | 'health' | 'traces'>('graph');
+  const [activeView, setActiveView] = useState<'graph' | 'flows' | 'health' | 'traces' | 'servicemap'>('graph');
   const [selectedTrace, setSelectedTrace] = useState<TraceInfo | null>(null);
   const [services, setServices] = useState<ServiceMetrics[]>([]);
   const [traces, setTraces] = useState<TraceInfo[]>([]);
@@ -200,6 +200,7 @@ const App = memo(() => {
               { key: 'flows', icon: Activity, label: 'Trace Flows', shortcut: '⌘2' },
               { key: 'health', icon: BarChart3, label: 'Metrics', shortcut: '⌘3' },
               { key: 'traces', icon: Layers, label: 'Traces', shortcut: '⌘4' },
+              { key: 'servicemap', icon: Share2, label: 'Dependencies', shortcut: '⌘5' },
             ].map(({ key, icon: Icon, label, shortcut }) => (
               <button
                 key={key}
@@ -212,38 +213,38 @@ const App = memo(() => {
               >
                 <Icon className="w-3.5 h-3.5" />
                 <span className="hidden lg:inline">{label}</span>
-                <span className="hidden xl:inline text-[10px] text-steel-400 font-mono">{shortcut}</span>
+                <span className="hidden xl:inline text-[10px] text-text-300 font-mono">{shortcut}</span>
               </button>
             ))}
           </nav>
 
           {/* Live Metrics Display */}
           {systemMetrics && (
-            <div className="glass-card px-3 py-1.5 flex items-center gap-4">
+            <div className="clean-card px-3 py-1.5 flex items-center gap-4">
               <div className="flex items-center gap-1.5 text-[10px] font-mono">
-                <div className="w-1.5 h-1.5 bg-electric-green rounded-full animate-pulse-electric"></div>
-                <span className="text-steel-300">MEM</span>
-                <span className="text-steel-100 font-medium">
+                <div className="w-1.5 h-1.5 bg-status-healthy rounded-full animate-pulse-subtle"></div>
+                <span className="text-text-500">MEM</span>
+                <span className="text-text-900 font-medium">
                   {systemMetrics.memory_usage_mb.toFixed(0)}MB
                 </span>
               </div>
               
-              <div className="w-0.5 h-3 bg-steel-700"></div>
+              <div className="w-0.5 h-3 bg-surface-400"></div>
               
               <div className="flex items-center gap-1.5 text-[10px] font-mono">
-                <div className="w-1.5 h-1.5 bg-electric-amber rounded-full animate-pulse-electric"></div>
-                <span className="text-steel-300">CPU</span>
-                <span className="text-steel-100 font-medium">
+                <div className="w-1.5 h-1.5 bg-status-warning rounded-full animate-pulse-subtle"></div>
+                <span className="text-text-500">CPU</span>
+                <span className="text-text-900 font-medium">
                   {systemMetrics.cpu_usage_percent.toFixed(1)}%
                 </span>
               </div>
               
-              <div className="w-0.5 h-3 bg-steel-700"></div>
+              <div className="w-0.5 h-3 bg-surface-400"></div>
               
               <div className="flex items-center gap-1.5 text-[10px] font-mono">
-                <div className="w-1.5 h-1.5 bg-electric-blue rounded-full animate-pulse-electric"></div>
-                <span className="text-steel-300">RPS</span>
-                <span className="text-electric-blue font-medium">
+                <div className="w-1.5 h-1.5 bg-accent-blue rounded-full animate-pulse-subtle"></div>
+                <span className="text-text-500">RPS</span>
+                <span className="text-accent-blue font-medium">
                   {systemMetrics.spans_per_second.toFixed(0)}
                 </span>
               </div>
@@ -252,15 +253,15 @@ const App = memo(() => {
         </div>
       </header>
 
-      {/* Knife-Edge Error Display */}
+      {/* Clean Error Display */}
       {error && (
         <div className="mx-6 mt-4 animate-slide-down">
-          <div className="glass-card border-electric-red bg-electric-red/5 p-4">
+          <div className="clean-card border-status-error bg-status-error bg-opacity-5 p-4">
             <div className="flex items-center gap-3">
               <div className="status-indicator critical"></div>
               <div>
-                <div className="text-electric-red font-medium text-sm">System Error</div>
-                <div className="text-steel-300 text-xs font-mono mt-1">{error}</div>
+                <div className="text-status-error font-medium text-sm">System Notice</div>
+                <div className="text-text-500 text-xs font-mono mt-1">{error}</div>
               </div>
             </div>
           </div>
@@ -296,32 +297,38 @@ const App = memo(() => {
             />
           </div>
         )}
+        
+        {activeView === 'servicemap' && (
+          <div className="h-full animate-slide-up">
+            <ServiceMap />
+          </div>
+        )}
       </main>
 
-      {/* Razor-Sharp Status Bar */}
-      <footer className="glass-card border-0 border-t-0.5 border-steel-800 px-6 py-2 backdrop-blur-knife gpu-layer">
+      {/* Clean Status Bar */}
+      <footer className="clean-card border-0 border-t border-surface-300 px-6 py-2 gpu-layer rounded-none">
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-6 text-[10px] font-mono">
             <div className="flex items-center gap-2">
-              <div className={`status-indicator animate-pulse-electric ${isTauriAvailable() ? 'healthy' : 'warning'}`}></div>
-              <span className="text-steel-300">{isTauriAvailable() ? 'OTEL Collector' : 'Demo Mode'}</span>
-              <span className={isTauriAvailable() ? 'text-electric-green' : 'text-electric-amber'}>
+              <div className={`status-indicator animate-pulse-subtle ${isTauriAvailable() ? 'healthy' : 'warning'}`}></div>
+              <span className="text-text-500">{isTauriAvailable() ? 'OTEL Collector' : 'Demo Mode'}</span>
+              <span className={isTauriAvailable() ? 'text-status-healthy' : 'text-status-warning'}>
                 {isTauriAvailable() ? 'ACTIVE' : 'OFFLINE'}
               </span>
             </div>
             
-            <div className="flex items-center gap-4 text-steel-400">
+            <div className="flex items-center gap-4 text-text-300">
               <span className="flex items-center gap-1">
-                <span className="text-steel-300">SERVICES</span>
-                <span className="text-steel-100 font-medium">{services.length}</span>
+                <span className="text-text-500">SERVICES</span>
+                <span className="text-text-900 font-medium">{services.length}</span>
               </span>
               <span className="flex items-center gap-1">
-                <span className="text-steel-300">TRACES</span>
-                <span className="text-steel-100 font-medium">{traces.length}</span>
+                <span className="text-text-500">TRACES</span>
+                <span className="text-text-900 font-medium">{traces.length}</span>
               </span>
               <span className="flex items-center gap-1">
-                <span className="text-steel-300">SPANS</span>
-                <span className="text-steel-100 font-medium">
+                <span className="text-text-500">SPANS</span>
+                <span className="text-text-900 font-medium">
                   {(systemMetrics?.total_spans || 0).toLocaleString()}
                 </span>
               </span>
@@ -329,23 +336,23 @@ const App = memo(() => {
             
             {systemMetrics && (
               <div className="flex items-center gap-1">
-                <span className="text-steel-300">THROUGHPUT</span>
-                <span className="text-electric-blue font-medium">
+                <span className="text-text-500">THROUGHPUT</span>
+                <span className="text-accent-blue font-medium">
                   {systemMetrics.spans_per_second.toFixed(0)} spans/s
                 </span>
               </div>
             )}
           </div>
           
-          <div className="flex items-center gap-4 text-[10px] text-steel-400 font-mono">
+          <div className="flex items-center gap-4 text-[10px] text-text-300 font-mono">
             <div className="flex items-center gap-2">
               <span>Powered by</span>
-              <span className="text-steel-100 font-medium">Urpo</span>
+              <span className="text-text-900 font-medium">Urpo</span>
             </div>
-            <div className="w-0.5 h-3 bg-steel-700"></div>
+            <div className="w-0.5 h-3 bg-surface-400"></div>
             <div className="flex items-center gap-1">
-              <span className="text-electric-blue">⚡</span>
-              <span className="text-electric-blue font-medium">Ultra-Fast OTEL</span>
+              <span className="text-accent-blue">⚡</span>
+              <span className="text-accent-blue font-medium">Ultra-Fast OTEL</span>
             </div>
           </div>
         </div>
