@@ -36,3 +36,15 @@ export const checkTauriFeatures = () => {
     // Add more feature checks as needed
   };
 };
+
+// Service Map API helpers
+import type { ServiceMap } from '../types';
+
+export interface ServiceMapOptions {
+  limit?: number;
+  time_window_seconds?: number;
+}
+
+export const getServiceMap = async (options?: ServiceMapOptions): Promise<ServiceMap | null> => {
+  return await safeTauriInvoke<ServiceMap>('get_service_map', options);
+};
