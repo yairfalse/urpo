@@ -3,9 +3,10 @@ import ServiceHealthDashboard from './components/ServiceHealthDashboard';
 import TraceExplorer from './components/TraceExplorer';
 import SystemMetrics from './components/SystemMetrics';
 import ServiceGraph from './components/ServiceGraph';
+import ServiceMap from './components/ServiceMap';
 import FlowTable from './components/FlowTable';
 import { ServiceMetrics, TraceInfo, SystemMetrics as SystemMetricsType } from './types';
-import { Network, Activity, BarChart3, Layers, GitBranch, Table } from 'lucide-react';
+import { Network, Activity, BarChart3, Layers, GitBranch, Table, Share2 } from 'lucide-react';
 import { isTauriAvailable, safeTauriInvoke } from './utils/tauri';
 import { 
   getUpdatedMockServices, 
@@ -148,15 +149,15 @@ const App = memo(() => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-void-950">
-        <div className="glass-card p-8 text-center animate-scale-in">
-          <div className="electric-glow w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center animate-pulse-electric">
-            <div className="text-electric-blue text-2xl font-mono font-bold">⚡</div>
+      <div className="flex items-center justify-center h-screen bg-background-50">
+        <div className="clean-card p-8 text-center animate-scale-in">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center bg-accent-blue bg-opacity-10 animate-pulse-subtle">
+            <div className="text-accent-blue text-2xl font-mono font-bold">⚡</div>
           </div>
-          <p className="text-steel-100 font-medium mb-2">Starting Urpo...</p>
-          <p className="text-steel-300 text-xs font-mono">Target: &lt;200ms • Ultra-fast initialization</p>
-          <div className="mt-4 h-0.5 bg-steel-800 rounded-full overflow-hidden">
-            <div className="h-full bg-electric-blue animate-knife-shine"></div>
+          <p className="text-text-900 font-medium mb-2">Starting Urpo...</p>
+          <p className="text-text-500 text-xs font-mono">Target: {'<'}200ms • Ultra-fast initialization</p>
+          <div className="mt-4 h-0.5 bg-surface-200 rounded-full overflow-hidden">
+            <div className="h-full bg-accent-blue animate-shine-subtle"></div>
           </div>
         </div>
       </div>
@@ -164,30 +165,30 @@ const App = memo(() => {
   }
 
   return (
-    <div className="h-screen bg-void-950 text-steel-100 flex flex-col gpu-composite">
-      {/* Ultra-Sharp Header */}
-      <header className="glass-card border-0 border-b-0.5 border-steel-800 backdrop-blur-knife px-6 py-3 gpu-layer">
+    <div className="h-screen bg-background-50 text-text-900 flex flex-col gpu-composite">
+      {/* Clean Professional Header */}
+      <header className="clean-card border-0 border-b border-surface-300 px-6 py-3 gpu-layer rounded-none">
         <div className="flex items-center justify-between">
           {/* Brand Section */}
           <div className="flex items-center space-x-6">
             <div className="flex items-center gap-3">
-              <div className="electric-glow p-2 rounded-lg">
-                <Network className="w-5 h-5 text-electric-blue" />
+              <div className="p-2 rounded-lg bg-accent-blue bg-opacity-10">
+                <Network className="w-5 h-5 text-accent-blue" />
               </div>
               <div>
-                <h1 className="text-lg font-display font-bold text-steel-50 tracking-tight">
+                <h1 className="text-lg font-display font-bold text-text-900 tracking-tight">
                   URPO
                 </h1>
-                <div className="text-[10px] text-steel-300 font-mono uppercase tracking-wide">
+                <div className="text-[10px] text-text-500 font-mono uppercase tracking-wide">
                   Ultra-Fast OTEL Explorer
                 </div>
               </div>
             </div>
             
-            <div className="hidden md:block h-6 w-0.5 bg-steel-700"></div>
+            <div className="hidden md:block h-6 w-0.5 bg-surface-400"></div>
             
-            <div className="hidden md:flex items-center gap-2 text-xs text-steel-300 font-mono">
-              <div className={`status-indicator animate-pulse-electric ${isTauriAvailable() ? 'healthy' : 'warning'}`}></div>
+            <div className="hidden md:flex items-center gap-2 text-xs text-text-500 font-mono">
+              <div className={`status-indicator animate-pulse-subtle ${isTauriAvailable() ? 'healthy' : 'warning'}`}></div>
               <span>{isTauriAvailable() ? 'Collector Active' : 'Demo Mode'}</span>
             </div>
           </div>
@@ -203,10 +204,10 @@ const App = memo(() => {
               <button
                 key={key}
                 onClick={() => setActiveView(key as any)}
-                className={`knife-button px-3 py-2 rounded-lg flex items-center gap-2 text-xs font-medium micro-interaction ${
+                className={`clean-button px-3 py-2 rounded-lg flex items-center gap-2 text-xs font-medium micro-interaction ${
                   activeView === key
-                    ? 'electric-glow bg-electric-blue/10 text-electric-blue border-electric-blue'
-                    : 'text-steel-300 hover:text-steel-100 border-knife'
+                    ? 'active'
+                    : ''
                 }`}
               >
                 <Icon className="w-3.5 h-3.5" />

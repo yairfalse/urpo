@@ -43,3 +43,31 @@ export interface SystemMetrics {
   total_spans: number;
   uptime_seconds: number;
 }
+
+export interface ServiceNode {
+  name: string;
+  request_count: number;
+  error_rate: number;
+  avg_latency_us: number;
+  is_root: boolean;
+  is_leaf: boolean;
+  tier: number;
+}
+
+export interface ServiceEdge {
+  from: string;
+  to: string;
+  call_count: number;
+  error_count: number;
+  avg_latency_us: number;
+  p99_latency_us: number;
+  operations: string[];
+}
+
+export interface ServiceMap {
+  nodes: ServiceNode[];
+  edges: ServiceEdge[];
+  generated_at: number;
+  trace_count: number;
+  time_window_seconds: number;
+}
