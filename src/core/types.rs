@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{Duration, SystemTime};
 use std::fmt;
+use std::str::FromStr;
 use crate::core::error::{Result, UrpoError};
 
 /// Unique identifier for a trace
@@ -44,6 +45,14 @@ impl TraceId {
 impl fmt::Display for TraceId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+impl FromStr for TraceId {
+    type Err = UrpoError;
+
+    fn from_str(s: &str) -> Result<Self> {
+        TraceId::new(s.to_string())
     }
 }
 
