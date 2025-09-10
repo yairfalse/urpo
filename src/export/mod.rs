@@ -8,7 +8,7 @@ use crate::storage::{StorageBackend, TraceInfo};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Export format options.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -43,7 +43,7 @@ pub struct ExportOptions {
     /// Export format
     pub format: ExportFormat,
     /// Output file path (None for stdout)
-    pub output: Option<String>,
+    pub output: Option<PathBuf>,
     /// Service filter
     pub service: Option<String>,
     /// Time range start (unix timestamp)
@@ -99,6 +99,25 @@ impl<'a> TraceExporter<'a> {
             ExportFormat::Jaeger => self.export_jaeger(&spans),
             ExportFormat::OpenTelemetry => self.export_otel(&spans),
             ExportFormat::Csv => self.export_csv(&spans),
+        }
+    }
+    
+    /// Export a single trace with provided spans.
+    pub async fn export_single_trace(
+        &self,
+        trace_id: &TraceId,
+        spans: &[Span],
+        options: &ExportOptions,
+    ) -> Result<String> {
+        if spans.is_empty() {
+            return Err(UrpoError::NotFound(format!("Trace {} not found", trace_id.as_str())));
+        }
+        
+        match options.format {
+            ExportFormat::Json => self.export_json(spans),
+            ExportFormat::Jaeger => self.export_jaeger(spans),
+            ExportFormat::OpenTelemetry => self.export_otel(spans),
+            ExportFormat::Csv => self.export_csv(spans),
         }
     }
     
