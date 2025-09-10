@@ -6,6 +6,7 @@ use crate::core::error::{Result, UrpoError};
 
 /// Unique identifier for a trace
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
 pub struct TraceId(String);
 
 /// Unique identifier for a span within a trace

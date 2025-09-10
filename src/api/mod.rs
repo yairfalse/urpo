@@ -315,7 +315,7 @@ async fn list_services_handler(
     let service_list: Vec<ServiceInfo> = services.into_iter().map(|(name, metrics)| {
         ServiceInfo {
             name: name.as_str().to_string(),
-            trace_count: 0, // TODO: Add trace_count to ServiceMetrics
+            trace_count: metrics.span_count as usize,
             error_count: metrics.error_count as usize,
             latency_p50: metrics.latency_p50.as_micros() as u64,
             latency_p95: metrics.latency_p95.as_micros() as u64,
