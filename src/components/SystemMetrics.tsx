@@ -44,7 +44,7 @@ const SystemMetrics = memo(({ metrics }: Props) => {
             {metrics.memory_usage_mb.toFixed(1)}MB
           </p>
           <p className="text-xs text-slate-600 mt-1">
-            Target: &lt;100MB
+            Target: {'<'}100MB
           </p>
         </div>
         
@@ -84,7 +84,7 @@ const SystemMetrics = memo(({ metrics }: Props) => {
             {formatUptime(metrics.uptime_seconds)}
           </p>
           <p className="text-xs text-green-400 mt-1">
-            Started in &lt;200ms ⚡
+            Started in {'<'}200ms ⚡
           </p>
         </div>
       </div>
