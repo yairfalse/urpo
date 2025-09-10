@@ -47,14 +47,14 @@ pub struct StorageStats {
     pub processing_rate: f64,
     /// Error rate for processing.
     pub error_rate: f64,
-    /// Storage mode (hot, warm, cold).
-    pub storage_mode: String,
-    /// Number of hot storage partitions.
-    pub hot_partitions: usize,
-    /// Number of warm storage partitions.
-    pub warm_partitions: usize,
-    /// Number of cold storage partitions.
-    pub cold_partitions: usize,
+    /// Number of cleanup operations performed.
+    pub cleanup_count: u64,
+    /// Last cleanup timestamp.
+    pub last_cleanup: Option<SystemTime>,
+    /// Storage health status.
+    pub health_status: StorageHealth,
+    /// Uptime in seconds.
+    pub uptime_seconds: u64,
 }
 
 /// Health status of the storage system.
