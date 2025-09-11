@@ -5,7 +5,7 @@ import SystemMetrics from './components/SystemMetrics';
 import ServiceGraph from './components/ServiceGraph';
 import ServiceMap from './components/ServiceMap';
 import FlowTable from './components/FlowTable';
-import { ServiceMetrics, TraceInfo, SystemMetrics as SystemMetricsType } from './types';
+import { ServiceMetrics, TraceInfo, SystemMetrics as SystemMetricsType, ViewMode, NavigationItem } from './types';
 import { Network, Activity, BarChart3, Layers, GitBranch, Table, Share2 } from 'lucide-react';
 import { isTauriAvailable, safeTauriInvoke } from './utils/tauri';
 import { 
@@ -16,7 +16,7 @@ import {
 
 // PERFORMANCE: Memoize the entire app to prevent unnecessary re-renders
 const App = memo(() => {
-  const [activeView, setActiveView] = useState<'graph' | 'flows' | 'health' | 'traces' | 'servicemap'>('graph');
+  const [activeView, setActiveView] = useState<ViewMode>('graph');
   const [selectedTrace, setSelectedTrace] = useState<TraceInfo | null>(null);
   const [services, setServices] = useState<ServiceMetrics[]>([]);
   const [traces, setTraces] = useState<TraceInfo[]>([]);
@@ -149,15 +149,15 @@ const App = memo(() => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-background-50">
+      <div className="flex items-center justify-center h-screen bg-surface-50">
         <div className="clean-card p-8 text-center animate-scale-in">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-lg flex items-center justify-center bg-accent-blue bg-opacity-10">
-            <Network className="w-8 h-8 text-accent-blue" />
+          <div className="w-16 h-16 mx-auto mb-4 rounded-lg flex items-center justify-center bg-surface-200">
+            <Network className="w-8 h-8 text-text-700" />
           </div>
           <p className="text-text-900 font-medium mb-2">Starting URPO</p>
           <p className="text-text-500 text-xs font-mono">Ultra-Fast OTEL Explorer</p>
-          <div className="mt-4 h-0.5 bg-surface-200 rounded-full overflow-hidden">
-            <div className="h-full bg-accent-blue animate-shine-subtle"></div>
+          <div className="mt-4 h-1 bg-surface-200 rounded-full overflow-hidden">
+            <div className="h-full bg-status-healthy animate-pulse-subtle w-3/4"></div>
           </div>
         </div>
       </div>
@@ -165,15 +165,15 @@ const App = memo(() => {
   }
 
   return (
-    <div className="h-screen bg-background-50 text-text-900 flex flex-col gpu-composite">
+    <div className="h-screen bg-surface-50 text-text-900 flex flex-col gpu-composite">
       {/* Clean Professional Header */}
       <header className="clean-card border-0 border-b border-surface-300 px-6 py-3 gpu-layer rounded-none">
         <div className="flex items-center justify-between">
           {/* Brand Section */}
           <div className="flex items-center space-x-6">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-accent-blue bg-opacity-10">
-                <Network className="w-5 h-5 text-accent-blue" />
+              <div className="p-2 rounded-lg bg-surface-200">
+                <Network className="w-5 h-5 text-text-700" />
               </div>
               <div>
                 <h1 className="text-lg font-display font-bold text-text-900 tracking-tight">
@@ -195,16 +195,16 @@ const App = memo(() => {
           
           {/* Sharp Navigation */}
           <nav className="flex items-center gap-1">
-            {[
+            {([
               { key: 'graph', icon: GitBranch, label: 'Service Map', shortcut: '⌘1' },
               { key: 'flows', icon: Activity, label: 'Trace Flows', shortcut: '⌘2' },
               { key: 'health', icon: BarChart3, label: 'Metrics', shortcut: '⌘3' },
               { key: 'traces', icon: Layers, label: 'Traces', shortcut: '⌘4' },
               { key: 'servicemap', icon: Share2, label: 'Dependencies', shortcut: '⌘5' },
-            ].map(({ key, icon: Icon, label, shortcut }) => (
+            ] as NavigationItem[]).map(({ key, icon: Icon, label, shortcut }) => (
               <button
                 key={key}
-                onClick={() => setActiveView(key as any)}
+                onClick={() => setActiveView(key)}
                 className={`clean-button px-3 py-2 rounded-lg flex items-center gap-2 text-xs font-medium micro-interaction ${
                   activeView === key
                     ? 'active'
@@ -242,9 +242,9 @@ const App = memo(() => {
               <div className="w-0.5 h-3 bg-surface-400"></div>
               
               <div className="flex items-center gap-1.5 text-[10px] font-mono">
-                <div className="w-1.5 h-1.5 bg-accent-blue rounded-full animate-pulse-subtle"></div>
+                <div className="w-1.5 h-1.5 bg-text-700 rounded-full animate-pulse-subtle"></div>
                 <span className="text-text-500">RPS</span>
-                <span className="text-accent-blue font-medium">
+                <span className="text-text-900 font-medium">
                   {systemMetrics.spans_per_second.toFixed(0)}
                 </span>
               </div>
@@ -337,7 +337,7 @@ const App = memo(() => {
             {systemMetrics && (
               <div className="flex items-center gap-1">
                 <span className="text-text-500">THROUGHPUT</span>
-                <span className="text-accent-blue font-medium">
+                <span className="text-text-900 font-medium">
                   {systemMetrics.spans_per_second.toFixed(0)} spans/s
                 </span>
               </div>
@@ -351,8 +351,8 @@ const App = memo(() => {
             </div>
             <div className="w-0.5 h-3 bg-surface-400"></div>
             <div className="flex items-center gap-1">
-              <Network className="w-3 h-3 text-accent-blue" />
-              <span className="text-accent-blue font-medium">Ultra-Fast OTEL</span>
+              <Network className="w-3 h-3 text-text-700" />
+              <span className="text-text-700 font-medium">Ultra-Fast OTEL</span>
             </div>
           </div>
         </div>

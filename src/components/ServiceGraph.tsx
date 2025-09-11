@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import { motion } from 'framer-motion';
-import { Activity, AlertCircle, CheckCircle, Clock, Network, Zap } from 'lucide-react';
+import { Activity, AlertCircle, CheckCircle, Clock, Network } from 'lucide-react';
 
 interface ServiceNode {
   id: string;
@@ -94,22 +94,22 @@ export default function ServiceGraph({ services, traces }: ServiceGraphProps) {
     const g = svg.append('g');
     
     // Add zoom behavior
-    const zoom = d3.zoom()
+    const zoom = (d3 as any).zoom()
       .scaleExtent([0.5, 3])
-      .on('zoom', (event) => {
+      .on('zoom', (event: any) => {
         g.attr('transform', event.transform);
       });
 
     svg.call(zoom as any);
 
     // Create force simulation
-    const simulation = d3.forceSimulation(graphData.nodes as any)
-      .force('link', d3.forceLink(graphData.links)
+    const simulation = (d3 as any).forceSimulation(graphData.nodes as any)
+      .force('link', (d3 as any).forceLink(graphData.links)
         .id((d: any) => d.id)
         .distance(150))
-      .force('charge', d3.forceManyBody().strength(-500))
-      .force('center', d3.forceCenter(width / 2, height / 2))
-      .force('collision', d3.forceCollide().radius(40));
+      .force('charge', (d3 as any).forceManyBody().strength(-500))
+      .force('center', (d3 as any).forceCenter(width / 2, height / 2))
+      .force('collision', (d3 as any).forceCollide().radius(40));
 
     // Create arrow markers for directed edges
     svg.append('defs').selectAll('marker')
@@ -127,7 +127,7 @@ export default function ServiceGraph({ services, traces }: ServiceGraphProps) {
       .attr('fill', d => 
         d === 'critical' ? '#ef4444' : 
         d === 'degraded' ? '#f59e0b' : 
-        '#10b981'
+        '#6B7280'
       );
 
     // Create links
@@ -138,7 +138,7 @@ export default function ServiceGraph({ services, traces }: ServiceGraphProps) {
       .attr('stroke', d => 
         d.errorRate > 0.5 ? '#ef4444' : 
         d.errorRate > 0.1 ? '#f59e0b' : 
-        '#10b981'
+        '#6B7280'
       )
       .attr('stroke-opacity', 0.6)
       .attr('stroke-width', d => Math.max(1, Math.min(5, d.requestRate / 10)))
@@ -152,10 +152,10 @@ export default function ServiceGraph({ services, traces }: ServiceGraphProps) {
       .data(graphData.nodes)
       .enter().append('g')
       .attr('cursor', 'pointer')
-      .on('click', (event, d) => setSelectedNode(d.id))
-      .on('mouseenter', (event, d) => setHoveredNode(d.id))
+      .on('click', (_event: any, d: any) => setSelectedNode(d.id))
+      .on('mouseenter', (_event: any, d: any) => setHoveredNode(d.id))
       .on('mouseleave', () => setHoveredNode(null))
-      .call(d3.drag()
+      .call((d3 as any).drag()
         .on('start', dragstarted)
         .on('drag', dragged)
         .on('end', dragended) as any);
@@ -166,7 +166,7 @@ export default function ServiceGraph({ services, traces }: ServiceGraphProps) {
       .attr('fill', d => {
         if (d.health === 'critical') return '#dc2626';
         if (d.health === 'degraded') return '#f97316';
-        return '#10b981';
+        return '#6B7280';
       })
       .attr('stroke', '#fff')
       .attr('stroke-width', 2);
@@ -245,24 +245,24 @@ export default function ServiceGraph({ services, traces }: ServiceGraphProps) {
 
   const getServiceIcon = (type: ServiceNode['type']) => {
     switch (type) {
-      case 'database': return '🗄️';
-      case 'cache': return '⚡';
-      case 'external': return '🌐';
-      default: return '📦';
+      case 'database': return 'DB';
+      case 'cache': return 'CACHE';
+      case 'external': return 'EXT';
+      default: return 'SVC';
     }
   };
 
   const selectedService = graphData.nodes.find(n => n.id === selectedNode);
 
   return (
-    <div className="relative h-full bg-slate-950 rounded-lg overflow-hidden">
+    <div className="relative h-full bg-surface-50 border border-surface-300 rounded-lg overflow-hidden">
       {/* Header */}
-      <div className="absolute top-0 left-0 right-0 z-10 bg-gradient-to-b from-slate-950 to-transparent p-4">
+      <div className="absolute top-0 left-0 right-0 z-10 bg-gradient-to-b from-surface-50 to-transparent p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Network className="w-5 h-5 text-green-500" />
-            <h2 className="text-lg font-semibold text-white">Service Dependency Map</h2>
-            <span className="text-xs text-slate-500">
+            <Network className="w-5 h-5 text-text-700" />
+            <h2 className="text-lg font-semibold text-text-900">Service Dependency Map</h2>
+            <span className="text-xs text-text-500">
               {graphData.nodes.length} services, {graphData.links.length} trace paths
             </span>
           </div>
@@ -271,16 +271,16 @@ export default function ServiceGraph({ services, traces }: ServiceGraphProps) {
             {/* Legend */}
             <div className="flex items-center gap-3 text-xs">
               <div className="flex items-center gap-1">
-                <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                <span className="text-slate-400">Healthy</span>
+                <div className="w-3 h-3 rounded-full bg-gray-500"></div>
+                <span className="text-text-500">Healthy</span>
               </div>
               <div className="flex items-center gap-1">
                 <div className="w-3 h-3 rounded-full bg-amber-500"></div>
-                <span className="text-slate-400">Degraded</span>
+                <span className="text-text-500">Degraded</span>
               </div>
               <div className="flex items-center gap-1">
                 <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                <span className="text-slate-400">Critical</span>
+                <span className="text-text-500">Critical</span>
               </div>
             </div>
           </div>
@@ -291,7 +291,7 @@ export default function ServiceGraph({ services, traces }: ServiceGraphProps) {
       <svg 
         ref={svgRef} 
         className="w-full h-full"
-        style={{ background: 'radial-gradient(circle at center, #1e293b 0%, #0f172a 100%)' }}
+        style={{ background: '#FAFAFA' }}
       />
 
       {/* Selected Service Details */}
@@ -299,12 +299,12 @@ export default function ServiceGraph({ services, traces }: ServiceGraphProps) {
         <motion.div
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
-          className="absolute top-20 right-4 w-80 bg-slate-900 border border-slate-800 rounded-lg p-4 shadow-xl"
+          className="absolute top-20 right-4 w-80 bg-surface-50 border border-surface-300 rounded-lg p-4 shadow-xl"
         >
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-white font-semibold flex items-center gap-2">
+            <h3 className="text-text-900 font-semibold flex items-center gap-2">
               {selectedService.health === 'healthy' ? (
-                <CheckCircle className="w-4 h-4 text-green-500" />
+                <CheckCircle className="w-4 h-4 text-gray-500" />
               ) : selectedService.health === 'degraded' ? (
                 <Clock className="w-4 h-4 text-amber-500" />
               ) : (
@@ -322,28 +322,28 @@ export default function ServiceGraph({ services, traces }: ServiceGraphProps) {
 
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
-              <span className="text-slate-400">Request Rate</span>
-              <span className="text-white">{selectedService.requestRate.toFixed(2)} req/s</span>
+              <span className="text-text-500">Request Rate</span>
+              <span className="text-text-900">{selectedService.requestRate.toFixed(2)} req/s</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-slate-400">Error Rate</span>
+              <span className="text-text-500">Error Rate</span>
               <span className={`${selectedService.errorRate > 5 ? 'text-red-400' : 'text-white'}`}>
                 {selectedService.errorRate.toFixed(2)}%
               </span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-slate-400">P95 Latency</span>
-              <span className="text-white">{selectedService.latencyP95}ms</span>
+              <span className="text-text-500">P95 Latency</span>
+              <span className="text-text-900">{selectedService.latencyP95}ms</span>
             </div>
           </div>
 
-          <div className="mt-4 pt-4 border-t border-slate-800">
-            <h4 className="text-sm font-medium text-slate-400 mb-2">Connected Services</h4>
+          <div className="mt-4 pt-4 border-t border-surface-300">
+            <h4 className="text-sm font-medium text-text-500 mb-2">Connected Services</h4>
             <div className="space-y-1">
               {graphData.links
                 .filter(l => l.source === selectedService.id || l.target === selectedService.id)
                 .map((link, idx) => (
-                  <div key={idx} className="text-xs text-slate-500">
+                  <div key={idx} className="text-xs text-text-500">
                     {link.source === selectedService.id ? '→' : '←'} {
                       link.source === selectedService.id ? link.target : link.source
                     } ({link.requestRate} req/s)
@@ -356,8 +356,8 @@ export default function ServiceGraph({ services, traces }: ServiceGraphProps) {
 
       {/* Trace Animation Overlay */}
       <div className="absolute bottom-4 left-4 flex items-center gap-2">
-        <Activity className="w-4 h-4 text-green-500 animate-pulse" />
-        <span className="text-xs text-slate-400">Live Trace Visualization</span>
+        <Activity className="w-4 h-4 text-text-700 animate-pulse" />
+        <span className="text-xs text-text-500">Live Trace Visualization</span>
       </div>
     </div>
   );

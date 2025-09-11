@@ -1,4 +1,4 @@
-# Urpo 🎭
+# Urpo
 
 A high-performance OpenTelemetry trace explorer with terminal and GUI interfaces.
 
@@ -8,26 +8,26 @@ A high-performance OpenTelemetry trace explorer with terminal and GUI interfaces
 
 ## Features
 
-### 🚀 Blazing Fast Performance
+### Blazing Fast Performance
 - **<200ms startup time** - Ready before you finish typing
 - **60fps UI** - Smooth, responsive interface
 - **Handles 100K+ spans** without breaking a sweat
 - **10μs per span processing** - Real-time ingestion at scale
 
-### 🔍 Powerful Trace Exploration
+### Powerful Trace Exploration
 - **Natural language search** - Find traces using intuitive queries
 - **Live service map** - Visualize your system with breathing, pulsing nodes
 - **Service dependency graphs** - Auto-discovered from trace data
 - **Instant filtering** - Roaring bitmap indexes for sub-millisecond queries
 
-### 💾 Flexible Storage
+### Flexible Storage
 - **In-memory mode** - Perfect for development and debugging
 - **Persistent storage** - Production-ready with tiered architecture:
   - Hot tier: Lock-free ring buffer for recent traces
   - Warm tier: Memory-mapped files for medium-term storage
   - Cold tier: LZ4 compressed archives for long-term retention
 
-### 🎨 Rich Visualizations
+### Rich Visualizations
 - **Command palette** (Cmd+K) - Quick access to any action
 - **Minimap navigation** - See your entire trace timeline at a glance
 - **Span details view** - Deep dive into individual spans
@@ -148,11 +148,11 @@ Fast, keyboard-driven interface for terminal enthusiasts:
 ┌─ Urpo: Service Health ────────────────────────────────────────────────────┐
 │ Services (5)          RPS    Error%   P50    P95    P99    Status         │
 ├───────────────────────────────────────────────────────────────────────────┤
-│ → user-service       45.2     0.1%    12ms   45ms   120ms  ●  Healthy     │
-│   auth-service       12.8     0.0%     8ms   18ms    25ms  ●  Healthy     │
-│   payment-service     3.4     2.1%    95ms  340ms   890ms  ⚠  Degraded    │
-│   inventory-service  28.1     0.3%    15ms   32ms    78ms  ●  Healthy     │
-│   notification-svc    8.9     0.0%     5ms    9ms    15ms  ●  Healthy     │
+│ > user-service       45.2     0.1%    12ms   45ms   120ms  [OK]  Healthy  │
+│   auth-service       12.8     0.0%     8ms   18ms    25ms  [OK]  Healthy  │
+│   payment-service     3.4     2.1%    95ms  340ms   890ms  [!!]  Degraded │
+│   inventory-service  28.1     0.3%    15ms   32ms    78ms  [OK]  Healthy  │
+│   notification-svc    8.9     0.0%     5ms    9ms    15ms  [OK]  Healthy  │
 ├───────────────────────────────────────────────────────────────────────────┤
 │ [ENTER] Drill down  [j/k] Navigate  [r] Refresh  [q] Quit                │
 └───────────────────────────────────────────────────────────────────────────┘
@@ -164,14 +164,15 @@ Urpo is built with performance as the primary goal:
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   OTEL Clients  │───▶│   Receivers     │───▶│   Storage       │
+│   OTEL Clients  │--->│   Receivers     │--->│   Storage       │
 │                 │    │  GRPC + HTTP    │    │   Tiered        │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
-                                                       │
-┌─────────────────┐    ┌─────────────────┐           │
-│  Tauri GUI or   │◀───│   Aggregation   │◀──────────┘
-│  Terminal UI     │    │   Engine        │
-└─────────────────┘    └─────────────────┘
+                                                       |
+                                                       v
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│  Tauri GUI or   │<---│   Aggregation   │<---│   Query Engine  │
+│  Terminal UI     │    │   Engine        │    │                 │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
 
 **Key Components**:

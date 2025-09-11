@@ -6,7 +6,7 @@
 use crate::core::{Result, UrpoError};
 use crate::export::{ExportFormat, ExportOptions, TraceExporter};
 use crate::service_map::ServiceMapBuilder;
-use crate::storage::StorageBackend;
+use crate::storage::{StorageBackend, UnifiedStorage};
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
@@ -93,6 +93,14 @@ struct SearchQuery {
     attribute_key: Option<String>,
     /// Maximum results
     limit: Option<usize>,
+}
+
+/// Start the API server with UnifiedStorage (recommended).
+pub async fn start_server_with_storage(
+    storage: &UnifiedStorage,
+    config: ApiConfig,
+) -> Result<()> {
+    start_server(storage.as_backend(), config).await
 }
 
 /// Start the API server.
@@ -269,7 +277,7 @@ async fn get_trace_handler(
     };
 
     // Get trace spans
-    let spans = match state.storage.read().await.get_trace_spans(trace_id.clone()).await {
+    let spans = match state.storage.read().await.get_trace_spans(&trace_id).await {
         Ok(s) => s,
         Err(e) => {
             if e.to_string().contains("not found") {
@@ -333,7 +341,7 @@ async fn get_service_map_handler(
     State(state): State<ApiState>,
 ) -> impl IntoResponse {
     let storage_guard = state.storage.read().await;
-    let mut builder = ServiceMapBuilder::new(&**storage_guard);
+    let mut builder = ServiceMapBuilder::new(&*storage_guard);
     
     match builder.build_from_recent_traces(1000, 3600).await {
         Ok(map) => Json(map).into_response(),

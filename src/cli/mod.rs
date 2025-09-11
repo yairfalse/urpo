@@ -338,7 +338,10 @@ async fn execute_export(
         
         let now = SystemTime::now();
         let start = now - duration;
-        (Some(start.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos() as u64), None)
+        let start_nanos = start.duration_since(SystemTime::UNIX_EPOCH)
+            .map_err(|e| UrpoError::config(format!("Invalid system time: {}", e)))?
+            .as_nanos() as u64;
+        (Some(start_nanos), None)
     } else {
         // Parse explicit start/end times
         let start_time = start.as_ref().map(|s| parse_timestamp(s))
@@ -354,7 +357,7 @@ async fn execute_export(
     
     // Create exporter
     let storage_guard = storage_trait.read().await;
-    let exporter = TraceExporter::new(&**storage_guard);
+    let exporter = TraceExporter::new(&*storage_guard);
     
     if let Some(trace_id_str) = trace_id {
         // Export specific trace
@@ -592,7 +595,7 @@ async fn start_headless(config: Config, cli: &Cli) -> Result<()> {
     let receiver = Arc::new(OtelReceiver::new(
         config.server.grpc_port,
         config.server.http_port,
-        storage_trait,
+        storage_trait.clone(),
         health_monitor,
     ));
     

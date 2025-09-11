@@ -32,75 +32,90 @@ const SystemMetrics = memo(({ metrics }: Props) => {
   };
 
   return (
-    <div className="mt-6 clean-card p-4">
-      <h3 className="text-sm font-medium text-text-900 mb-3">
+    <div className="clean-card p-6">
+      <h3 className="text-lg font-display font-bold text-text-900 mb-4">
         System Performance
       </h3>
       
-      <div className="grid grid-cols-5 gap-4">
-        <div>
-          <p className="text-xs text-text-500">Memory Usage</p>
-          <p className={`text-lg font-mono ${getMemoryColor(metrics.memory_usage_mb)}`}>
+      <div className="grid grid-cols-5 gap-6">
+        <div className="text-center space-y-2">
+          <div className="flex items-center justify-center gap-1">
+            <div className={`status-indicator ${metrics.memory_usage_mb < 50 ? 'healthy' : metrics.memory_usage_mb < 100 ? 'warning' : 'critical'}`}></div>
+            <span className="text-xs text-text-500 font-mono uppercase tracking-wide">Memory</span>
+          </div>
+          <div className={`text-2xl font-mono font-bold ${getMemoryColor(metrics.memory_usage_mb)}`}>
             {metrics.memory_usage_mb.toFixed(1)}MB
-          </p>
-          <p className="text-xs text-text-300 mt-1">
-            Target: {'<'}100MB
-          </p>
+          </div>
+          <div className="text-xs text-text-300">
+            Target: Less than 100MB
+          </div>
         </div>
         
-        <div>
-          <p className="text-xs text-text-500">CPU Usage</p>
-          <p className={`text-lg font-mono ${getCpuColor(metrics.cpu_usage_percent)}`}>
+        <div className="text-center space-y-2">
+          <div className="flex items-center justify-center gap-1">
+            <div className={`status-indicator ${metrics.cpu_usage_percent < 20 ? 'healthy' : metrics.cpu_usage_percent < 50 ? 'warning' : 'critical'}`}></div>
+            <span className="text-xs text-text-500 font-mono uppercase tracking-wide">CPU</span>
+          </div>
+          <div className={`text-2xl font-mono font-bold ${getCpuColor(metrics.cpu_usage_percent)}`}>
             {metrics.cpu_usage_percent.toFixed(1)}%
-          </p>
-          <p className="text-xs text-text-300 mt-1">
-            Efficient usage
-          </p>
+          </div>
+          <div className="text-xs text-text-300">
+            Optimized Usage
+          </div>
         </div>
         
-        <div>
-          <p className="text-xs text-text-500">Throughput</p>
-          <p className="text-lg font-mono text-status-healthy">
+        <div className="text-center space-y-2">
+          <div className="flex items-center justify-center gap-1">
+            <div className="status-indicator healthy"></div>
+            <span className="text-xs text-text-500 font-mono uppercase tracking-wide">Throughput</span>
+          </div>
+          <div className="text-2xl font-mono font-bold text-status-healthy">
             {metrics.spans_per_second.toFixed(0)}/s
-          </p>
-          <p className="text-xs text-text-300 mt-1">
-            High performance
-          </p>
+          </div>
+          <div className="text-xs text-text-300">
+            High Performance
+          </div>
         </div>
         
-        <div>
-          <p className="text-xs text-text-500">Total Spans</p>
-          <p className="text-lg font-mono text-text-700">
+        <div className="text-center space-y-2">
+          <div className="flex items-center justify-center gap-1">
+            <div className="status-indicator info"></div>
+            <span className="text-xs text-text-500 font-mono uppercase tracking-wide">Total Spans</span>
+          </div>
+          <div className="text-2xl font-mono font-bold text-text-700">
             {metrics.total_spans.toLocaleString()}
-          </p>
-          <p className="text-xs text-text-300 mt-1">
-            No limits! 💪
-          </p>
+          </div>
+          <div className="text-xs text-text-300">
+            No Limits
+          </div>
         </div>
         
-        <div>
-          <p className="text-xs text-text-500">Uptime</p>
-          <p className="text-lg font-mono text-text-700">
+        <div className="text-center space-y-2">
+          <div className="flex items-center justify-center gap-1">
+            <div className="status-indicator healthy"></div>
+            <span className="text-xs text-text-500 font-mono uppercase tracking-wide">Uptime</span>
+          </div>
+          <div className="text-2xl font-mono font-bold text-text-700">
             {formatUptime(metrics.uptime_seconds)}
-          </p>
-          <p className="text-xs text-status-healthy mt-1">
-            Started in {'<'}200ms ⚡
-          </p>
+          </div>
+          <div className="text-xs text-status-healthy">
+            Fast startup under 200ms
+          </div>
         </div>
       </div>
       
-      {/* Performance bars */}
-      <div className="mt-4 space-y-2">
+      {/* Professional Performance Bars */}
+      <div className="mt-6 pt-4 border-t border-surface-300 space-y-3">
         <div>
-          <div className="flex items-center justify-between text-xs mb-1">
-            <span className="text-text-500">Memory Efficiency</span>
-            <span className="text-text-300">
+          <div className="flex items-center justify-between text-xs mb-2">
+            <span className="text-text-500 font-mono uppercase tracking-wide">Memory Efficiency</span>
+            <span className="text-text-700 font-mono">
               {((100 - (metrics.memory_usage_mb / 100) * 100)).toFixed(0)}%
             </span>
           </div>
           <div className="h-2 bg-surface-200 rounded-full overflow-hidden">
             <div
-              className="h-full bg-gradient-to-r from-status-healthy to-accent-green transition-all duration-300"
+              className="h-full bg-status-healthy transition-all duration-300"
               style={{
                 width: `${Math.max(100 - (metrics.memory_usage_mb / 100) * 100, 0)}%`
               }}
@@ -109,15 +124,15 @@ const SystemMetrics = memo(({ metrics }: Props) => {
         </div>
         
         <div>
-          <div className="flex items-center justify-between text-xs mb-1">
-            <span className="text-text-500">Processing Power</span>
-            <span className="text-text-300">
-              {metrics.spans_per_second > 1000 ? '🔥 BLAZING' : `${metrics.spans_per_second.toFixed(0)} spans/s`}
+          <div className="flex items-center justify-between text-xs mb-2">
+            <span className="text-text-500 font-mono uppercase tracking-wide">Processing Power</span>
+            <span className="text-text-700 font-mono">
+              {metrics.spans_per_second > 1000 ? 'EXCELLENT' : `${metrics.spans_per_second.toFixed(0)} spans/s`}
             </span>
           </div>
           <div className="h-2 bg-surface-200 rounded-full overflow-hidden">
             <div
-              className="h-full bg-gradient-to-r from-accent-blue to-accent-purple transition-all duration-300"
+              className="h-full bg-text-700 transition-all duration-300"
               style={{
                 width: `${Math.min((metrics.spans_per_second / 10000) * 100, 100)}%`
               }}

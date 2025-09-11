@@ -119,7 +119,7 @@ const LiveServiceMap = () => {
       const particleX = from.x + (to.x - from.x) * flow.offset;
       const particleY = from.y + (to.y - from.y) * flow.offset;
       
-      ctx.fillStyle = from.healthy ? '#00ffaa' : '#ff3366';
+      ctx.fillStyle = from.healthy ? '#6B7280' : '#ff3366';
       ctx.globalAlpha = 0.8;
       ctx.beginPath();
       ctx.arc(particleX, particleY, 3, 0, Math.PI * 2);
@@ -137,7 +137,7 @@ const LiveServiceMap = () => {
       // Shadow effect for active services
       if (service.rps > 0) {
         ctx.shadowBlur = 10 + pulse;
-        ctx.shadowColor = service.healthy ? '#00ffaa' : '#ff3366';
+        ctx.shadowColor = service.healthy ? '#6B7280' : '#ff3366';
       }
       
       // Node background
@@ -145,7 +145,7 @@ const LiveServiceMap = () => {
       ctx.fillRect(service.x - size, service.y - size/2, size * 2, size);
       
       // Node border
-      ctx.strokeStyle = service.healthy ? '#00ffaa' : '#ff3366';
+      ctx.strokeStyle = service.healthy ? '#6B7280' : '#ff3366';
       ctx.lineWidth = service === hoveredService ? 3 : 1;
       ctx.strokeRect(service.x - size, service.y - size/2, size * 2, size);
       
@@ -172,7 +172,7 @@ const LiveServiceMap = () => {
       // Active traces indicator (breathing dots)
       const dotRadius = 2 + Math.sin(time * 3 + service.id.length) * 1;
       for (let i = 0; i < Math.min(service.activeTraces, 5); i++) {
-        ctx.fillStyle = '#00ffaa';
+        ctx.fillStyle = '#6B7280';
         ctx.globalAlpha = 0.6;
         ctx.beginPath();
         ctx.arc(
@@ -188,7 +188,7 @@ const LiveServiceMap = () => {
     });
     
     // Stats overlay
-    ctx.fillStyle = '#00ffaa';
+    ctx.fillStyle = '#6B7280';
     ctx.font = 'bold 12px JetBrains Mono';
     ctx.textAlign = 'left';
     ctx.fillText('LIVE', 20, 30);
@@ -240,14 +240,14 @@ const LiveServiceMap = () => {
           ref={canvasRef}
           width={1600}
           height={800}
-          className="w-full h-full bg-black border border-gray-900"
+          className="w-full h-full bg-surface-50 border border-gray-900"
           onMouseMove={handleMouseMove}
           style={{ imageRendering: 'crisp-edges' }}
         />
         
         {/* Overlay stats */}
-        <div className="absolute top-4 right-4 bg-black/80 p-3 border border-gray-800 text-xs font-mono">
-          <div className="text-green-500 mb-2">SERVICE HEALTH</div>
+        <div className="absolute top-4 right-4 bg-surface-50/80 p-3 border border-gray-800 text-xs font-mono">
+          <div className="text-text-700 mb-2">SERVICE HEALTH</div>
           <div className="space-y-1 text-gray-400">
             <div>Services: {services.size}</div>
             <div>Total RPS: {Array.from(services.values()).reduce((sum, s) => sum + s.rps, 0).toFixed(1)}</div>
@@ -257,12 +257,12 @@ const LiveServiceMap = () => {
         
         {/* Hover tooltip */}
         {hoveredService && services.get(hoveredService) && (
-          <div className="absolute bg-black/95 border border-green-500 p-2 text-xs font-mono"
+          <div className="absolute bg-surface-50/95 border border-text-700 p-2 text-xs font-mono"
                style={{
                  left: services.get(hoveredService)!.x + 50,
                  top: services.get(hoveredService)!.y - 30,
                }}>
-            <div className="text-green-500 font-bold mb-1">{hoveredService}</div>
+            <div className="text-text-700 font-bold mb-1">{hoveredService}</div>
             <div className="text-gray-300 space-y-0.5">
               <div>RPS: {services.get(hoveredService)!.rps.toFixed(2)}</div>
               <div>P95: {services.get(hoveredService)!.p95Latency}ms</div>

@@ -124,7 +124,7 @@ impl<'a> ServiceMapBuilder<'a> {
     
     /// Analyze a single trace to extract dependencies.
     async fn analyze_trace(&mut self, trace_id: &TraceId) -> Result<()> {
-        let spans = self.storage.get_trace_spans(trace_id.clone()).await?;
+        let spans = self.storage.get_trace_spans(trace_id).await?;
         
         if spans.is_empty() {
             return Ok(());
@@ -333,7 +333,7 @@ pub mod api {
         State(storage): State<Arc<RwLock<dyn StorageBackend>>>,
     ) -> impl IntoResponse {
         let storage_guard = storage.read().await;
-        let mut builder = ServiceMapBuilder::new(&**storage_guard);
+        let mut builder = ServiceMapBuilder::new(&*storage_guard);
         
         match builder.build_from_recent_traces(1000, 3600).await {
             Ok(map) => Json(map).into_response(),
@@ -363,7 +363,7 @@ mod tests {
         // frontend -> backend -> database
         let trace_id = TraceId::new("test-trace-123".to_string()).unwrap();
         
-        let frontend_span = SpanBuilder::new()
+        let frontend_span = SpanBuilder::default()
             .trace_id(trace_id.clone())
             .span_id("span-1".into())
             .service_name("frontend".into())
@@ -371,7 +371,7 @@ mod tests {
             .build()
             .unwrap();
         
-        let backend_span = SpanBuilder::new()
+        let backend_span = SpanBuilder::default()
             .trace_id(trace_id.clone())
             .span_id("span-2".into())
             .parent_span_id(Some("span-1".into()))
@@ -380,7 +380,7 @@ mod tests {
             .build()
             .unwrap();
         
-        let db_span = SpanBuilder::new()
+        let db_span = SpanBuilder::default()
             .trace_id(trace_id.clone())
             .span_id("span-3".into())
             .parent_span_id(Some("span-2".into()))

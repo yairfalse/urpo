@@ -23,14 +23,12 @@ export default {
           300: '#9CA3AF',    // Placeholder text
           100: '#F3F4F6',    // Light text (on dark backgrounds)
         },
-        // Professional accent colors
+        // Professional accent colors - NEUTRAL ONLY
         'accent': {
-          blue: '#3B82F6',    // Primary blue (links, actions)
-          cyan: '#06B6D4',    // Info/secondary
-          green: '#10B981',   // Success states
-          amber: '#F59E0B',   // Warning states
-          red: '#EF4444',     // Error states
-          purple: '#8B5CF6',  // Special elements
+          primary: '#111827',   // Dark gray for primary actions
+          secondary: '#6B7280', // Medium gray for secondary
+          warning: '#F59E0B',   // Amber for warnings only
+          error: '#EF4444',     // Red for errors only
         },
         // Surface colors
         'surface': {
@@ -40,13 +38,13 @@ export default {
           300: '#E5E7EB',     // Borders
           400: '#D1D5DB',     // Dividers
         },
-        // Status indicators - clean, no glow
+        // Status indicators - professional neutral
         'status': {
-          healthy: '#10B981',   // Green
-          warning: '#F59E0B',   // Amber
+          healthy: '#6B7280',   // Gray (not green)
+          warning: '#F59E0B',   // Amber  
           error: '#EF4444',     // Red
-          info: '#3B82F6',      // Blue
-          unknown: '#6B7280',   // Gray
+          info: '#6B7280',      // Gray (not blue)
+          unknown: '#9CA3AF',   // Light gray
         }
       },
       // Sharp typography system
@@ -88,6 +86,7 @@ export default {
         'slide-down': 'slide-down 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
         'scale-in': 'scale-in 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
         'shine-subtle': 'shine-subtle 3s ease-in-out infinite',
+        'clean-shine': 'clean-shine 1.5s ease-in-out infinite',
       },
       // Subtle professional keyframes
       keyframes: {
@@ -145,6 +144,14 @@ export default {
             backgroundPosition: '200% 0' 
           },
         },
+        'clean-shine': {
+          '0%': { 
+            backgroundPosition: '-200% 0' 
+          },
+          '100%': { 
+            backgroundPosition: '200% 0' 
+          },
+        },
       },
       // Clean professional shadows
       boxShadow: {
@@ -155,9 +162,9 @@ export default {
         'card-hover': '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
         'inset-clean': 'inset 0 2px 4px 0 rgba(0, 0, 0, 0.06)',
       },
-      // Clean gradients
+      // Clean gradients - neutral only
       backgroundImage: {
-        'gradient-subtle': 'linear-gradient(135deg, rgba(59, 130, 246, 0.05) 0%, rgba(16, 185, 129, 0.05) 100%)',
+        'gradient-subtle': 'linear-gradient(135deg, rgba(107, 114, 128, 0.05) 0%, rgba(156, 163, 175, 0.05) 100%)',
         'shine-subtle': 'linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.4) 50%, transparent 100%)',
       },
     },

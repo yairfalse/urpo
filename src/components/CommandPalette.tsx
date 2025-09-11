@@ -86,7 +86,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, onComm
         return {
           id: 'compare',
           label: `Compare traces ${traceIds[0].substring(0, 8)}... with ${traceIds[1].substring(0, 8)}...`,
-          icon: '⚖️',
+          icon: 'CMP',
           category: 'compare',
           action: async () => {
             await invoke('compare_traces', { 
@@ -107,7 +107,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, onComm
       id: 'show-live-map',
       label: 'Show Live Service Map',
       shortcut: '⌘L',
-      icon: '🗺️',
+      icon: 'MAP',
       category: 'view',
       action: () => {
         window.dispatchEvent(new CustomEvent('show-view', { detail: 'map' }));
@@ -117,7 +117,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, onComm
       id: 'show-heatmap',
       label: 'Show Latency Heatmap',
       shortcut: '⌘H',
-      icon: '🔥',
+      icon: 'HOT',
       category: 'view',
       action: () => {
         window.dispatchEvent(new CustomEvent('show-view', { detail: 'heatmap' }));
@@ -127,7 +127,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, onComm
       id: 'split-view',
       label: 'Split View Mode',
       shortcut: '⌘\\',
-      icon: '⚡',
+      icon: 'FAST',
       category: 'view',
       action: () => {
         window.dispatchEvent(new CustomEvent('toggle-split-view'));
@@ -156,7 +156,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, onComm
       id: 'clear-all',
       label: 'Clear All Traces',
       shortcut: '⌘⇧K',
-      icon: '🗑️',
+      icon: 'DEL',
       category: 'filter',
       action: async () => {
         await invoke('clear_traces');
@@ -238,13 +238,13 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, onComm
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-32">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/80" onClick={onClose} />
+      <div className="absolute inset-0 bg-surface-50/80" onClick={onClose} />
       
       {/* Command Palette */}
-      <div className="relative w-full max-w-2xl bg-gray-950 border border-green-500/50 shadow-2xl">
+      <div className="relative w-full max-w-2xl bg-gray-950 border border-gray-500/50 shadow-2xl">
         {/* Input */}
         <div className="flex items-center border-b border-gray-800">
-          <span className="pl-4 text-green-500">&gt;</span>
+          <span className="pl-4 text-gray-500">&gt;</span>
           <input
             ref={inputRef}
             type="text"
@@ -268,7 +268,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, onComm
                 key={cmd.id}
                 className={`flex items-center justify-between px-4 py-2 cursor-pointer transition-colors ${
                   index === selectedIndex
-                    ? 'bg-green-500/10 text-white border-l-2 border-green-500'
+                    ? 'bg-gray-500/10 text-white border-l-2 border-gray-500'
                     : 'text-gray-400 hover:bg-gray-900 hover:text-white'
                 }`}
                 onClick={() => {

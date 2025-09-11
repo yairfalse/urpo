@@ -398,6 +398,7 @@ impl Monitor {
                 cleanup_count: 0,
                 last_cleanup: None,
                 health_status: StorageHealth::Healthy,
+                uptime_seconds: 0,
             },
             performance: PerformanceStats::default(),
             receiver: ReceiverMetrics::default(),

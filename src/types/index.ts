@@ -71,3 +71,35 @@ export interface ServiceMap {
   trace_count: number;
   time_window_seconds: number;
 }
+
+// UI View Types
+export type ViewMode = 'graph' | 'flows' | 'health' | 'traces' | 'servicemap';
+
+export interface NavigationItem {
+  key: ViewMode;
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  shortcut: string;
+}
+
+// Service Map View Types
+export type ServiceMapViewMode = 'topology' | 'focus' | 'hotpaths' | 'errors';
+
+// Component Props Types
+export interface ServiceMapProps {
+  className?: string;
+}
+
+export interface TraceExplorerProps {
+  traces: TraceInfo[];
+  onRefresh: () => void;
+}
+
+export interface ServiceHealthDashboardProps {
+  services: ServiceMetrics[];
+}
+
+export interface FlowTableProps {
+  traces: TraceInfo[];
+  onRefresh: () => void;
+}
