@@ -88,10 +88,10 @@ impl<'a> TraceExporter<'a> {
         format: ExportFormat,
     ) -> Result<String> {
         // Get spans for the trace
-        let spans = self.storage.get_trace_spans(trace_id.clone()).await?;
+        let spans = self.storage.get_trace_spans(trace_id).await?;
         
         if spans.is_empty() {
-            return Err(UrpoError::NotFound(format!("Trace {} not found", trace_id.as_str())));
+            return Err(UrpoError::TraceNotFound(format!("Trace {}", trace_id.as_str())));
         }
         
         match format {
@@ -110,7 +110,7 @@ impl<'a> TraceExporter<'a> {
         options: &ExportOptions,
     ) -> Result<String> {
         if spans.is_empty() {
-            return Err(UrpoError::NotFound(format!("Trace {} not found", trace_id.as_str())));
+            return Err(UrpoError::TraceNotFound(format!("Trace {}", trace_id.as_str())));
         }
         
         match options.format {
@@ -202,7 +202,7 @@ impl<'a> TraceExporter<'a> {
         let mut all_traces = Vec::new();
         
         for trace_info in traces {
-            let spans = self.storage.get_trace_spans(trace_info.trace_id.clone()).await?;
+            let spans = self.storage.get_trace_spans(&trace_info.trace_id).await?;
             all_traces.push(serde_json::json!({
                 "trace_id": trace_info.trace_id.as_str(),
                 "root_service": trace_info.root_service,
@@ -224,7 +224,7 @@ impl<'a> TraceExporter<'a> {
         let mut jaeger_traces = Vec::new();
         
         for trace_info in traces {
-            let spans = self.storage.get_trace_spans(trace_info.trace_id.clone()).await?;
+            let spans = self.storage.get_trace_spans(&trace_info.trace_id).await?;
             jaeger_traces.push(convert_to_jaeger_format(&spans));
         }
         
@@ -237,7 +237,7 @@ impl<'a> TraceExporter<'a> {
         let mut otel_traces = Vec::new();
         
         for trace_info in traces {
-            let spans = self.storage.get_trace_spans(trace_info.trace_id.clone()).await?;
+            let spans = self.storage.get_trace_spans(&trace_info.trace_id).await?;
             otel_traces.push(convert_to_otel_format(&spans));
         }
         
@@ -253,7 +253,7 @@ impl<'a> TraceExporter<'a> {
         csv_output.push_str("trace_id,span_id,parent_span_id,service,operation,start_time,duration_us,status,attributes\n");
         
         for trace_info in traces {
-            let spans = self.storage.get_trace_spans(trace_info.trace_id.clone()).await?;
+            let spans = self.storage.get_trace_spans(&trace_info.trace_id).await?;
             for span in spans {
                 csv_output.push_str(&format!(
                     "{},{},{},{},{},{},{},{},\"{}\"\n",
@@ -405,8 +405,8 @@ fn convert_to_jaeger_format(spans: &[Span]) -> JaegerTrace {
             parent_span_id: span.parent_span_id.as_ref().map(|p| p.as_str().to_string()),
             operation_name: span.operation_name.clone(),
             references,
-            start_time: span.start_time / 1000, // Convert to microseconds
-            duration: span.duration,
+            start_time: span.start_time.duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_micros() as u64,
+            duration: span.duration.as_micros() as u64,
             tags,
             logs: vec![],
             process_id: process_id.to_string(),
@@ -452,8 +452,8 @@ fn convert_to_otel_format(spans: &[Span]) -> serde_json::Value {
                 "parentSpanId": span.parent_span_id.as_ref().map(|p| p.as_str()),
                 "name": span.operation_name,
                 "kind": 1, // SPAN_KIND_SERVER
-                "startTimeUnixNano": span.start_time.to_string(),
-                "endTimeUnixNano": (span.start_time + span.duration * 1000).to_string(),
+                "startTimeUnixNano": span.start_time.duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos().to_string(),
+                "endTimeUnixNano": (span.start_time + span.duration).duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos().to_string(),
                 "attributes": attributes,
                 "status": {
                     "code": if span.status.is_error() { 2 } else { 1 }

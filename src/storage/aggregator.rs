@@ -140,9 +140,10 @@ fn calculate_percentiles_histogram(latencies: &[u64]) -> (u64, u64, u64) {
         return (0, 0, 0);
     }
     
-    // Find min and max for bucket calculation
-    let min_latency = *latencies.iter().min().unwrap();
-    let max_latency = *latencies.iter().max().unwrap();
+    // Find min and max for bucket calculation  
+    // SAFE: Already checked latencies.is_empty() above
+    let min_latency = *latencies.iter().min().expect("latencies not empty");
+    let max_latency = *latencies.iter().max().expect("latencies not empty");
     
     if min_latency == max_latency {
         return (min_latency, min_latency, min_latency);

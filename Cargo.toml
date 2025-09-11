@@ -72,8 +72,16 @@ rkyv = { version = "0.7", features = ["validation", "archive_le"] }  # Zero-copy
 lz4 = "1.28"  # Fast compression for cold storage
 rocksdb = { version = "0.22", optional = true }  # Optional persistent storage
 crossbeam-channel = "0.5"  # Lock-free channels for trace ingestion
+crossbeam = "0.8"  # Full crossbeam suite including ArrayQueue
 speedy = "0.8"  # Even faster serialization than bincode
 object-pool = "0.4"  # Object pooling for performance
+once_cell = "1.19"  # Lazy static replacement
+
+# Additional performance dependencies from CLAUDE.md
+mimalloc = { version = "0.1", default-features = false }  # Ultra-fast allocator
+rustc-hash = "2.0"  # Fast hashing
+fastrand = "2.0"  # Fast random numbers
+bumpalo = "3.0"  # Arena allocation
 
 
 [dev-dependencies]
@@ -101,6 +109,23 @@ crate-type = ["lib", "cdylib"]
 name = "urpo"
 path = "src/main.rs"
 
+[[bench]]
+name = "span_processing"
+harness = false
+
+[[bench]]
+name = "hot_path"
+harness = false
+
 [profile.release]
-lto = true
-codegen-units = 1
+lto = "fat"              # Full link-time optimization
+codegen-units = 1        # Better optimization
+panic = "abort"          # Smaller binary, faster panic
+opt-level = 3            # Maximum optimization
+debug = false            # No debug info in release
+strip = true             # Strip symbols for smaller binary
+overflow-checks = false  # Disable overflow checks for maximum speed
+
+[profile.bench]
+inherits = "release"
+debug = true             # Keep debug info for profiling

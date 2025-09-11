@@ -339,8 +339,10 @@ impl Dashboard {
         self.services.sort_by(|a, b| {
             let ordering = match self.sort_by {
                 SortBy::Name => a.name.as_str().cmp(b.name.as_str()),
-                SortBy::Rps => a.request_rate.partial_cmp(&b.request_rate).unwrap(),
-                SortBy::ErrorRate => a.error_rate.partial_cmp(&b.error_rate).unwrap(),
+                SortBy::Rps => a.request_rate.partial_cmp(&b.request_rate)
+                    .unwrap_or(std::cmp::Ordering::Equal),
+                SortBy::ErrorRate => a.error_rate.partial_cmp(&b.error_rate)
+                    .unwrap_or(std::cmp::Ordering::Equal),
                 SortBy::P50 => a.latency_p50.cmp(&b.latency_p50),
                 SortBy::P95 => a.latency_p95.cmp(&b.latency_p95),
                 SortBy::P99 => a.latency_p99.cmp(&b.latency_p99),
@@ -392,8 +394,10 @@ impl Dashboard {
         filtered.sort_by(|a, b| {
             let ordering = match self.sort_by {
                 SortBy::Name => a.name.as_str().cmp(b.name.as_str()),
-                SortBy::Rps => a.request_rate.partial_cmp(&b.request_rate).unwrap(),
-                SortBy::ErrorRate => a.error_rate.partial_cmp(&b.error_rate).unwrap(),
+                SortBy::Rps => a.request_rate.partial_cmp(&b.request_rate)
+                    .unwrap_or(std::cmp::Ordering::Equal),
+                SortBy::ErrorRate => a.error_rate.partial_cmp(&b.error_rate)
+                    .unwrap_or(std::cmp::Ordering::Equal),
                 SortBy::P50 => a.latency_p50.cmp(&b.latency_p50),
                 SortBy::P95 => a.latency_p95.cmp(&b.latency_p95),
                 SortBy::P99 => a.latency_p99.cmp(&b.latency_p99),
@@ -578,14 +582,16 @@ impl Dashboard {
                     if self.selected_span_index.is_none() {
                         self.selected_span_index = Some(0);
                         self.span_state.select(Some(0));
-                    } else {
-                        let selected = self.selected_span_index.unwrap();
+                    } else if let Some(selected) = self.selected_span_index {
                         if selected > 0 {
                             self.selected_span_index = Some(selected - 1);
                             self.span_state.select(Some(selected - 1));
                         }
                     }
                 }
+            }
+            Tab::Map => {
+                // Map view navigation - no selection movement needed
             }
         }
     }
@@ -620,6 +626,9 @@ impl Dashboard {
                     }
                 }
             }
+            Tab::Map => {
+                // Map view navigation - no selection movement needed
+            }
         }
     }
 
@@ -629,6 +638,7 @@ impl Dashboard {
             Tab::Services => &mut self.service_state,
             Tab::Traces => &mut self.trace_state,
             Tab::Spans => return,
+            Tab::Map => return,
         };
 
         let selected = state.selected().unwrap_or(0);
@@ -659,6 +669,9 @@ impl Dashboard {
                     }
                 }
             }
+            Tab::Map => {
+                // Map view navigation - no selection movement needed
+            }
         }
     }
 
@@ -674,6 +687,9 @@ impl Dashboard {
                         self.selected_span_index = Some(selected - 1);
                     }
                 }
+            }
+            Tab::Map => {
+                // Map view navigation - no selection movement needed
             }
         }
     }
@@ -699,6 +715,9 @@ impl Dashboard {
                         self.selected_span_index = Some(selected - 1);
                     }
                 }
+            }
+            Tab::Map => {
+                // Map view navigation - no selection movement needed
             }
         }
     }
@@ -735,6 +754,9 @@ impl Dashboard {
             }
             Tab::Spans => {
                 // Already in detail view - could expand/collapse span details
+            }
+            Tab::Map => {
+                // Map view selection - could select services/connections
             }
         }
     }
@@ -973,6 +995,7 @@ fn draw_ui(frame: &mut Frame, app: &mut Dashboard) {
         Tab::Services => dashboard::draw_dashboard(frame, app),
         Tab::Traces => draw_traces_view(frame, app),
         Tab::Spans => draw_spans_view(frame, app),
+        Tab::Map => draw_map_view(frame, app),
     }
 
     // Draw help overlay if active
@@ -1471,6 +1494,7 @@ fn draw_footer(frame: &mut Frame, area: Rect, app: &Dashboard) {
             }
             Tab::Traces => "[q]uit [Tab]switch [↑↓]navigate [Enter]spans [/]search [f]filter".to_string(),
             Tab::Spans => "[q]uit [Tab]switch [↑↓]scroll".to_string(),
+            Tab::Map => "[q]uit [Tab]switch [↑↓]zoom [Enter]select".to_string(),
         }
     };
 
@@ -1484,6 +1508,34 @@ fn draw_footer(frame: &mut Frame, area: Rect, app: &Dashboard) {
         .style(Style::default().fg(Color::White));
 
     frame.render_widget(footer, area);
+}
+
+/// Draw the service map view.
+fn draw_map_view(frame: &mut Frame, _app: &mut Dashboard) {
+    let area = frame.area();
+    
+    // Create a simple placeholder for map view
+    let map_text = vec![
+        Line::from("📊 Service Map View"),
+        Line::from(""),
+        Line::from("This feature will show a visual map of your services"),
+        Line::from("and their connections based on trace data."),
+        Line::from(""),
+        Line::from("Coming soon..."),
+    ];
+    
+    let map_paragraph = Paragraph::new(map_text)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Service Map ")
+                .title_alignment(Alignment::Center)
+                .border_style(Style::default().fg(Color::Green)),
+        )
+        .alignment(Alignment::Center)
+        .style(Style::default().fg(Color::White));
+    
+    frame.render_widget(map_paragraph, area);
 }
 
 /// Draw help overlay.

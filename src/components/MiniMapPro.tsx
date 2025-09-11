@@ -119,7 +119,7 @@ const MiniMapPro: React.FC<MiniMapProProps> = ({
       // Color based on latency
       let latencyColor;
       if (bucket.avgLatency < 100000) { // < 100ms
-        latencyColor = '#00ff00';
+        latencyColor = '#6B7280';
       } else if (bucket.avgLatency < 500000) { // < 500ms
         latencyColor = '#ffaa00';
       } else { // > 500ms
@@ -157,7 +157,7 @@ const MiniMapPro: React.FC<MiniMapProProps> = ({
         color = '#ffaa00';
       } else if (densityIntensity > 0.8) {
         char = '▓';
-        color = '#00ffaa';
+        color = '#6B7280';
       } else if (densityIntensity > 0.4) {
         char = '▒';
         color = '#00aa88';
@@ -175,15 +175,15 @@ const MiniMapPro: React.FC<MiniMapProProps> = ({
     const viewHeight = Math.max(viewEndY - viewStartY, 3);
     
     // Viewport indicator with glow effect
-    ctx.strokeStyle = '#00ffaa';
+    ctx.strokeStyle = '#6B7280';
     ctx.lineWidth = 2;
     ctx.shadowBlur = 10;
-    ctx.shadowColor = '#00ffaa';
+    ctx.shadowColor = '#6B7280';
     ctx.strokeRect(0, viewStartY, width, viewHeight);
     ctx.shadowBlur = 0;
     
     // "YOU ARE HERE" text
-    ctx.fillStyle = '#00ffaa';
+    ctx.fillStyle = '#6B7280';
     ctx.font = 'bold 8px monospace';
     ctx.save();
     ctx.translate(width/2, viewStartY + viewHeight/2);
@@ -270,7 +270,7 @@ const MiniMapPro: React.FC<MiniMapProProps> = ({
     // Status bar at bottom
     ctx.fillStyle = '#000';
     ctx.fillRect(0, height - 15, width, 15);
-    ctx.fillStyle = errorRate > 5 ? '#ff3366' : errorRate > 1 ? '#ffaa00' : '#00ff00';
+    ctx.fillStyle = errorRate > 5 ? '#ff3366' : errorRate > 1 ? '#ffaa00' : '#6B7280';
     ctx.font = 'bold 8px monospace';
     ctx.textAlign = 'center';
     ctx.fillText(`${errorRate.toFixed(1)}% ERR`, width/2, height - 4);

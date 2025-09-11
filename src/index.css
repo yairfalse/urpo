@@ -27,33 +27,11 @@
 
 /* CLEAN PROFESSIONAL AESTHETICS */
 @layer base {
-  :root {
-    /* Clean color system variables */
-    --bg-primary: #FFFFFF;
-    --bg-secondary: #F8F9FA;
-    --bg-elevated: #F1F3F4;
-    --border-light: #E8EAED;
-    --border-medium: #E5E7EB;
-    
-    --text-primary: #1F2937;
-    --text-secondary: #374151;
-    --text-muted: #6B7280;
-    --text-placeholder: #9CA3AF;
-    
-    --accent-blue: #3B82F6;
-    --accent-green: #10B981;
-    --accent-amber: #F59E0B;
-    --accent-red: #EF4444;
-    
-    --status-healthy: #10B981;
-    --status-warning: #F59E0B;
-    --status-error: #EF4444;
-    --status-info: #3B82F6;
-  }
+  /* Using Tailwind colors as single source of truth - no CSS variables needed */
 
   /* Root element with clean white background */
   html {
-    background: var(--bg-primary);
+    background: #FFFFFF;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
     font-weight: 400;
     font-synthesis: none;
@@ -63,8 +41,8 @@
   }
 
   body {
-    background: var(--bg-primary);
-    color: var(--text-primary);
+    background: #FFFFFF;
+    color: #111827;
     font-family: 'Inter', system-ui, sans-serif;
     font-weight: 400;
     line-height: 1.5;
@@ -94,23 +72,23 @@
   }
 
   ::-webkit-scrollbar-track {
-    background: var(--bg-secondary);
+    background: #F9FAFB;
   }
 
   ::-webkit-scrollbar-thumb {
-    background: var(--border-medium);
+    background: #D1D5DB;
     border-radius: 3px;
     transition: background 0.2s ease;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: var(--text-muted);
+    background: #6B7280;
   }
 
   /* Firefox scrollbar */
   * {
     scrollbar-width: thin;
-    scrollbar-color: var(--border-medium) var(--bg-secondary);
+    scrollbar-color: #D1D5DB #F9FAFB;
   }
 }
 
@@ -143,7 +121,7 @@
     transition: all 0.15s ease;
     
     &:hover {
-      @apply bg-surface-100 border-accent-blue text-accent-blue;
+      @apply bg-surface-100 border-surface-300 text-text-700;
       transform: translateY(-1px);
       box-shadow: 
         0 4px 6px -1px rgba(0, 0, 0, 0.1),
@@ -155,7 +133,7 @@
     }
 
     &.active {
-      @apply bg-accent-blue text-white border-accent-blue;
+      @apply bg-text-900 text-white border-text-900;
     }
   }
 
@@ -174,11 +152,11 @@
     
     &:focus {
       outline: none;
-      @apply border-accent-blue ring-2 ring-accent-blue ring-opacity-20;
+      @apply border-surface-400 ring-2 ring-surface-400 ring-opacity-20;
     }
 
     &::placeholder {
-      color: var(--text-placeholder);
+      color: #9CA3AF;
       font-weight: 300;
     }
   }
@@ -209,14 +187,14 @@
       font-size: 11px;
       text-transform: uppercase;
       letter-spacing: 0.05em;
-      color: var(--steel-300);
+      color: #6B7280;
     }
 
     tbody tr {
       transition: background 0.1s ease;
       
       &:hover {
-        background: rgba(0, 212, 255, 0.05);
+        background: rgba(107, 114, 128, 0.05);
       }
     }
   }
@@ -229,19 +207,19 @@
     border-radius: 50%;
     
     &.healthy {
-      background: var(--status-healthy);
+      background: #6B7280;
     }
     
     &.warning {
-      background: var(--status-warning);
+      background: #F59E0B;
     }
     
     &.critical {
-      background: var(--status-error);
+      background: #EF4444;
     }
     
     &.info {
-      background: var(--status-info);
+      background: #6B7280;
     }
   }
 
@@ -259,13 +237,13 @@
   }
 
   /* Loading shimmer effect */
-  .knife-shimmer {
+  .clean-shimmer {
     background: linear-gradient(90deg, 
-      rgba(255, 255, 255, 0.05) 25%, 
-      rgba(255, 255, 255, 0.1) 50%, 
-      rgba(255, 255, 255, 0.05) 75%);
+      rgba(107, 114, 128, 0.05) 25%, 
+      rgba(107, 114, 128, 0.1) 50%, 
+      rgba(107, 114, 128, 0.05) 75%);
     background-size: 200% 100%;
-    animation: knife-shine 1.5s ease-in-out infinite;
+    animation: clean-shine 1.5s ease-in-out infinite;
   }
 }
 
@@ -294,12 +272,12 @@
     user-select: text;
   }
 
-  /* Precise borders */
-  .border-knife {
-    border: 0.5px solid rgba(255, 255, 255, 0.1);
+  /* Professional borders */
+  .border-subtle {
+    border: 0.5px solid #E5E7EB;
   }
 
-  .border-electric {
-    border: 0.5px solid var(--electric-blue);
+  .border-accent {
+    border: 0.5px solid #D1D5DB;
   }
 }

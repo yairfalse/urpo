@@ -218,7 +218,7 @@ impl Default for ServerConfig {
         ServerConfig {
             grpc_port: 4317,
             http_port: 4318,
-            bind_address: "0.0.0.0".parse().unwrap(),
+            bind_address: "0.0.0.0".parse().expect("Valid default IP address"),
             max_connections: 1000,
             connection_timeout: Duration::from_secs(30),
         }

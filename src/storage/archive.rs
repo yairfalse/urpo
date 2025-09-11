@@ -61,7 +61,7 @@ impl PartitionGranularity {
             Self::Weekly => {
                 // Parse format like "2024W15"
                 if let Some(captures) = regex::Regex::new(r"(\d{4})W(\d{2})")
-                    .unwrap()
+                    .expect("valid regex")
                     .captures(key) 
                 {
                     let year: i32 = captures[1].parse()
@@ -126,7 +126,9 @@ impl ArchiveIndex {
     pub fn new(partition_key: String, start_time: SystemTime) -> Self {
         Self {
             partition_key,
-            start_time: start_time.duration_since(UNIX_EPOCH).unwrap().as_secs(),
+            start_time: start_time.duration_since(UNIX_EPOCH)
+                .expect("valid start time")
+                .as_secs(),
             end_time: 0,
             trace_count: 0,
             span_count: 0,
@@ -149,11 +151,15 @@ impl ArchiveIndex {
         let trace_id_hash = self.hash_trace_id(&spans[0].trace_id);
         
         // Update time bounds
-        let trace_start = spans.iter().map(|s| s.start_time).min().unwrap();
-        let trace_end = spans.iter().map(|s| s.start_time + s.duration).max().unwrap();
+        let trace_start = spans.iter().map(|s| s.start_time).min().expect("spans not empty");
+        let trace_end = spans.iter().map(|s| s.start_time + s.duration).max().expect("spans not empty");
         
-        let start_secs = trace_start.duration_since(UNIX_EPOCH).unwrap().as_secs();
-        let end_secs = trace_end.duration_since(UNIX_EPOCH).unwrap().as_secs();
+        let start_secs = trace_start.duration_since(UNIX_EPOCH)
+            .map_err(|e| UrpoError::parse(format!("Invalid start time: {}", e)))?
+            .as_secs();
+        let end_secs = trace_end.duration_since(UNIX_EPOCH)
+            .map_err(|e| UrpoError::parse(format!("Invalid end time: {}", e)))?
+            .as_secs();
         
         if self.end_time == 0 {
             self.start_time = start_secs.min(self.start_time);
@@ -644,6 +650,7 @@ mod tests {
             status: SpanStatus::Ok,
             attributes: Default::default(),
             tags: Default::default(),
+            resource_attributes: Default::default(),
         }
     }
 
