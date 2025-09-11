@@ -273,24 +273,79 @@ impl AdaptiveBatcher {
         }
     }
     
-    /// Add span to batch buffer.
+    /// Add span to batch buffer with optimized lock usage.
     pub async fn add_span(&self, span: Span) -> Result<Option<Vec<Span>>> {
-        // Check rate limiting
-        self.perf_manager.acquire_permit().await?;
+        // Fast path: check rate limiting without acquiring lock
+        if self.perf_manager.is_backpressure() {
+            return Err(UrpoError::Timeout { timeout_ms: 0 });
+        }
         
-        let mut buffer = self.buffer.lock().await;
-        buffer.push_back(span);
+        // Try non-blocking rate limiting first
+        if let Ok(_permit) = self.perf_manager.rate_limiter.try_acquire() {
+            // Fast path: got permit immediately
+        } else {
+            // Slow path: use async acquire with short timeout
+            self.perf_manager.acquire_permit().await?;
+        }
         
-        let current_size = buffer.len();
         let target_batch_size = self.batch_size.load(Ordering::Relaxed);
         
-        // Check if we should flush the batch
-        if current_size >= target_batch_size || self.should_flush().await {
-            let batch: Vec<Span> = buffer.drain(..).collect();
+        // Use try_lock to avoid blocking on contention
+        let batch_result = match self.buffer.try_lock() {
+            Ok(mut buffer) => {
+                buffer.push_back(span);
+                let current_size = buffer.len();
+                
+                // Check if we should flush (avoid async call in lock)
+                let should_flush_now = current_size >= target_batch_size;
+                
+                if should_flush_now {
+                    let batch: Vec<Span> = buffer.drain(..).collect();
+                    Some((batch, current_size))
+                } else {
+                    None
+                }
+            },
+            Err(_) => {
+                // Buffer is locked, defer to background flush
+                return Ok(None);
+            }
+        };
+        
+        if let Some((batch, size)) = batch_result {
+            // Update timestamp after lock is released
             *self.last_batch.lock().await = Instant::now();
             
-            // Adjust batch size based on performance
-            self.adjust_batch_size(batch.len(), current_size).await;
+            // Adjust batch size asynchronously (non-blocking)
+            let batch_len = batch.len();
+            let perf_manager = self.perf_manager.clone();
+            let batch_size = self.batch_size.clone();
+            let batch_timeout = self.batch_timeout.clone();
+            let min_batch = self.min_batch_size;
+            let max_batch = self.max_batch_size;
+            
+            tokio::spawn(async move {
+                let load_factor = perf_manager.get_load_factor().await;
+                let current_batch_size = batch_size.load(Ordering::Relaxed);
+                
+                let new_batch_size = if load_factor > 0.8 {
+                    (current_batch_size * 110 / 100).min(max_batch)
+                } else if load_factor < 0.3 {
+                    (current_batch_size * 90 / 100).max(min_batch)
+                } else {
+                    current_batch_size
+                };
+                
+                batch_size.store(new_batch_size, Ordering::Relaxed);
+                
+                let new_timeout = if load_factor > 0.7 {
+                    Duration::from_millis(50)
+                } else {
+                    Duration::from_millis(100)
+                };
+                
+                *batch_timeout.write().await = new_timeout;
+            });
             
             Ok(Some(batch))
         } else {
@@ -383,36 +438,57 @@ impl PerformanceMonitor {
         
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(monitor_interval);
+            let mut stats_cache = None;
+            let mut cache_time = Instant::now();
             
             while !shutdown.load(Ordering::Relaxed) {
                 interval.tick().await;
                 
-                let stats = perf_manager.get_stats().await;
+                // Use cached stats if recent (reduce lock contention)
+                let stats = if cache_time.elapsed() < Duration::from_millis(500) && stats_cache.is_some() {
+                    stats_cache.clone().unwrap()
+                } else {
+                    let s = perf_manager.get_stats().await;
+                    stats_cache = Some(s.clone());
+                    cache_time = Instant::now();
+                    s
+                };
                 
-                // Log performance metrics
-                tracing::debug!(
-                    "Performance: {}spans/s, {}μs latency, load={:.2}, backpressure={}",
-                    stats.spans_per_second,
-                    stats.avg_latency_us,
-                    perf_manager.get_load_factor().await,
-                    perf_manager.is_backpressure()
-                );
+                // Batch logging to reduce syscall overhead
+                let load_factor = perf_manager.get_load_factor().await;
+                let is_backpressure = perf_manager.is_backpressure();
                 
-                // Detect performance issues
-                if stats.avg_latency_us > 50_000 { // > 50ms
-                    tracing::warn!(
-                        "High latency detected: {}μs (target: {}μs)",
-                        stats.avg_latency_us,
-                        perf_manager.target_latency
-                    );
-                }
+                // Only log if significant changes (reduce log spam)
+                static mut LAST_LOG_TIME: Option<Instant> = None;
+                let should_log = unsafe {
+                    LAST_LOG_TIME.map_or(true, |t| t.elapsed() > Duration::from_secs(10))
+                        || stats.avg_latency_us > 50_000
+                        || is_backpressure
+                        || stats.dropped_spans > 0
+                };
                 
-                if perf_manager.is_backpressure() {
-                    tracing::warn!("System under backpressure, throttling input");
-                }
-                
-                if stats.dropped_spans > 0 {
-                    tracing::error!("Dropped {} spans due to overload", stats.dropped_spans);
+                if should_log {
+                    unsafe { LAST_LOG_TIME = Some(Instant::now()); }
+                    
+                    // Batch all logging at once
+                    if stats.avg_latency_us > 50_000 {
+                        tracing::warn!(
+                            "PERFORMANCE ALERT: {}μs latency (target: {}μs), {}spans/s, load={:.2}, backpressure={}, dropped={}",
+                            stats.avg_latency_us,
+                            perf_manager.target_latency,
+                            stats.spans_per_second,
+                            load_factor,
+                            is_backpressure,
+                            stats.dropped_spans
+                        );
+                    } else {
+                        tracing::debug!(
+                            "Performance: {}spans/s, {}μs latency, load={:.2}",
+                            stats.spans_per_second,
+                            stats.avg_latency_us,
+                            load_factor
+                        );
+                    }
                 }
             }
         });

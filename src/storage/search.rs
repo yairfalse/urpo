@@ -3,8 +3,7 @@
 
 use std::sync::Arc;
 use dashmap::DashMap;
-use std::collections::BTreeMap;
-use crate::core::{TraceId, ServiceName};
+use crate::core::ServiceName;
 use std::sync::atomic::{AtomicU64, Ordering};
 use parking_lot::RwLock;
 
@@ -133,27 +132,48 @@ impl SearchIndex {
             return result;
         }
 
-        // Full text search using inverted index
-        let mut trace_scores: BTreeMap<u128, u32> = BTreeMap::new();
+        // BLAZING FAST full text search with early termination
+        let mut trace_scores: Vec<(u128, u32)> = Vec::with_capacity(limit * 2);
         let tokens = tokenize_zero_copy(query);
+        let mut seen_traces = std::collections::HashSet::with_capacity(limit * 2);
 
-        for token in tokens {
+        // Process tokens in order of specificity (longer tokens first)
+        let mut sorted_tokens: Vec<&str> = tokens.into_iter().collect();
+        sorted_tokens.sort_unstable_by(|a, b| b.len().cmp(&a.len()));
+
+        for token in sorted_tokens {
             if token.len() > 2 {
-                if let Some(traces) = self.inverted_index.get(token) {
-                    for trace_id in traces.read().iter() {
-                        *trace_scores.entry(*trace_id).or_insert(0) += 1;
+                if let Some(traces_ref) = self.inverted_index.get(token) {
+                    let traces = traces_ref.read();
+                    // Early termination: only process up to limit*2 traces per token
+                    for trace_id in traces.iter().take(limit * 2) {
+                        if seen_traces.insert(*trace_id) {
+                            // New trace, calculate score efficiently
+                            let score = if token.len() > 8 { 3 } else if token.len() > 5 { 2 } else { 1 };
+                            trace_scores.push((*trace_id, score));
+                            
+                            // Early exit if we have enough high-quality results
+                            if trace_scores.len() >= limit * 2 {
+                                break;
+                            }
+                        }
                     }
+                }
+                // Early exit if we have enough candidates
+                if trace_scores.len() >= limit * 3 {
+                    break;
                 }
             }
         }
 
-        // Sort by score and return top results
-        let mut sorted: Vec<(u128, u32)> = trace_scores.into_iter().collect();
-        sorted.sort_unstable_by(|a, b| b.1.cmp(&a.1));
+        // Use partial sort for better performance
+        if trace_scores.len() > limit {
+            trace_scores.select_nth_unstable_by(limit - 1, |a, b| b.1.cmp(&a.1));
+            trace_scores.truncate(limit);
+        }
 
-        let result = sorted
+        let result = trace_scores
             .into_iter()
-            .take(limit)
             .map(|(trace_id, _)| trace_id)
             .collect();
 
@@ -208,12 +228,12 @@ impl SearchIndex {
     }
 }
 
-/// Zero-copy tokenization - NO ALLOCATIONS
+/// Zero-copy tokenization with smart filtering - NO ALLOCATIONS
 #[inline(always)]
-fn tokenize_zero_copy(text: &str) -> Vec<&str> {
+fn tokenize_zero_copy(text: &str) -> impl Iterator<Item = &str> {
     text.split(|c: char| !c.is_alphanumeric())
-        .filter(|s| !s.is_empty())
-        .collect()
+        .filter(|s| s.len() > 1) // Skip single characters
+        .take(8) // Limit tokens to prevent explosion
 }
 
 /// Check if attribute should be indexed
