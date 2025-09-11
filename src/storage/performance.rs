@@ -459,16 +459,21 @@ impl PerformanceMonitor {
                 let is_backpressure = perf_manager.is_backpressure();
                 
                 // Only log if significant changes (reduce log spam)
-                static mut LAST_LOG_TIME: Option<Instant> = None;
-                let should_log = unsafe {
-                    LAST_LOG_TIME.map_or(true, |t| t.elapsed() > Duration::from_secs(10))
+                // SAFE: Use thread-local storage instead of global static mut
+                use std::cell::Cell;
+                thread_local! {
+                    static LAST_LOG_TIME: Cell<Option<Instant>> = Cell::new(None);
+                }
+                
+                let should_log = LAST_LOG_TIME.with(|last_time| {
+                    last_time.get().map_or(true, |t| t.elapsed() > Duration::from_secs(10))
                         || stats.avg_latency_us > 50_000
                         || is_backpressure
                         || stats.dropped_spans > 0
-                };
+                });
                 
                 if should_log {
-                    unsafe { LAST_LOG_TIME = Some(Instant::now()); }
+                    LAST_LOG_TIME.with(|last_time| last_time.set(Some(Instant::now())));
                     
                     // Batch all logging at once
                     if stats.avg_latency_us > 50_000 {

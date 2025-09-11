@@ -116,7 +116,7 @@ const TraceMinimap: React.FC<MinimapProps> = ({
         ctx.fillStyle = '#ff3366';
       } else if (density > maxDensity * 0.8) {
         char = '▓';
-        ctx.fillStyle = '#00ffaa';
+        ctx.fillStyle = '#6B7280';
       } else if (density > maxDensity * 0.5) {
         char = '▒';
         ctx.fillStyle = '#888';
@@ -143,12 +143,12 @@ const TraceMinimap: React.FC<MinimapProps> = ({
     ctx.fillRect(0, viewStartY, width, viewHeight);
 
     // Viewport border
-    ctx.strokeStyle = '#00ffaa';
+    ctx.strokeStyle = '#6B7280';
     ctx.lineWidth = 2;
     ctx.strokeRect(0, viewStartY, width, viewHeight);
 
     // "You are here" indicator
-    ctx.fillStyle = '#00ffaa';
+    ctx.fillStyle = '#6B7280';
     ctx.font = 'bold 10px monospace';
     ctx.save();
     ctx.translate(width / 2, viewStartY + viewHeight / 2);
@@ -308,7 +308,7 @@ const TraceMinimap: React.FC<MinimapProps> = ({
       {/* Hover tooltip */}
       {hoverInfo && (
         <div 
-          className="absolute left-full ml-2 px-2 py-1 bg-black border border-green-500 text-xs font-mono text-green-500 pointer-events-none"
+          className="absolute left-full ml-2 px-2 py-1 bg-surface-50 border border-gray-500 text-xs font-mono text-gray-500 pointer-events-none"
           style={{ top: hoverInfo.y - 10 }}
         >
           {hoverInfo.text}

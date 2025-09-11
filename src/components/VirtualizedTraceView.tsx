@@ -116,7 +116,7 @@ const VirtualizedTraceView = memo(({ trace, spans }: Props) => {
   const getSpanColor = (span: SpanData) => {
     if (span.status === 'error') return 'bg-red-500';
     if (span.duration > 1000) return 'bg-yellow-500';
-    return 'bg-green-500';
+    return 'bg-gray-500';
   };
 
   const calculateSpanPosition = (span: SpanData) => {
@@ -181,7 +181,7 @@ const VirtualizedTraceView = memo(({ trace, spans }: Props) => {
               <div
                 key={span.span_id}
                 className={`absolute w-full h-8 border-b border-surface-200 hover:bg-surface-100 transition-colors cursor-pointer ${
-                  selectedSpan === span.span_id ? 'bg-surface-200 border-status-info' : ''
+                  selectedSpan === span.span_id ? 'bg-surface-200 border-text-700' : ''
                 }`}
                 style={{ top: `${actualIndex * 32}px` }}
                 onClick={() => setSelectedSpan(span.span_id)}

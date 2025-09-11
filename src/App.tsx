@@ -242,9 +242,9 @@ const App = memo(() => {
               <div className="w-0.5 h-3 bg-surface-400"></div>
               
               <div className="flex items-center gap-1.5 text-[10px] font-mono">
-                <div className="w-1.5 h-1.5 bg-status-info rounded-full animate-pulse-subtle"></div>
+                <div className="w-1.5 h-1.5 bg-text-700 rounded-full animate-pulse-subtle"></div>
                 <span className="text-text-500">RPS</span>
-                <span className="text-status-info font-medium">
+                <span className="text-text-900 font-medium">
                   {systemMetrics.spans_per_second.toFixed(0)}
                 </span>
               </div>

@@ -87,14 +87,14 @@ const ServiceMap = memo(({ className = '' }: ServiceMapProps) => {
   const getHealthColor = (node: ServiceNode) => {
     if (node.error_rate > 0.1) return 'text-status-error';
     if (node.error_rate > 0.01) return 'text-status-warning';
-    return 'text-status-healthy';
+    return 'text-text-700';
   };
 
   // Get health color class for background
   const getHealthBgColor = (node: ServiceNode) => {
     if (node.error_rate > 0.1) return 'bg-status-error bg-opacity-5 border-status-error border-opacity-20';
     if (node.error_rate > 0.01) return 'bg-status-warning bg-opacity-5 border-status-warning border-opacity-20';
-    return 'bg-status-healthy bg-opacity-5 border-status-healthy border-opacity-20';
+    return 'bg-surface-100 border-surface-400';
   };
 
   if (loading) {
@@ -231,7 +231,7 @@ const TopologyView = memo(({
                     onClick={() => onSelectService(node.name)}
                     className={`p-3 rounded-lg border-2 transition-all hover:scale-105 ${
                       selectedService === node.name 
-                        ? 'ring-2 ring-status-info' 
+                        ? 'ring-2 ring-text-700' 
                         : ''
                     } ${getHealthBgColor(node)}`}
                   >
@@ -250,7 +250,7 @@ const TopologyView = memo(({
               {/* Show connections to next tier */}
               {tier < maxTier && (
                 <div className="flex justify-center">
-                  <div className="text-status-info text-2xl">↓</div>
+                  <div className="text-text-700 text-2xl">↓</div>
                 </div>
               )}
             </>
@@ -350,7 +350,7 @@ const EdgeCard = memo(({ edge, direction }: { edge: ServiceEdge; direction: 'inc
         </div>
         <div className="text-right text-xs">
           <div className="text-text-primary">{edge.call_count} calls</div>
-          <div className={errorRate > 10 ? 'text-status-error' : errorRate > 1 ? 'text-status-warning' : 'text-status-healthy'}>
+          <div className={errorRate > 10 ? 'text-text-900' : errorRate > 1 ? 'text-text-700' : 'text-text-700'}>
             {errorRate.toFixed(1)}% errors
           </div>
           <div className="text-text-muted">{(edge.avg_latency_us / 1000).toFixed(1)}ms avg</div>
@@ -373,7 +373,7 @@ const HotPathsView = memo(({ edges }: { edges: ServiceEdge[] }) => (
               <span className="ml-2 font-medium">{edge.from} → {edge.to}</span>
             </div>
             <div className="text-right">
-              <div className="font-bold text-status-info">{edge.call_count.toLocaleString()} calls</div>
+              <div className="font-bold text-text-900">{edge.call_count.toLocaleString()} calls</div>
               <div className="text-sm text-text-muted">{(edge.avg_latency_us / 1000).toFixed(1)}ms avg</div>
             </div>
           </div>
@@ -389,10 +389,10 @@ const ErrorPathsView = memo(({ edges }: { edges: ServiceEdge[] }) => (
     <h3 className="text-lg font-semibold text-text-primary">Error Paths</h3>
     {edges.length === 0 ? (
       <div className="clean-card text-center p-8">
-        <div className="w-12 h-12 mx-auto mb-4 rounded-lg bg-status-healthy bg-opacity-10 flex items-center justify-center">
-          <span className="text-status-healthy text-2xl">✓</span>
+        <div className="w-12 h-12 mx-auto mb-4 rounded-lg bg-surface-200 flex items-center justify-center">
+          <span className="text-text-700 text-2xl">✓</span>
         </div>
-        <p className="text-status-healthy font-medium">No errors detected!</p>
+        <p className="text-text-900 font-medium">No errors detected!</p>
         <p className="text-text-500 text-sm mt-1">All service connections are healthy.</p>
       </div>
     ) : (

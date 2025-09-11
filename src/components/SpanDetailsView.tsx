@@ -110,7 +110,7 @@ const SpanDetailsView: React.FC<SpanDetailsViewProps> = ({
         <div
           className={`flex items-center px-2 py-1 cursor-pointer font-mono text-xs border-l-2 ${
             isSelected 
-              ? 'bg-green-500/20 border-green-500' 
+              ? 'bg-gray-500/20 border-gray-500' 
               : 'hover:bg-gray-900 border-transparent'
           } ${hasError ? 'text-red-400' : ''}`}
           style={{ paddingLeft: `${depth * 20 + 8}px` }}
@@ -124,7 +124,7 @@ const SpanDetailsView: React.FC<SpanDetailsViewProps> = ({
           )}
           
           {/* Service & Operation */}
-          <span className={`${hasError ? 'text-red-400' : 'text-green-400'}`}>
+          <span className={`${hasError ? 'text-red-400' : 'text-gray-400'}`}>
             {span.service_name}
           </span>
           <span className="text-gray-600 mx-1">/</span>
@@ -136,7 +136,7 @@ const SpanDetailsView: React.FC<SpanDetailsViewProps> = ({
           <span className={`ml-2 ${
             span.duration > 1000000 ? 'text-red-400' :
             span.duration > 100000 ? 'text-yellow-400' :
-            'text-green-400'
+            'text-gray-400'
           }`}>
             {formatDuration(span.duration)}
           </span>
@@ -157,7 +157,7 @@ const SpanDetailsView: React.FC<SpanDetailsViewProps> = ({
   }
 
   return (
-    <div className="flex h-full bg-black text-white">
+    <div className="flex h-full bg-surface-50 text-white">
       {/* Left Panel - Span Tree */}
       <div className="w-1/2 border-r border-gray-800 overflow-y-auto">
         {/* View Mode Tabs */}
@@ -165,7 +165,7 @@ const SpanDetailsView: React.FC<SpanDetailsViewProps> = ({
           <button
             onClick={() => setViewMode('tree')}
             className={`px-4 py-2 text-xs font-mono ${
-              viewMode === 'tree' ? 'bg-gray-900 text-green-400' : 'text-gray-500'
+              viewMode === 'tree' ? 'bg-gray-900 text-gray-400' : 'text-gray-500'
             }`}
           >
             TREE
@@ -173,7 +173,7 @@ const SpanDetailsView: React.FC<SpanDetailsViewProps> = ({
           <button
             onClick={() => setViewMode('timeline')}
             className={`px-4 py-2 text-xs font-mono ${
-              viewMode === 'timeline' ? 'bg-gray-900 text-green-400' : 'text-gray-500'
+              viewMode === 'timeline' ? 'bg-gray-900 text-gray-400' : 'text-gray-500'
             }`}
           >
             TIMELINE
@@ -181,7 +181,7 @@ const SpanDetailsView: React.FC<SpanDetailsViewProps> = ({
           <button
             onClick={() => setViewMode('raw')}
             className={`px-4 py-2 text-xs font-mono ${
-              viewMode === 'raw' ? 'bg-gray-900 text-green-400' : 'text-gray-500'
+              viewMode === 'raw' ? 'bg-gray-900 text-gray-400' : 'text-gray-500'
             }`}
           >
             RAW
@@ -205,7 +205,7 @@ const SpanDetailsView: React.FC<SpanDetailsViewProps> = ({
                     key={span.span_id}
                     className={`flex items-center px-2 py-1 cursor-pointer text-xs font-mono ${
                       selectedSpan?.span_id === span.span_id
-                        ? 'bg-green-500/20'
+                        ? 'bg-gray-500/20'
                         : 'hover:bg-gray-900'
                     }`}
                     onClick={() => setSelectedSpan(span)}
@@ -213,7 +213,7 @@ const SpanDetailsView: React.FC<SpanDetailsViewProps> = ({
                     <span className="text-gray-500 w-20">
                       {formatTime(span.start_time).split('T')[1].split('.')[0]}
                     </span>
-                    <span className="text-green-400 w-32">{span.service_name}</span>
+                    <span className="text-gray-400 w-32">{span.service_name}</span>
                     <span className="flex-1">{span.operation_name}</span>
                     <span className="text-yellow-400">{formatDuration(span.duration)}</span>
                   </div>
@@ -235,7 +235,7 @@ const SpanDetailsView: React.FC<SpanDetailsViewProps> = ({
           <div className="p-4 space-y-4">
             {/* Header */}
             <div className="border-b border-gray-800 pb-4">
-              <h3 className="text-lg font-mono text-green-400">
+              <h3 className="text-lg font-mono text-gray-400">
                 {selectedSpan.operation_name}
               </h3>
               <div className="mt-2 space-y-1 text-xs text-gray-400">
@@ -250,7 +250,7 @@ const SpanDetailsView: React.FC<SpanDetailsViewProps> = ({
                         const parent = spans.find(s => s.span_id === selectedSpan.parent_id);
                         if (parent) setSelectedSpan(parent);
                       }}
-                      className="ml-2 text-blue-400 hover:underline font-mono"
+                      className="ml-2 text-text-700 hover:underline font-mono"
                     >
                       {selectedSpan.parent_id}
                     </button>
@@ -275,7 +275,7 @@ const SpanDetailsView: React.FC<SpanDetailsViewProps> = ({
               <div className={`inline-block px-2 py-1 text-xs font-mono ${
                 selectedSpan.status === 'ERROR' 
                   ? 'bg-red-500/20 text-red-400 border border-red-500' 
-                  : 'bg-green-500/20 text-green-400 border border-green-500'
+                  : 'bg-gray-500/20 text-gray-400 border border-gray-500'
               }`}>
                 {selectedSpan.status || 'OK'}
               </div>
@@ -303,7 +303,7 @@ const SpanDetailsView: React.FC<SpanDetailsViewProps> = ({
                 <div className="space-y-2">
                   {selectedSpan.events.map((event, idx) => (
                     <div key={idx} className="bg-gray-900 p-2 rounded-none text-xs">
-                      <div className="font-mono text-green-400">{event.name}</div>
+                      <div className="font-mono text-gray-400">{event.name}</div>
                       <div className="text-gray-500">
                         {formatTime(event.time)}
                       </div>
@@ -326,7 +326,7 @@ const SpanDetailsView: React.FC<SpanDetailsViewProps> = ({
                   {selectedSpan.links.map((link, idx) => (
                     <div key={idx} className="text-xs font-mono">
                       <span className="text-gray-500">Trace:</span>
-                      <span className="text-blue-400 ml-2">{link.trace_id}</span>
+                      <span className="text-text-700 ml-2">{link.trace_id}</span>
                     </div>
                   ))}
                 </div>

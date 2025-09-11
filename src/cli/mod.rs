@@ -338,7 +338,10 @@ async fn execute_export(
         
         let now = SystemTime::now();
         let start = now - duration;
-        (Some(start.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos() as u64), None)
+        let start_nanos = start.duration_since(SystemTime::UNIX_EPOCH)
+            .map_err(|e| UrpoError::config(format!("Invalid system time: {}", e)))?
+            .as_nanos() as u64;
+        (Some(start_nanos), None)
     } else {
         // Parse explicit start/end times
         let start_time = start.as_ref().map(|s| parse_timestamp(s))

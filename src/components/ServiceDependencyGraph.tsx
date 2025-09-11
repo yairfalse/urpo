@@ -342,7 +342,7 @@ const ServiceDependencyGraph: React.FC = () => {
       
       // Highlight selected paths
       if (selectedService && (edge.source === selectedService || edge.target === selectedService)) {
-        ctx.strokeStyle = '#00ffaa';
+        ctx.strokeStyle = '#6B7280';
         ctx.lineWidth *= 2;
       }
       
@@ -401,8 +401,8 @@ const ServiceDependencyGraph: React.FC = () => {
       const actualSize = size + pulse;
       
       // Node color based on health
-      let fillColor = '#001122';
-      let borderColor = '#00ffaa';
+      let fillColor = '#374151';
+      let borderColor = '#6B7280';
       
       if (node.metrics.errorRate > 0.05) {
         fillColor = '#220011';
@@ -554,7 +554,7 @@ const ServiceDependencyGraph: React.FC = () => {
         <button
           onClick={() => setLayoutMode('force')}
           className={`px-3 py-1 text-xs font-mono ${
-            layoutMode === 'force' ? 'bg-green-600 text-white' : 'bg-gray-800 text-gray-400'
+            layoutMode === 'force' ? 'bg-text-900 text-white' : 'bg-surface-200 text-text-500'
           }`}
         >
           FORCE
@@ -562,7 +562,7 @@ const ServiceDependencyGraph: React.FC = () => {
         <button
           onClick={() => setLayoutMode('hierarchical')}
           className={`px-3 py-1 text-xs font-mono ${
-            layoutMode === 'hierarchical' ? 'bg-green-600 text-white' : 'bg-gray-800 text-gray-400'
+            layoutMode === 'hierarchical' ? 'bg-text-900 text-white' : 'bg-surface-200 text-text-500'
           }`}
         >
           HIERARCHY
@@ -570,7 +570,7 @@ const ServiceDependencyGraph: React.FC = () => {
         <button
           onClick={() => setLayoutMode('circular')}
           className={`px-3 py-1 text-xs font-mono ${
-            layoutMode === 'circular' ? 'bg-green-600 text-white' : 'bg-gray-800 text-gray-400'
+            layoutMode === 'circular' ? 'bg-text-900 text-white' : 'bg-surface-200 text-text-500'
           }`}
         >
           CIRCULAR
@@ -590,7 +590,7 @@ const ServiceDependencyGraph: React.FC = () => {
         ref={canvasRef}
         width={1000}
         height={600}
-        className="border border-gray-800 cursor-move"
+        className="border border-surface-400 cursor-move"
         onMouseMove={handleMouseMove}
         onMouseDown={handleMouseDown}
         onMouseUp={handleMouseUp}
@@ -600,9 +600,9 @@ const ServiceDependencyGraph: React.FC = () => {
       
       {/* Selected service details */}
       {selectedService && dependencies.services.get(selectedService) && (
-        <div className="absolute bottom-2 right-2 bg-black/90 border border-green-500 p-3 text-xs font-mono w-64">
-          <div className="text-green-500 font-bold mb-2">{selectedService}</div>
-          <div className="space-y-1 text-gray-300">
+        <div className="absolute bottom-2 right-2 bg-surface-100 border border-surface-400 p-3 text-xs font-mono w-64">
+          <div className="text-text-900 font-bold mb-2">{selectedService}</div>
+          <div className="space-y-1 text-text-700">
             <div>Request Rate: {dependencies.services.get(selectedService)!.metrics.requestRate.toFixed(2)} rps</div>
             <div>Error Rate: {(dependencies.services.get(selectedService)!.metrics.errorRate * 100).toFixed(2)}%</div>
             <div>P95 Latency: {dependencies.services.get(selectedService)!.metrics.p95Latency}ms</div>
@@ -610,24 +610,24 @@ const ServiceDependencyGraph: React.FC = () => {
           </div>
           
           {/* Upstream dependencies */}
-          <div className="mt-2 pt-2 border-t border-gray-700">
-            <div className="text-gray-500 mb-1">Calls from:</div>
+          <div className="mt-2 pt-2 border-t border-surface-400">
+            <div className="text-text-500 mb-1">Calls from:</div>
             {dependencies.edges
               .filter(e => e.target === selectedService)
               .map(e => (
-                <div key={e.source} className="text-gray-400">
+                <div key={e.source} className="text-text-500">
                   ← {e.source} ({e.callCount} calls)
                 </div>
               ))}
           </div>
           
           {/* Downstream dependencies */}
-          <div className="mt-2 pt-2 border-t border-gray-700">
-            <div className="text-gray-500 mb-1">Calls to:</div>
+          <div className="mt-2 pt-2 border-t border-surface-400">
+            <div className="text-text-500 mb-1">Calls to:</div>
             {dependencies.edges
               .filter(e => e.source === selectedService)
               .map(e => (
-                <div key={e.target} className="text-gray-400">
+                <div key={e.target} className="text-text-500">
                   → {e.target} ({e.callCount} calls)
                 </div>
               ))}

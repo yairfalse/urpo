@@ -6,6 +6,7 @@
 pub mod http;
 
 use crate::core::{Result, Span as UrpoSpan, SpanId, SpanStatus, TraceId, ServiceName, UrpoError};
+use crate::storage::UnifiedStorage;
 use chrono::{DateTime, Utc};
 use opentelemetry_proto::tonic::collector::trace::v1::{
     trace_service_server::{TraceService, TraceServiceServer},
@@ -29,6 +30,16 @@ pub struct OtelReceiver {
 }
 
 impl OtelReceiver {
+    /// Create a new OTEL receiver with UnifiedStorage (recommended).
+    pub fn with_storage(
+        grpc_port: u16,
+        http_port: u16,
+        storage: &UnifiedStorage,
+        health_monitor: Arc<crate::monitoring::Monitor>,
+    ) -> Self {
+        Self::new(grpc_port, http_port, storage.as_backend(), health_monitor)
+    }
+    
     /// Create a new OTEL receiver.
     pub fn new(
         grpc_port: u16,

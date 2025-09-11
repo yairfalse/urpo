@@ -553,6 +553,7 @@ mod tests {
             status: SpanStatus::Ok,
             attributes: Default::default(),
             tags: Default::default(),
+            resource_attributes: Default::default(),
         }
     }
 

@@ -339,8 +339,10 @@ impl Dashboard {
         self.services.sort_by(|a, b| {
             let ordering = match self.sort_by {
                 SortBy::Name => a.name.as_str().cmp(b.name.as_str()),
-                SortBy::Rps => a.request_rate.partial_cmp(&b.request_rate).unwrap(),
-                SortBy::ErrorRate => a.error_rate.partial_cmp(&b.error_rate).unwrap(),
+                SortBy::Rps => a.request_rate.partial_cmp(&b.request_rate)
+                    .unwrap_or(std::cmp::Ordering::Equal),
+                SortBy::ErrorRate => a.error_rate.partial_cmp(&b.error_rate)
+                    .unwrap_or(std::cmp::Ordering::Equal),
                 SortBy::P50 => a.latency_p50.cmp(&b.latency_p50),
                 SortBy::P95 => a.latency_p95.cmp(&b.latency_p95),
                 SortBy::P99 => a.latency_p99.cmp(&b.latency_p99),
@@ -392,8 +394,10 @@ impl Dashboard {
         filtered.sort_by(|a, b| {
             let ordering = match self.sort_by {
                 SortBy::Name => a.name.as_str().cmp(b.name.as_str()),
-                SortBy::Rps => a.request_rate.partial_cmp(&b.request_rate).unwrap(),
-                SortBy::ErrorRate => a.error_rate.partial_cmp(&b.error_rate).unwrap(),
+                SortBy::Rps => a.request_rate.partial_cmp(&b.request_rate)
+                    .unwrap_or(std::cmp::Ordering::Equal),
+                SortBy::ErrorRate => a.error_rate.partial_cmp(&b.error_rate)
+                    .unwrap_or(std::cmp::Ordering::Equal),
                 SortBy::P50 => a.latency_p50.cmp(&b.latency_p50),
                 SortBy::P95 => a.latency_p95.cmp(&b.latency_p95),
                 SortBy::P99 => a.latency_p99.cmp(&b.latency_p99),
@@ -578,8 +582,7 @@ impl Dashboard {
                     if self.selected_span_index.is_none() {
                         self.selected_span_index = Some(0);
                         self.span_state.select(Some(0));
-                    } else {
-                        let selected = self.selected_span_index.unwrap();
+                    } else if let Some(selected) = self.selected_span_index {
                         if selected > 0 {
                             self.selected_span_index = Some(selected - 1);
                             self.span_state.select(Some(selected - 1));
