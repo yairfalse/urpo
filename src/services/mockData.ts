@@ -14,12 +14,7 @@ export const mockServices: ServiceMetrics[] = [
     latency_p50: 45.2,
     latency_p95: 127.8,
     latency_p99: 234.1,
-    span_count: 15420,
-    error_count: 23,
-    last_seen: Date.now() - 1000, // 1 second ago
-    status: 'healthy',
-    dependencies: ['user-service', 'billing-service'],
-    version: '2.1.0'
+    active_spans: 15420
   },
   {
     name: 'user-service',
@@ -28,12 +23,7 @@ export const mockServices: ServiceMetrics[] = [
     latency_p50: 23.1,
     latency_p95: 67.4,
     latency_p99: 145.2,
-    span_count: 8934,
-    error_count: 1,
-    last_seen: Date.now() - 500,
-    status: 'healthy',
-    dependencies: ['auth-service'],
-    version: '1.8.3'
+    active_spans: 8934
   },
   {
     name: 'billing-service',
@@ -42,12 +32,7 @@ export const mockServices: ServiceMetrics[] = [
     latency_p50: 78.9,
     latency_p95: 189.5,
     latency_p99: 456.7,
-    span_count: 3478,
-    error_count: 174,
-    last_seen: Date.now() - 2000,
-    status: 'degraded',
-    dependencies: ['payment-gateway'],
-    version: '3.0.1'
+    active_spans: 3478
   },
   {
     name: 'auth-service',
@@ -56,12 +41,7 @@ export const mockServices: ServiceMetrics[] = [
     latency_p50: 12.3,
     latency_p95: 34.5,
     latency_p99: 78.9,
-    span_count: 23480,
-    error_count: 188,
-    last_seen: Date.now() - 800,
-    status: 'healthy',
-    dependencies: [],
-    version: '4.2.1'
+    active_spans: 23480
   }
 ];
 
@@ -69,43 +49,43 @@ export const mockServices: ServiceMetrics[] = [
 export const mockTraces: TraceInfo[] = [
   {
     trace_id: 'trace_1a2b3c4d5e6f7890',
-    root_span_name: 'POST /api/payment/process',
-    service_name: 'payment-service',
-    start_time: Date.now() - 60000, // 1 minute ago
-    duration_ms: 234.5,
+    root_service: 'payment-service',
+    root_operation: 'POST /api/payment/process',
+    start_time: Math.floor((Date.now() - 60000) / 1000), // 1 minute ago in seconds
+    duration: 234.5,
     span_count: 12,
-    error_count: 0,
-    status: 'ok'
+    has_error: false,
+    services: ['payment-service', 'user-service', 'billing-service']
   },
   {
     trace_id: 'trace_9z8y7x6w5v4u3210',
-    root_span_name: 'GET /api/user/profile',
-    service_name: 'user-service',
-    start_time: Date.now() - 45000,
-    duration_ms: 67.8,
+    root_service: 'user-service',
+    root_operation: 'GET /api/user/profile',
+    start_time: Math.floor((Date.now() - 45000) / 1000),
+    duration: 67.8,
     span_count: 8,
-    error_count: 0,
-    status: 'ok'
+    has_error: false,
+    services: ['user-service', 'auth-service']
   },
   {
     trace_id: 'trace_error_abc123def456',
-    root_span_name: 'POST /api/billing/invoice',
-    service_name: 'billing-service',
-    start_time: Date.now() - 30000,
-    duration_ms: 1234.5,
+    root_service: 'billing-service',
+    root_operation: 'POST /api/billing/invoice',
+    start_time: Math.floor((Date.now() - 30000) / 1000),
+    duration: 1234.5,
     span_count: 15,
-    error_count: 3,
-    status: 'error'
+    has_error: true,
+    services: ['billing-service', 'payment-gateway', 'notification-service']
   },
   {
     trace_id: 'trace_slow_xyz789uvw123',
-    root_span_name: 'GET /api/analytics/report',
-    service_name: 'analytics-service',
-    start_time: Date.now() - 120000,
-    duration_ms: 5678.9,
+    root_service: 'analytics-service',
+    root_operation: 'GET /api/analytics/report',
+    start_time: Math.floor((Date.now() - 120000) / 1000),
+    duration: 5678.9,
     span_count: 45,
-    error_count: 0,
-    status: 'ok'
+    has_error: false,
+    services: ['analytics-service', 'database-service', 'cache-service']
   }
 ];
 
@@ -127,8 +107,7 @@ export const getUpdatedMockServices = (): ServiceMetrics[] => {
     latency_p50: service.latency_p50 + (Math.random() - 0.5) * 5,
     latency_p95: service.latency_p95 + (Math.random() - 0.5) * 10,
     latency_p99: service.latency_p99 + (Math.random() - 0.5) * 20,
-    span_count: service.span_count + Math.floor(Math.random() * 100),
-    last_seen: Date.now() - Math.floor(Math.random() * 5000)
+    active_spans: service.active_spans + Math.floor(Math.random() * 100)
   }));
 };
 
