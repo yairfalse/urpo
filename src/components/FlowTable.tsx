@@ -1,5 +1,4 @@
 import { useState, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ArrowRight, 
   Clock, 
@@ -224,14 +223,9 @@ export default function FlowTable({ traces, onRefresh }: FlowTableProps) {
             </tr>
           </thead>
           <tbody>
-            <AnimatePresence mode="popLayout">
-              {filteredFlows.map((flow, index) => (
-                <motion.tr
+              {filteredFlows.map((flow) => (
+                <tr
                   key={flow.id}
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 10 }}
-                  transition={{ delay: index * 0.01 }}
                   className={`
                     border-b border-surface-300 hover:bg-surface-100 cursor-pointer transition-colors
                     ${selectedFlow === flow.id ? 'bg-surface-200' : ''}
@@ -284,21 +278,15 @@ export default function FlowTable({ traces, onRefresh }: FlowTableProps) {
                   <td className="p-3 text-right text-xs text-text-500">
                     {formatBytes(flow.bytes)}
                   </td>
-                </motion.tr>
+                </tr>
               ))}
-            </AnimatePresence>
           </tbody>
         </table>
       </div>
 
       {/* Selected Flow Details */}
-      <AnimatePresence>
         {selectedFlow && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="border-t border-surface-300 bg-surface-100 p-4"
+          <div className="border-t border-surface-300 bg-surface-100 p-4"
           >
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-medium text-text-900">Flow Details</h3>
@@ -327,9 +315,8 @@ export default function FlowTable({ traces, onRefresh }: FlowTableProps) {
                 </div>
               </div>
             </div>
-          </motion.div>
+          </div>
         )}
-      </AnimatePresence>
     </div>
   );
 }
