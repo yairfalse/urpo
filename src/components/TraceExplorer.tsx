@@ -1,6 +1,6 @@
 import { memo, useState, useCallback, useMemo } from 'react';
 import { TraceInfo, SpanData } from '../types';
-import { invoke } from '@tauri-apps/api/tauri';
+import { isTauriAvailable, safeTauriInvoke } from '../utils/tauri';
 import VirtualizedTraceView from './VirtualizedTraceView';
 
 interface Props {
@@ -41,28 +41,48 @@ const TraceExplorer = memo(({ traces, onRefresh }: Props) => {
   const loadTraceSpans = useCallback(async (trace: TraceInfo) => {
     setLoading(true);
     try {
-      // For large traces, use streaming to prevent UI freeze
-      if (trace.span_count > 5000) {
-        // Stream data in chunks
-        await invoke('stream_trace_data', {
-          window: window,
-          traceId: trace.trace_id,
-        });
-        
-        // Listen for chunks
-        const spans: SpanData[] = [];
-        // Note: In real implementation, we'd set up event listeners
-        setTraceSpans(spans);
+      if (isTauriAvailable()) {
+        // For large traces, use streaming to prevent UI freeze
+        if (trace.span_count > 5000) {
+          // Stream data in chunks
+          await safeTauriInvoke('stream_trace_data', {
+            window: window,
+            traceId: trace.trace_id,
+          });
+          
+          // Listen for chunks
+          const spans: SpanData[] = [];
+          // Note: In real implementation, we'd set up event listeners
+          setTraceSpans(spans);
+        } else {
+          // For smaller traces, load all at once
+          const spans = await safeTauriInvoke<SpanData[]>('get_trace_spans', {
+            traceId: trace.trace_id,
+          });
+          setTraceSpans(spans || []);
+        }
       } else {
-        // For smaller traces, load all at once
-        const spans = await invoke<SpanData[]>('get_trace_spans', {
-          traceId: trace.trace_id,
-        });
-        setTraceSpans(spans);
+        // Fallback: Generate mock span data for demo
+        const mockSpans: SpanData[] = Array.from({ length: Math.min(trace.span_count, 50) }, (_, i) => ({
+          trace_id: trace.trace_id,
+          span_id: `span-${i}`,
+          parent_span_id: i > 0 ? `span-${Math.floor(i / 2)}` : undefined,
+          service_name: trace.services[i % trace.services.length] || 'unknown',
+          operation_name: `operation-${i}`,
+          start_time: trace.start_time + (i * 1000),
+          duration: Math.random() * 100 + 10,
+          status: Math.random() > 0.9 ? 'error' : 'ok',
+          attributes: { 'span.kind': 'server', 'http.method': 'GET' },
+          tags: {},
+          error_message: Math.random() > 0.9 ? 'Sample error message' : undefined
+        }));
+        setTraceSpans(mockSpans);
       }
       setSelectedTrace(trace);
     } catch (err) {
       console.error('Failed to load trace spans:', err);
+      // Even on error, provide empty spans to prevent crashes
+      setTraceSpans([]);
     } finally {
       setLoading(false);
     }
@@ -134,7 +154,7 @@ const TraceExplorer = memo(({ traces, onRefresh }: Props) => {
                 onClick={() => loadTraceSpans(trace)}
                 className={`clean-card p-4 cursor-pointer micro-interaction ${
                   selectedTrace?.trace_id === trace.trace_id 
-                    ? 'ring-2 ring-status-info border-status-info' 
+                    ? 'ring-2 ring-text-700 border-text-700' 
                     : 'hover:border-surface-400'
                 }`}
               >

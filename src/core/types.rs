@@ -18,6 +18,13 @@ pub struct SpanId(String);
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ServiceName(String);
 
+impl Default for TraceId {
+    fn default() -> Self {
+        // Default trace ID for pool allocation
+        TraceId("00000000000000000000000000000000".to_string())
+    }
+}
+
 impl TraceId {
     /// Creates a new TraceId after validation
     pub fn new(id: String) -> Result<Self> {
@@ -56,6 +63,13 @@ impl FromStr for TraceId {
     }
 }
 
+impl Default for SpanId {
+    fn default() -> Self {
+        // Default span ID for pool allocation
+        SpanId("0000000000000000".to_string())
+    }
+}
+
 impl SpanId {
     /// Creates a new SpanId after validation
     pub fn new(id: String) -> Result<Self> {
@@ -83,6 +97,13 @@ impl SpanId {
 impl fmt::Display for SpanId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+impl Default for ServiceName {
+    fn default() -> Self {
+        // Default service name for pool allocation
+        ServiceName("unknown".to_string())
     }
 }
 
@@ -284,6 +305,24 @@ impl SpanBuilder {
         self
     }
     
+    /// Build a default span for pool allocation.
+    /// Used internally by the span pool for pre-allocation.
+    pub fn build_default(self) -> Span {
+        Span {
+            trace_id: TraceId::default(),
+            span_id: SpanId::default(),
+            parent_span_id: None,
+            service_name: ServiceName::default(),
+            operation_name: String::new(),
+            start_time: SystemTime::UNIX_EPOCH,
+            duration: Duration::from_millis(0),
+            status: SpanStatus::Unknown,
+            attributes: HashMap::new(),
+            tags: HashMap::new(),
+            resource_attributes: HashMap::new(),
+        }
+    }
+    
     pub fn build(self) -> Result<Span> {
         Ok(Span {
             trace_id: self.trace_id.ok_or_else(|| UrpoError::InvalidSpan("trace_id is required".to_string()))?,
@@ -338,13 +377,15 @@ impl Trace {
             .map(|span| span.span_id.clone());
         
         // Calculate total duration
-        let first_start = spans.first().unwrap().start_time;
+        let first_start = spans.first()
+            .ok_or(UrpoError::InvalidSpan("Cannot create trace from empty spans".to_string()))?
+            .start_time;
         let last_end = spans.iter()
             .map(|span| span.end_time())
             .max()
             .unwrap_or(first_start);
         let total_duration = last_end.duration_since(first_start)
-            .unwrap_or(Duration::from_millis(0));
+            .unwrap_or_else(|_| Duration::from_millis(0));
         
         // Count unique services
         let mut services = std::collections::HashSet::new();

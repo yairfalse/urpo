@@ -16,9 +16,9 @@ const ServiceHealthDashboard = memo(({ services }: Props) => {
   // Calculate health status with enterprise precision
   const getHealthStatus = (errorRate: number) => {
     if (errorRate === 0) return { 
-      color: 'text-status-healthy', 
-      bg: 'bg-status-healthy bg-opacity-5', 
-      border: 'border-status-healthy border-opacity-20',
+      color: 'text-text-700', 
+      bg: 'bg-surface-100', 
+      border: 'border-surface-400',
       indicator: 'healthy',
       label: 'Healthy' 
     };
@@ -39,7 +39,7 @@ const ServiceHealthDashboard = memo(({ services }: Props) => {
   };
 
   const getLatencyColor = (p99: number) => {
-    if (p99 < 100) return 'text-status-healthy';
+    if (p99 < 100) return 'text-text-700';
     if (p99 < 500) return 'text-status-warning';
     return 'text-status-error';
   };
@@ -61,7 +61,7 @@ const ServiceHealthDashboard = memo(({ services }: Props) => {
           Waiting for OpenTelemetry spans
         </p>
         <div className="mt-4 h-1 bg-surface-200 rounded-full overflow-hidden">
-          <div className="h-full bg-status-info animate-pulse-subtle w-2/3"></div>
+          <div className="h-full bg-text-700 animate-pulse-subtle w-2/3"></div>
         </div>
       </div>
     );
@@ -83,7 +83,7 @@ const ServiceHealthDashboard = memo(({ services }: Props) => {
         
         <div className="clean-card px-3 py-1 text-xs font-mono">
           <span className="text-text-500">Services:</span>
-          <span className="text-status-info font-medium ml-1">{services.length}</span>
+          <span className="text-text-900 font-medium ml-1">{services.length}</span>
         </div>
       </div>
       
@@ -172,7 +172,7 @@ const ServiceHealthDashboard = memo(({ services }: Props) => {
                 {/* Professional Progress Bar */}
                 <div className="h-1 bg-surface-200 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-status-healthy transition-all duration-300 ease-out"
+                    className="h-full bg-text-700 transition-all duration-300 ease-out"
                     style={{
                       width: `${Math.min((service.active_spans / 100) * 100, 100)}%`,
                     }}
@@ -198,10 +198,10 @@ const ServiceHealthDashboard = memo(({ services }: Props) => {
               <div className="status-indicator healthy"></div>
               <span className="text-[10px] text-text-500 font-mono uppercase tracking-wide">Services</span>
             </div>
-            <div className="text-2xl font-mono font-bold text-status-healthy">
+            <div className="text-2xl font-mono font-bold text-text-900">
               {services.length.toLocaleString()}
             </div>
-            <div className="h-0.5 bg-status-healthy bg-opacity-30 rounded-full"></div>
+            <div className="h-0.5 bg-text-700 rounded-full"></div>
           </div>
           
           <div className="text-center space-y-2">
@@ -209,10 +209,10 @@ const ServiceHealthDashboard = memo(({ services }: Props) => {
               <div className="status-indicator info"></div>
               <span className="text-[10px] text-text-500 font-mono uppercase tracking-wide">Total RPS</span>
             </div>
-            <div className="text-2xl font-mono font-bold text-status-info">
+            <div className="text-2xl font-mono font-bold text-text-900">
               {services.reduce((sum, s) => sum + s.request_rate, 0).toFixed(0)}
             </div>
-            <div className="h-0.5 bg-status-info bg-opacity-30 rounded-full"></div>
+            <div className="h-0.5 bg-text-700 rounded-full"></div>
           </div>
           
           <div className="text-center space-y-2">

@@ -6,7 +6,7 @@
 use crate::core::{Result, UrpoError};
 use crate::export::{ExportFormat, ExportOptions, TraceExporter};
 use crate::service_map::ServiceMapBuilder;
-use crate::storage::StorageBackend;
+use crate::storage::{StorageBackend, UnifiedStorage};
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
@@ -93,6 +93,14 @@ struct SearchQuery {
     attribute_key: Option<String>,
     /// Maximum results
     limit: Option<usize>,
+}
+
+/// Start the API server with UnifiedStorage (recommended).
+pub async fn start_server_with_storage(
+    storage: &UnifiedStorage,
+    config: ApiConfig,
+) -> Result<()> {
+    start_server(storage.as_backend(), config).await
 }
 
 /// Start the API server.

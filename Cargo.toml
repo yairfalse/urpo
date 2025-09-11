@@ -72,8 +72,10 @@ rkyv = { version = "0.7", features = ["validation", "archive_le"] }  # Zero-copy
 lz4 = "1.28"  # Fast compression for cold storage
 rocksdb = { version = "0.22", optional = true }  # Optional persistent storage
 crossbeam-channel = "0.5"  # Lock-free channels for trace ingestion
+crossbeam = "0.8"  # Full crossbeam suite including ArrayQueue
 speedy = "0.8"  # Even faster serialization than bincode
 object-pool = "0.4"  # Object pooling for performance
+once_cell = "1.19"  # Lazy static replacement
 
 # Additional performance dependencies from CLAUDE.md
 mimalloc = { version = "0.1", default-features = false }  # Ultra-fast allocator

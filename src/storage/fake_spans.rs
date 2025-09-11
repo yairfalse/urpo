@@ -44,7 +44,7 @@ impl ServiceConfig {
         operations: Vec<&str>,
     ) -> Self {
         Self {
-            name: ServiceName::new(name.to_string()).unwrap(),
+            name: ServiceName::new(name.to_string()).expect("valid service name"),
             base_rps,
             rps_variation: 0.2, // 20% variation
             base_error_rate,

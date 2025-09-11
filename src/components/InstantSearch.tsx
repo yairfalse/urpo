@@ -131,7 +131,7 @@ const InstantSearch = memo(({ onTraceSelect }: SearchProps) => {
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search traces... (⌘K)"
               className="w-full px-4 py-2 pl-10 bg-gray-800 text-white rounded-lg 
-                       border border-gray-700 focus:border-blue-500 focus:outline-none
+                       border border-surface-400 focus:border-text-700 focus:outline-none
                        placeholder-gray-500"
               autoFocus
             />
@@ -140,7 +140,7 @@ const InstantSearch = memo(({ onTraceSelect }: SearchProps) => {
             </svg>
             {isSearching && (
               <div className="absolute right-3 top-3">
-                <div className="animate-spin h-4 w-4 border-2 border-blue-500 rounded-full border-t-transparent"></div>
+                <div className="animate-spin h-4 w-4 border-2 border-text-700 rounded-full border-t-transparent"></div>
               </div>
             )}
           </div>
@@ -195,14 +195,14 @@ const InstantSearch = memo(({ onTraceSelect }: SearchProps) => {
             onMouseEnter={() => setSelectedIndex(index)}
             className={`p-3 border-b border-gray-900 cursor-pointer transition-all
               ${index === selectedIndex 
-                ? 'bg-gray-800 border-l-4 border-blue-500' 
+                ? 'bg-surface-200 border-l-4 border-text-700' 
                 : 'hover:bg-gray-900'}`}
           >
             <div className="flex items-start justify-between">
               <div className="flex-1">
                 {/* Trace Header */}
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="text-sm font-mono text-blue-400">
+                  <span className="text-sm font-mono text-text-700">
                     {trace.trace_id.substring(0, 16)}...
                   </span>
                   {trace.has_error && (
@@ -217,7 +217,7 @@ const InstantSearch = memo(({ onTraceSelect }: SearchProps) => {
 
                 {/* Service & Operation */}
                 <div className="flex items-center gap-2 text-sm">
-                  <span className="text-green-400">{trace.root_service}</span>
+                  <span className="text-gray-400">{trace.root_service}</span>
                   <span className="text-gray-600">→</span>
                   <span className="text-gray-300">{trace.root_operation}</span>
                 </div>
@@ -227,7 +227,7 @@ const InstantSearch = memo(({ onTraceSelect }: SearchProps) => {
                   <span>{trace.span_count} spans</span>
                   <span>{trace.services.length} services</span>
                   <span className={`font-medium ${
-                    trace.duration < 100 ? 'text-green-500' :
+                    trace.duration < 100 ? 'text-gray-500' :
                     trace.duration < 500 ? 'text-yellow-500' :
                     'text-red-500'
                   }`}>
@@ -241,7 +241,7 @@ const InstantSearch = memo(({ onTraceSelect }: SearchProps) => {
                 <div className={`w-2 h-2 rounded-full ${
                   trace.has_error ? 'bg-red-500' :
                   trace.duration > 1000 ? 'bg-yellow-500' :
-                  'bg-green-500'
+                  'bg-gray-500'
                 }`}></div>
               </div>
             </div>

@@ -15,7 +15,7 @@ use crate::core::{Result, Span};
 
 // Cache-line aligned span for MAXIMUM performance
 #[repr(C, align(64))]
-#[derive(Clone, Debug, Archive, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Archive, Deserialize, Serialize)]
 pub struct CompactSpan {
     pub trace_id: u128,      // 16 bytes
     pub span_id: u64,        // 8 bytes
@@ -40,60 +40,86 @@ impl CompactSpan {
     }
 }
 
-/// Ring buffer for hot traces (last 15 minutes)
+
+/// Lock-free ring buffer for hot traces following CLAUDE.md principles.
+/// Uses crossbeam channels for guaranteed safety and performance.
 pub struct HotTraceRing {
-    buffer: Vec<CompactSpan>,
+    sender: Sender<CompactSpan>,
+    receiver: Receiver<CompactSpan>,
     capacity: usize,
-    head: AtomicUsize,
-    tail: AtomicUsize,
-    size: AtomicUsize,
+    /// Fast atomic counters for metrics
+    total_pushed: AtomicU64,
+    total_dropped: AtomicU64,
 }
 
 impl HotTraceRing {
+    /// Create new ring buffer with specified capacity.
+    /// Uses crossbeam bounded channel for lock-free, safe operations.
     pub fn new(capacity: usize) -> Self {
+        let (sender, receiver) = bounded(capacity);
         Self {
-            buffer: vec![CompactSpan::default(); capacity],
+            sender,
+            receiver,
             capacity,
-            head: AtomicUsize::new(0),
-            tail: AtomicUsize::new(0),
-            size: AtomicUsize::new(0),
+            total_pushed: AtomicU64::new(0),
+            total_dropped: AtomicU64::new(0),
         }
     }
     
+    /// Push span to ring buffer. Returns false if buffer is full.
+    /// PERFORMANCE: Zero allocations, lock-free operation.
     #[inline(always)]
     pub fn push(&self, span: CompactSpan) -> bool {
-        let current_size = self.size.load(Ordering::Relaxed);
-        if current_size >= self.capacity {
-            return false; // Buffer full
+        match self.sender.try_send(span) {
+            Ok(()) => {
+                self.total_pushed.fetch_add(1, Ordering::Relaxed);
+                true
+            }
+            Err(_) => {
+                // Buffer full - this is expected behavior under load
+                self.total_dropped.fetch_add(1, Ordering::Relaxed);
+                false
+            }
         }
-        
-        let tail = self.tail.fetch_add(1, Ordering::AcqRel) % self.capacity;
-        unsafe {
-            // Safe because we control access
-            let ptr = &self.buffer[tail] as *const _ as *mut CompactSpan;
-            ptr.write(span);
-        }
-        
-        self.size.fetch_add(1, Ordering::Release);
-        true
     }
     
+    /// Pop span from ring buffer. Returns None if empty.
+    /// PERFORMANCE: Zero allocations, lock-free operation.
     #[inline(always)]
     pub fn pop(&self) -> Option<CompactSpan> {
-        let current_size = self.size.load(Ordering::Acquire);
-        if current_size == 0 {
-            return None;
-        }
-        
-        let head = self.head.fetch_add(1, Ordering::AcqRel) % self.capacity;
-        let span = unsafe {
-            // Safe because we control access
-            (&self.buffer[head] as *const CompactSpan).read()
-        };
-        
-        self.size.fetch_sub(1, Ordering::Release);
-        Some(span)
+        self.receiver.try_recv().ok()
     }
+    
+    /// Get current buffer length (approximate).
+    #[inline(always)]
+    pub fn len(&self) -> usize {
+        self.receiver.len()
+    }
+    
+    /// Check if buffer is empty.
+    #[inline(always)]
+    pub fn is_empty(&self) -> bool {
+        self.receiver.is_empty()
+    }
+    
+    /// Get performance metrics.
+    pub fn metrics(&self) -> RingBufferMetrics {
+        RingBufferMetrics {
+            capacity: self.capacity,
+            current_size: self.len(),
+            total_pushed: self.total_pushed.load(Ordering::Relaxed),
+            total_dropped: self.total_dropped.load(Ordering::Relaxed),
+        }
+    }
+}
+
+/// Ring buffer performance metrics.
+#[derive(Debug, Clone)]
+pub struct RingBufferMetrics {
+    pub capacity: usize,
+    pub current_size: usize,
+    pub total_pushed: u64,
+    pub total_dropped: u64,
 }
 
 /// Storage mode configuration
@@ -449,21 +475,6 @@ impl StorageEngine {
     }
 }
 
-impl Default for CompactSpan {
-    fn default() -> Self {
-        Self {
-            trace_id: 0,
-            span_id: 0,
-            parent_id: 0,
-            service_id: 0,
-            operation_id: 0,
-            start_time_ns: 0,
-            duration_us: 0,
-            status_flags: 0,
-            _padding: [0; 15],
-        }
-    }
-}
 
 #[cfg(test)]
 mod tests {
