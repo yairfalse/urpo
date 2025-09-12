@@ -3,7 +3,7 @@
 //! This module automatically analyzes traces to build service dependency graphs,
 //! showing how services call each other, with performance and error metrics.
 
-use crate::core::{Result, ServiceName, Span, TraceId, UrpoError};
+use crate::core::{Result, ServiceName, Span, TraceId};
 use crate::storage::StorageBackend;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -365,26 +365,26 @@ mod tests {
         
         let frontend_span = SpanBuilder::default()
             .trace_id(trace_id.clone())
-            .span_id("span-1".into())
-            .service_name("frontend".into())
+            .span_id(SpanId::new("span-1".to_string()).unwrap())
+            .service_name(ServiceName::new("frontend".to_string()).unwrap())
             .operation_name("GET /api".to_string())
             .build()
             .unwrap();
         
         let backend_span = SpanBuilder::default()
             .trace_id(trace_id.clone())
-            .span_id("span-2".into())
-            .parent_span_id(Some("span-1".into()))
-            .service_name("backend".into())
+            .span_id(SpanId::new("span-2".to_string()).unwrap())
+            .parent_span_id(SpanId::new("span-1".to_string()).unwrap())
+            .service_name(ServiceName::new("backend".to_string()).unwrap())
             .operation_name("process_request".to_string())
             .build()
             .unwrap();
         
         let db_span = SpanBuilder::default()
             .trace_id(trace_id.clone())
-            .span_id("span-3".into())
-            .parent_span_id(Some("span-2".into()))
-            .service_name("database".into())
+            .span_id(SpanId::new("span-3".to_string()).unwrap())
+            .parent_span_id(SpanId::new("span-2".to_string()).unwrap())
+            .service_name(ServiceName::new("database".to_string()).unwrap())
             .operation_name("query".to_string())
             .build()
             .unwrap();
