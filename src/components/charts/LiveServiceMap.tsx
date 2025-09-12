@@ -90,6 +90,9 @@ const LiveServiceMap = () => {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     
+    // Check if animation should continue (component still mounted)
+    if (!animationRef.current) return;
+    
     // Clear with dark background
     ctx.fillStyle = '#0a0a0a';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -146,7 +149,7 @@ const LiveServiceMap = () => {
       
       // Node border
       ctx.strokeStyle = service.healthy ? '#6B7280' : '#ff3366';
-      ctx.lineWidth = service === hoveredService ? 3 : 1;
+      ctx.lineWidth = service.id === hoveredService ? 3 : 1;
       ctx.strokeRect(service.x - size, service.y - size/2, size * 2, size);
       
       // Reset shadow
@@ -223,12 +226,29 @@ const LiveServiceMap = () => {
     updateMetrics();
     const interval = setInterval(updateMetrics, 1000); // Update every second
     
-    animationRef.current = requestAnimationFrame(animate);
+    // Start animation loop
+    const startAnimation = () => {
+      animationRef.current = requestAnimationFrame(animate);
+    };
+    
+    startAnimation();
     
     return () => {
+      // Clear interval
       clearInterval(interval);
+      
+      // Cancel animation frame
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
+        animationRef.current = undefined;
+      }
+      
+      // Clear canvas
+      if (canvasRef.current) {
+        const ctx = canvasRef.current.getContext('2d');
+        if (ctx) {
+          ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+        }
       }
     };
   }, [updateMetrics, animate]);

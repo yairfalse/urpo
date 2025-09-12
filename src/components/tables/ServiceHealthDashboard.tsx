@@ -1,6 +1,6 @@
 import { memo, useMemo } from 'react';
 import { Network } from 'lucide-react';
-import { ServiceMetrics } from '../types';
+import { ServiceMetrics } from '../../types';
 
 interface Props {
   services: ServiceMetrics[];
@@ -221,7 +221,7 @@ const ServiceHealthDashboard = memo(({ services }: Props) => {
               <span className="text-[10px] text-text-500 font-mono uppercase tracking-wide">Avg Error</span>
             </div>
             <div className="text-2xl font-mono font-bold text-status-warning">
-              {(services.reduce((sum, s) => sum + s.error_rate, 0) / services.length).toFixed(2)}%
+              {services.length > 0 ? (services.reduce((sum, s) => sum + s.error_rate, 0) / services.length).toFixed(2) : '0.00'}%
             </div>
             <div className="h-0.5 bg-status-warning bg-opacity-30 rounded-full"></div>
           </div>
@@ -232,7 +232,7 @@ const ServiceHealthDashboard = memo(({ services }: Props) => {
               <span className="text-[10px] text-text-500 font-mono uppercase tracking-wide">Max P99</span>
             </div>
             <div className="text-2xl font-mono font-bold text-status-error">
-              {Math.max(...services.map(s => s.latency_p99))}ms
+              {services.length > 0 ? Math.max(...services.map(s => s.latency_p99)) : 0}ms
             </div>
             <div className="h-0.5 bg-status-error bg-opacity-30 rounded-full"></div>
           </div>

@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import * as d3 from 'd3';
 import { motion } from 'framer-motion';
 import { Activity, AlertCircle, CheckCircle, Clock, Network } from 'lucide-react';
+import { ServiceMetrics, TraceInfo } from '../../types';
 
 interface ServiceNode {
   id: string;
@@ -22,21 +23,39 @@ interface ServiceLink {
 }
 
 interface ServiceGraphProps {
-  services: any[];
-  traces: any[];
+  services: ServiceMetrics[];
+  traces: TraceInfo[];
 }
+
+// REMOVED DUPLICATE TYPE DEFINITIONS - Now using centralized types from '../../types'
+
+// PERFORMANCE: Utility functions outside component to prevent recreating
+const inferServiceType = (name: string): ServiceNode['type'] => {
+  if (name.includes('db') || name.includes('postgres') || name.includes('mysql')) return 'database';
+  if (name.includes('redis') || name.includes('cache')) return 'cache';
+  if (name.includes('api') || name.includes('external')) return 'external';
+  return 'service';
+};
+
+const getServiceIcon = (type: ServiceNode['type']): string => {
+  switch (type) {
+    case 'database': return 'DB';
+    case 'cache': return 'C';
+    case 'external': return 'E';
+    default: return 'S';
+  }
+};
 
 export default function ServiceGraph({ services, traces }: ServiceGraphProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
-  const [graphData, setGraphData] = useState<{ nodes: ServiceNode[], links: ServiceLink[] }>({ 
-    nodes: [], 
-    links: [] 
-  });
 
-  // Build graph data from services and traces
-  useEffect(() => {
+  // PERFORMANCE: Memoize expensive data transformations
+  const graphData = useMemo(() => {
+    // Fast path: early return if no data
+    if (!services.length) return { nodes: [], links: [] };
+
     const nodes: ServiceNode[] = services.map(service => ({
       id: service.name,
       name: service.name,
@@ -47,18 +66,18 @@ export default function ServiceGraph({ services, traces }: ServiceGraphProps) {
       type: inferServiceType(service.name)
     }));
 
-    // Extract service relationships from traces
+    // Extract service relationships from traces - optimized for performance
     const linkMap = new Map<string, ServiceLink>();
     
-    traces.forEach(trace => {
-      if (trace.services && trace.services.length > 1) {
+    for (const trace of traces) {
+      if (trace.services?.length > 1) {
         for (let i = 0; i < trace.services.length - 1; i++) {
           const key = `${trace.services[i]}->${trace.services[i + 1]}`;
           const existing = linkMap.get(key);
           
           if (existing) {
-            existing.requestRate += 1;
-            if (trace.has_error) existing.errorRate += 1;
+            existing.requestRate++;
+            if (trace.has_error) existing.errorRate++;
           } else {
             linkMap.set(key, {
               source: trace.services[i],
@@ -70,189 +89,199 @@ export default function ServiceGraph({ services, traces }: ServiceGraphProps) {
           }
         }
       }
-    });
+    }
 
-    setGraphData({
+    return {
       nodes,
       links: Array.from(linkMap.values())
-    });
+    };
   }, [services, traces]);
 
-  // D3 Force Simulation
+  // PERFORMANCE: Stable drag handlers with proper typing
+  const dragHandlers = useMemo(() => {
+    const dragstarted = (event: d3.D3DragEvent<SVGGElement, ServiceNode, unknown>, d: ServiceNode & d3.SimulationNodeDatum, simulation: d3.Simulation<ServiceNode, undefined>) => {
+      if (!event.active) simulation.alphaTarget(0.3).restart();
+      d.fx = d.x;
+      d.fy = d.y;
+    };
+
+    const dragged = (event: d3.D3DragEvent<SVGGElement, ServiceNode, unknown>, d: ServiceNode & d3.SimulationNodeDatum) => {
+      d.fx = event.x;
+      d.fy = event.y;
+    };
+
+    const dragended = (event: d3.D3DragEvent<SVGGElement, ServiceNode, unknown>, d: ServiceNode & d3.SimulationNodeDatum, simulation: d3.Simulation<ServiceNode, undefined>) => {
+      if (!event.active) simulation.alphaTarget(0);
+      d.fx = null;
+      d.fy = null;
+    };
+
+    return { dragstarted, dragged, dragended };
+  }, []);
+
+  // PERFORMANCE: Memoized color functions
+  const getNodeColor = useCallback((health: ServiceNode['health']) => {
+    switch (health) {
+      case 'critical': return '#dc2626';
+      case 'degraded': return '#f97316';
+      default: return '#6B7280';
+    }
+  }, []);
+
+  const getLinkColor = useCallback((errorRate: number) => {
+    if (errorRate > 0.5) return '#ef4444';
+    if (errorRate > 0.1) return '#f59e0b';
+    return '#6B7280';
+  }, []);
+
+  // PERFORMANCE: Extract D3 setup into separate effects for better control
   useEffect(() => {
     if (!svgRef.current || graphData.nodes.length === 0) return;
 
+    const svg = d3.select(svgRef.current);
     const width = svgRef.current.clientWidth;
     const height = svgRef.current.clientHeight;
 
-    // Clear previous graph
-    d3.select(svgRef.current).selectAll('*').remove();
+    // Clear previous graph - efficient cleanup
+    svg.selectAll('*').remove();
 
-    const svg = d3.select(svgRef.current);
-    
-    // Create container groups
+    // Create container with zoom
     const g = svg.append('g');
-    
-    // Add zoom behavior
-    const zoom = (d3 as any).zoom()
+    const zoom = d3.zoom()
       .scaleExtent([0.5, 3])
-      .on('zoom', (event: any) => {
+      .on('zoom', (event) => {
         g.attr('transform', event.transform);
       });
 
     svg.call(zoom as any);
 
-    // Create force simulation
-    const simulation = (d3 as any).forceSimulation(graphData.nodes as any)
-      .force('link', (d3 as any).forceLink(graphData.links)
-        .id((d: any) => d.id)
-        .distance(150))
-      .force('charge', (d3 as any).forceManyBody().strength(-500))
-      .force('center', (d3 as any).forceCenter(width / 2, height / 2))
-      .force('collision', (d3 as any).forceCollide().radius(40));
+    // Create optimized force simulation with proper types
+    const simulation = d3.forceSimulation<ServiceNode>(graphData.nodes)
+      .force('link', d3.forceLink<ServiceNode, ServiceLink>(graphData.links)
+        .id((d) => d.id)
+        .distance(150)
+        .strength(0.5))
+      .force('charge', d3.forceManyBody<ServiceNode>().strength(-500))
+      .force('center', d3.forceCenter(width / 2, height / 2))
+      .force('collision', d3.forceCollide<ServiceNode>().radius(45));
 
-    // Create arrow markers for directed edges
-    svg.append('defs').selectAll('marker')
-      .data(['healthy', 'degraded', 'critical'])
-      .enter().append('marker')
-      .attr('id', d => `arrow-${d}`)
-      .attr('viewBox', '0 -5 10 10')
-      .attr('refX', 25)
-      .attr('refY', 0)
-      .attr('markerWidth', 6)
-      .attr('markerHeight', 6)
-      .attr('orient', 'auto')
-      .append('path')
-      .attr('d', 'M0,-5L10,0L0,5')
-      .attr('fill', d => 
-        d === 'critical' ? '#ef4444' : 
-        d === 'degraded' ? '#f59e0b' : 
-        '#6B7280'
-      );
+    // Arrow markers
+    const defs = svg.append('defs');
+    ['healthy', 'degraded', 'critical'].forEach(status => {
+      defs.append('marker')
+        .attr('id', `arrow-${status}`)
+        .attr('viewBox', '0 -5 10 10')
+        .attr('refX', 25)
+        .attr('refY', 0)
+        .attr('markerWidth', 6)
+        .attr('markerHeight', 6)
+        .attr('orient', 'auto')
+        .append('path')
+        .attr('d', 'M0,-5L10,0L0,5')
+        .attr('fill', 
+          status === 'critical' ? '#ef4444' : 
+          status === 'degraded' ? '#f59e0b' : '#6B7280'
+        );
+    });
 
-    // Create links
+    // Links with optimized styling
     const link = g.append('g')
+      .attr('class', 'links')
       .selectAll('line')
       .data(graphData.links)
       .enter().append('line')
-      .attr('stroke', d => 
-        d.errorRate > 0.5 ? '#ef4444' : 
-        d.errorRate > 0.1 ? '#f59e0b' : 
-        '#6B7280'
-      )
-      .attr('stroke-opacity', 0.6)
+      .attr('stroke', d => getLinkColor(d.errorRate))
+      .attr('stroke-opacity', 0.7)
       .attr('stroke-width', d => Math.max(1, Math.min(5, d.requestRate / 10)))
       .attr('marker-end', d => 
         `url(#arrow-${d.errorRate > 0.5 ? 'critical' : d.errorRate > 0.1 ? 'degraded' : 'healthy'})`
       );
 
-    // Create node groups
+    // Node groups with event handlers
     const node = g.append('g')
+      .attr('class', 'nodes')
       .selectAll('g')
       .data(graphData.nodes)
       .enter().append('g')
       .attr('cursor', 'pointer')
-      .on('click', (_event: any, d: any) => setSelectedNode(d.id))
-      .on('mouseenter', (_event: any, d: any) => setHoveredNode(d.id))
+      .on('click', (event, d) => setSelectedNode(d.id))
+      .on('mouseenter', (event, d) => setHoveredNode(d.id))
       .on('mouseleave', () => setHoveredNode(null))
-      .call((d3 as any).drag()
-        .on('start', dragstarted)
-        .on('drag', dragged)
-        .on('end', dragended) as any);
+      .call(d3.drag()
+        .on('start', (event, d) => dragHandlers.dragstarted(event, d, simulation))
+        .on('drag', dragHandlers.dragged)
+        .on('end', (event, d) => dragHandlers.dragended(event, d, simulation)) as any);
 
-    // Add circles for nodes
+    // Node circles
     node.append('circle')
       .attr('r', d => 20 + Math.min(20, d.requestRate / 100))
-      .attr('fill', d => {
-        if (d.health === 'critical') return '#dc2626';
-        if (d.health === 'degraded') return '#f97316';
-        return '#6B7280';
-      })
-      .attr('stroke', '#fff')
+      .attr('fill', d => getNodeColor(d.health))
+      .attr('stroke', '#ffffff')
       .attr('stroke-width', 2);
 
-    // Add icons for service types
+    // Service type icons
     node.append('text')
-      .attr('font-family', 'lucide')
-      .attr('font-size', '16px')
+      .attr('font-family', 'monospace')
+      .attr('font-size', '12px')
       .attr('fill', 'white')
       .attr('text-anchor', 'middle')
-      .attr('dy', '0.3em')
+      .attr('dominant-baseline', 'middle')
       .text(d => getServiceIcon(d.type));
 
-    // Add labels
+    // Node labels
     node.append('text')
       .attr('x', 0)
-      .attr('y', d => 30 + Math.min(20, d.requestRate / 100))
+      .attr('y', d => 35 + Math.min(20, d.requestRate / 100))
       .attr('text-anchor', 'middle')
       .attr('fill', '#e5e7eb')
       .attr('font-size', '12px')
+      .attr('font-weight', '500')
       .text(d => d.name);
 
-    // Add metrics on hover
-    node.append('text')
+    // Performance metrics (show on hover)
+    const hoverText = node.append('text')
       .attr('x', 0)
-      .attr('y', d => 45 + Math.min(20, d.requestRate / 100))
+      .attr('y', d => 50 + Math.min(20, d.requestRate / 100))
       .attr('text-anchor', 'middle')
       .attr('fill', '#9ca3af')
       .attr('font-size', '10px')
       .attr('opacity', 0)
-      .text(d => `${d.requestRate.toFixed(0)} req/s`)
-      .transition()
-      .duration(200)
-      .attr('opacity', d => hoveredNode === d.id ? 1 : 0);
+      .text(d => `${d.requestRate.toFixed(0)} req/s`);
 
-    // Update positions on simulation tick
+    // Simulation tick handler with proper types
     simulation.on('tick', () => {
       link
-        .attr('x1', (d: any) => d.source.x)
-        .attr('y1', (d: any) => d.source.y)
-        .attr('x2', (d: any) => d.target.x)
-        .attr('y2', (d: any) => d.target.y);
+        .attr('x1', (d) => (d.source as ServiceNode & d3.SimulationNodeDatum).x || 0)
+        .attr('y1', (d) => (d.source as ServiceNode & d3.SimulationNodeDatum).y || 0)
+        .attr('x2', (d) => (d.target as ServiceNode & d3.SimulationNodeDatum).x || 0)
+        .attr('y2', (d) => (d.target as ServiceNode & d3.SimulationNodeDatum).y || 0);
 
-      node.attr('transform', (d: any) => `translate(${d.x},${d.y})`);
+      node.attr('transform', (d) => `translate(${d.x || 0},${d.y || 0})`);
     });
 
-    // Drag functions
-    function dragstarted(event: any, d: any) {
-      if (!event.active) simulation.alphaTarget(0.3).restart();
-      d.fx = d.x;
-      d.fy = d.y;
-    }
-
-    function dragged(event: any, d: any) {
-      d.fx = event.x;
-      d.fy = event.y;
-    }
-
-    function dragended(event: any, d: any) {
-      if (!event.active) simulation.alphaTarget(0);
-      d.fx = null;
-      d.fy = null;
-    }
-
+    // CRITICAL: Proper cleanup to prevent memory leaks
     return () => {
       simulation.stop();
+      simulation.on('tick', null);
     };
-  }, [graphData, hoveredNode]);
+  }, [graphData, dragHandlers, getNodeColor, getLinkColor]);
 
-  const inferServiceType = (name: string): ServiceNode['type'] => {
-    if (name.includes('db') || name.includes('postgres') || name.includes('mysql')) return 'database';
-    if (name.includes('redis') || name.includes('cache')) return 'cache';
-    if (name.includes('api') || name.includes('external')) return 'external';
-    return 'service';
-  };
+  // PERFORMANCE: Separate effect for hover state updates
+  useEffect(() => {
+    if (!svgRef.current) return;
 
-  const getServiceIcon = (type: ServiceNode['type']) => {
-    switch (type) {
-      case 'database': return 'DB';
-      case 'cache': return 'CACHE';
-      case 'external': return 'EXT';
-      default: return 'SVC';
-    }
-  };
+    d3.select(svgRef.current)
+      .selectAll('.nodes text:last-child')
+      .transition()
+      .duration(150)
+      .attr('opacity', (d: ServiceNode) => hoveredNode === d.id ? 1 : 0);
+  }, [hoveredNode]);
 
-  const selectedService = graphData.nodes.find(n => n.id === selectedNode);
+  // PERFORMANCE: Memoize selected service lookup
+  const selectedService = useMemo(
+    () => graphData.nodes.find(n => n.id === selectedNode),
+    [graphData.nodes, selectedNode]
+  );
 
   return (
     <div className="relative h-full bg-surface-50 border border-surface-300 rounded-lg overflow-hidden">
@@ -271,7 +300,7 @@ export default function ServiceGraph({ services, traces }: ServiceGraphProps) {
             {/* Legend */}
             <div className="flex items-center gap-3 text-xs">
               <div className="flex items-center gap-1">
-                <div className="w-3 h-3 rounded-full bg-gray-500"></div>
+                <div className="w-3 h-3 rounded-full bg-surface-400"></div>
                 <span className="text-text-500">Healthy</span>
               </div>
               <div className="flex items-center gap-1">
@@ -304,7 +333,7 @@ export default function ServiceGraph({ services, traces }: ServiceGraphProps) {
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-text-900 font-semibold flex items-center gap-2">
               {selectedService.health === 'healthy' ? (
-                <CheckCircle className="w-4 h-4 text-gray-500" />
+                <CheckCircle className="w-4 h-4 text-text-500" />
               ) : selectedService.health === 'degraded' ? (
                 <Clock className="w-4 h-4 text-amber-500" />
               ) : (
@@ -314,7 +343,7 @@ export default function ServiceGraph({ services, traces }: ServiceGraphProps) {
             </h3>
             <button
               onClick={() => setSelectedNode(null)}
-              className="text-slate-500 hover:text-white"
+              className="text-text-500 hover:text-text-900"
             >
               ✕
             </button>

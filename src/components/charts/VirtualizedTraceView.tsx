@@ -1,5 +1,5 @@
 import { memo, useMemo, useState, useCallback, useRef, useEffect } from 'react';
-import { TraceInfo, SpanData } from '../types';
+import { TraceInfo, SpanData } from '../../types';
 
 interface Props {
   trace: TraceInfo;
@@ -198,7 +198,7 @@ const VirtualizedTraceView = memo(({ trace, spans }: Props) => {
                           e.stopPropagation();
                           toggleExpand(span.span_id);
                         }}
-                        className="mr-1 text-slate-500 hover:text-slate-300"
+                        className="mr-1 text-text-500 hover:text-text-700"
                       >
                         {isExpanded ? '▼' : '▶'}
                       </button>

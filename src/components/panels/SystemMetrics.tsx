@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { SystemMetrics as SystemMetricsType } from '../types';
+import { SystemMetrics as SystemMetricsType } from '../../types';
 
 interface Props {
   metrics: SystemMetricsType;

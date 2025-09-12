@@ -1,7 +1,7 @@
 // INSTANT SEARCH - FASTER THAN YOUR BRAIN CAN PROCESS
 import React, { useState, useCallback, useEffect, useMemo, memo } from 'react';
 import { invoke } from '@tauri-apps/api/tauri';
-import { TraceInfo } from '../types';
+import { TraceInfo } from '../../types';
 
 interface SearchProps {
   onTraceSelect: (trace: TraceInfo) => void;
