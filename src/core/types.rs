@@ -136,6 +136,27 @@ impl fmt::Display for ServiceName {
     }
 }
 
+/// Type of span according to OpenTelemetry specification
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum SpanKind {
+    /// Default span type
+    Internal,
+    /// Synchronous outbound calls
+    Client,
+    /// Synchronous inbound calls
+    Server,
+    /// Asynchronous producer
+    Producer,
+    /// Asynchronous consumer
+    Consumer,
+}
+
+impl Default for SpanKind {
+    fn default() -> Self {
+        SpanKind::Internal
+    }
+}
+
 /// Status of a span execution
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum SpanStatus {
@@ -186,6 +207,8 @@ pub struct Span {
     pub start_time: SystemTime,
     /// How long the span took to complete
     pub duration: Duration,
+    /// Type/kind of the span
+    pub kind: SpanKind,
     /// Status of the span execution
     pub status: SpanStatus,
     /// Key-value attributes associated with the span
@@ -243,6 +266,7 @@ pub struct SpanBuilder {
     operation_name: Option<String>,
     start_time: Option<SystemTime>,
     duration: Option<Duration>,
+    kind: Option<SpanKind>,
     status: Option<SpanStatus>,
     attributes: HashMap<String, String>,
     tags: HashMap<String, String>,
@@ -285,6 +309,11 @@ impl SpanBuilder {
         self
     }
     
+    pub fn kind(mut self, kind: SpanKind) -> Self {
+        self.kind = Some(kind);
+        self
+    }
+    
     pub fn status(mut self, status: SpanStatus) -> Self {
         self.status = Some(status);
         self
@@ -316,6 +345,7 @@ impl SpanBuilder {
             operation_name: String::new(),
             start_time: SystemTime::UNIX_EPOCH,
             duration: Duration::from_millis(0),
+            kind: SpanKind::default(),
             status: SpanStatus::Unknown,
             attributes: HashMap::new(),
             tags: HashMap::new(),
@@ -332,6 +362,7 @@ impl SpanBuilder {
             operation_name: self.operation_name.ok_or_else(|| UrpoError::InvalidSpan("operation_name is required".to_string()))?,
             start_time: self.start_time.unwrap_or_else(SystemTime::now),
             duration: self.duration.unwrap_or(Duration::from_millis(0)),
+            kind: self.kind.unwrap_or(SpanKind::Internal),
             status: self.status.unwrap_or(SpanStatus::Unknown),
             attributes: self.attributes,
             tags: self.tags,

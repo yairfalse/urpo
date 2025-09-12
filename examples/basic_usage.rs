@@ -8,6 +8,7 @@
 
 use chrono::Utc;
 use std::collections::HashMap;
+use std::time::{Duration, SystemTime};
 use tokio::time::sleep;
 use urpo_lib::core::{Config, ServiceName, Span, SpanId, SpanKind, SpanStatus, TraceId};
 use urpo_lib::storage::{InMemoryStorage, StorageBackend};
@@ -29,26 +30,31 @@ fn generate_test_span(
     attributes.insert("http.url".to_string(), format!("/api/{}", operation));
     attributes.insert("http.status_code".to_string(), if is_error { "500" } else { "200" }.to_string());
     
-    Span {
-        span_id: SpanId::new(format!("{:0>16}", span_num)).unwrap(),
-        trace_id: TraceId::new(format!("{:0>32}", trace_num)).unwrap(),
-        parent_span_id: if span_num > 1 {
-            Some(SpanId::new(format!("{:0>16}", span_num - 1)).unwrap())
-        } else {
-            None
-        },
-        service_name: ServiceName::new(service.to_string()).unwrap(),
-        operation_name: operation.to_string(),
-        kind: if span_num == 1 { SpanKind::Server } else { SpanKind::Client },
-        start_time,
-        end_time,
-        status: if is_error {
-            SpanStatus::Error("Internal Server Error".to_string())
-        } else {
-            SpanStatus::Ok
-        },
-        attributes,
-        events: Vec::new(),
+    {
+        let mut builder = urpo_lib::core::SpanBuilder::default()
+            .span_id(SpanId::new(format!("{:0>16}", span_num)).unwrap())
+            .trace_id(TraceId::new(format!("{:0>32}", trace_num)).unwrap())
+            .service_name(ServiceName::new(service.to_string()).unwrap())
+            .operation_name(operation.to_string())
+            .kind(if span_num == 1 { SpanKind::Server } else { SpanKind::Client })
+            .start_time(start_time.into())
+            .duration(Duration::from_millis(duration_ms as u64))
+            .status(if is_error {
+                SpanStatus::Error("Internal Server Error".to_string())
+            } else {
+                SpanStatus::Ok
+            });
+            
+        if span_num > 1 {
+            builder = builder.parent_span_id(SpanId::new(format!("{:0>16}", span_num - 1)).unwrap());
+        }
+        
+        builder.build()
+            .map(|mut span| {
+                span.attributes = attributes;
+                span
+            })
+            .unwrap()
     }
 }
 
@@ -62,21 +68,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!("Starting Urpo basic usage example");
     
     // Create configuration
-    let config = Config {
-        grpc_port: 4317,
-        http_port: 4318,
-        max_memory_mb: 128,
-        max_traces: 1000,
-        sampling_rate: 1.0,
-        debug: false,
-        retention_seconds: 3600,
-    };
-    
-    config.validate()?;
-    tracing::info!("Configuration validated");
+    let config = Config::default();
+    tracing::info!("Configuration loaded");
     
     // Create storage backend
-    let storage = InMemoryStorage::new(config.max_traces);
+    let storage = InMemoryStorage::new(1000);
     tracing::info!("Storage backend created");
     
     // Simulate receiving spans from different services
@@ -122,12 +118,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!("\nService Metrics:");
     for metric in metrics {
         tracing::info!(
-            "  {} - Spans: {}, Errors: {}, Error Rate: {:.2}%, Avg Duration: {}ms",
-            metric.service_name.as_str(),
-            metric.span_count,
-            metric.error_count,
-            metric.error_rate(),
-            metric.avg_duration_ms
+            "  {} - Rate: {:.2}/s, Errors: {:.2}%, P95: {}ms",
+            metric.name.as_str(),
+            metric.request_rate,
+            metric.error_rate,
+            metric.latency_p95.as_millis()
         );
     }
     
@@ -140,27 +135,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "  {} - {} [{}ms] - Status: {:?}",
             span.service_name.as_str(),
             span.operation_name,
-            span.duration().as_millis(),
+            span.duration.as_millis(),
             span.status
         );
     }
     
     // Query recent spans for a specific service
     let service_name = ServiceName::new("api-gateway".to_string()).unwrap();
-    let service_spans = storage.get_service_spans(&service_name, 5).await?;
+    let service_spans = storage.get_service_spans(&service_name, SystemTime::now() - Duration::from_secs(3600)).await?;
     tracing::info!("\nRecent spans for service {}:", service_name.as_str());
     for span in service_spans {
         tracing::info!(
             "  Trace {} - {} [{}ms]",
             &span.trace_id.as_str()[..8],
             span.operation_name,
-            span.duration().as_millis()
+            span.duration.as_millis()
         );
     }
     
     // Demonstrate cleanup
     tracing::info!("\nRunning cleanup (retention: 1 hour)...");
-    let removed = storage.cleanup(chrono::Duration::hours(1)).await?;
+    let removed = storage.enforce_limits().await?;
     tracing::info!("Removed {} old spans", removed);
     
     // Final statistics
