@@ -19,9 +19,9 @@ src/bindings.ts linguist-generated
 *.md linguist-documentation
 docs/** linguist-documentation
 
-# This is primarily a Rust project
-* linguist-detectable=false
+# This is primarily a Rust project with TypeScript frontend
 *.rs linguist-detectable=true
+*.ts linguist-detectable=true
+*.tsx linguist-detectable=true
 *.toml linguist-detectable=true
 Cargo.toml linguist-detectable=true
-Cargo.lock linguist-detectable=true
