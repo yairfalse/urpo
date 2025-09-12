@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback, memo } from 'react';
-import ServiceHealthDashboard from './components/ServiceHealthDashboard';
-import TraceExplorer from './components/TraceExplorer';
-import SystemMetrics from './components/SystemMetrics';
-import ServiceGraph from './components/ServiceGraph';
-import ServiceMap from './components/ServiceMap';
-import FlowTable from './components/FlowTable';
+import ServiceHealthDashboard from './components/tables/ServiceHealthDashboard';
+import TraceExplorer from './components/tables/TraceExplorer';
+import SystemMetrics from './components/panels/SystemMetrics';
+import ServiceGraph from './components/charts/ServiceGraph';
+import ServiceMap from './components/tables/ServiceMap';
+import FlowTable from './components/tables/FlowTable';
 import { ServiceMetrics, TraceInfo, SystemMetrics as SystemMetricsType, ViewMode, NavigationItem } from './types';
 import { Network, Activity, BarChart3, Layers, GitBranch, Table, Share2 } from 'lucide-react';
 import { isTauriAvailable, safeTauriInvoke } from './utils/tauri';
@@ -13,6 +13,7 @@ import {
   getUpdatedMockSystemMetrics, 
   mockTraces 
 } from './services/mockData';
+import { POLLING } from './constants/ui';
 
 // PERFORMANCE: Memoize the entire app to prevent unnecessary re-renders
 const App = memo(() => {
@@ -134,8 +135,8 @@ const App = memo(() => {
     // Initial load
     updateMetrics();
 
-    // Poll every second for real-time updates
-    const interval = setInterval(updateMetrics, 1000);
+    // Poll for real-time updates using configured interval
+    const interval = setInterval(updateMetrics, POLLING.METRICS_INTERVAL_MS);
 
     return () => clearInterval(interval);
   }, [loading, updateMetrics]);

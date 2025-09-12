@@ -1,7 +1,7 @@
 import { memo, useState, useCallback, useMemo } from 'react';
-import { TraceInfo, SpanData } from '../types';
-import { isTauriAvailable, safeTauriInvoke } from '../utils/tauri';
-import VirtualizedTraceView from './VirtualizedTraceView';
+import { TraceInfo, SpanData } from '../../types';
+import { isTauriAvailable, safeTauriInvoke } from '../../utils/tauri';
+import VirtualizedTraceView from '../charts/VirtualizedTraceView';
 
 interface Props {
   traces: TraceInfo[];

@@ -14,6 +14,7 @@ import {
   Minus
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { TraceInfo } from '../../types';
 
 interface Flow {
   id: string;
@@ -39,7 +40,7 @@ interface Flow {
 }
 
 interface FlowTableProps {
-  traces: any[];
+  traces: TraceInfo[];
   onRefresh?: () => void;
 }
 
@@ -93,10 +94,10 @@ export default function FlowTable({ traces, onRefresh }: FlowTableProps) {
 
   const getVerdictColor = (verdict: Flow['verdict']) => {
     switch (verdict) {
-      case 'FORWARDED': return 'text-gray-400';
+      case 'FORWARDED': return 'text-text-500';
       case 'DROPPED': return 'text-amber-400';
       case 'ERROR': return 'text-red-400';
-      default: return 'text-slate-400';
+      default: return 'text-text-500';
     }
   };
 
@@ -110,9 +111,9 @@ export default function FlowTable({ traces, onRefresh }: FlowTableProps) {
   };
 
   const getLatencyTrend = (latency: number) => {
-    if (latency < 50) return <TrendingDown className="w-3 h-3 text-gray-400" />;
+    if (latency < 50) return <TrendingDown className="w-3 h-3 text-text-500" />;
     if (latency > 200) return <TrendingUp className="w-3 h-3 text-red-400" />;
-    return <Minus className="w-3 h-3 text-slate-400" />;
+    return <Minus className="w-3 h-3 text-text-500" />;
   };
 
   const formatBytes = (bytes: number) => {
@@ -128,7 +129,7 @@ export default function FlowTable({ traces, onRefresh }: FlowTableProps) {
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse"></div>
+              <div className="w-2 h-2 bg-text-700 rounded-full animate-pulse"></div>
               <h2 className="text-lg font-semibold text-text-900">Trace Flows</h2>
             </div>
             <span className="text-xs text-text-500">
@@ -186,7 +187,7 @@ export default function FlowTable({ traces, onRefresh }: FlowTableProps) {
           {/* Statistics */}
           <div className="ml-auto flex items-center gap-4 text-xs">
             <div className="flex items-center gap-2">
-              <CheckCircle className="w-3 h-3 text-gray-400" />
+              <CheckCircle className="w-3 h-3 text-text-500" />
               <span className="text-text-500">
                 {flows.filter(f => f.verdict === 'FORWARDED').length}
               </span>

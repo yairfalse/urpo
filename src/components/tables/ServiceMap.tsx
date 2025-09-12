@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, memo } from 'react';
-import { ServiceMap as ServiceMapType, ServiceNode, ServiceEdge, ServiceMapProps, ServiceMapViewMode } from '../types';
-import { isTauriAvailable, getServiceMap } from '../utils/tauri';
+import { ServiceMap as ServiceMapType, ServiceNode, ServiceEdge, ServiceMapProps, ServiceMapViewMode } from '../../types';
+import { isTauriAvailable, getServiceMap } from '../../utils/tauri';
 
 const ServiceMap = memo(({ className = '' }: ServiceMapProps) => {
   const [serviceMap, setServiceMap] = useState<ServiceMapType | null>(null);
