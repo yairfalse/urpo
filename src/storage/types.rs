@@ -83,6 +83,16 @@ pub struct CleanupConfig {
     pub aggressive_cleanup: bool,
     /// Minimum number of spans to keep per service.
     pub min_spans_per_service: usize,
+    /// Warning threshold for memory usage (0.0-1.0).
+    pub warning_threshold: f64,
+    /// Critical threshold for memory usage (0.0-1.0).
+    pub critical_threshold: f64,
+    /// Emergency threshold for memory usage (0.0-1.0).
+    pub emergency_threshold: f64,
+    /// How long to retain traces.
+    pub retention_period: Duration,
+    /// How often to run cleanup operations.
+    pub cleanup_interval: Duration,
 }
 
 impl Default for CleanupConfig {
@@ -93,6 +103,11 @@ impl Default for CleanupConfig {
             max_age: Duration::from_secs(3600), // 1 hour
             aggressive_cleanup: true,
             min_spans_per_service: 100,
+            warning_threshold: 0.7,
+            critical_threshold: 0.85,
+            emergency_threshold: 0.95,
+            retention_period: Duration::from_secs(24 * 3600), // 24 hours
+            cleanup_interval: Duration::from_secs(60), // 1 minute
         }
     }
 }
