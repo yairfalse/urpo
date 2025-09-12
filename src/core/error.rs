@@ -67,6 +67,9 @@ pub enum UrpoError {
     
     #[error("Authentication error: {0}")]
     Auth(String),
+    
+    #[error("Buffer full: cannot store more items")]
+    BufferFull,
 }
 
 /// Result type alias for Urpo operations
@@ -141,6 +144,7 @@ impl UrpoError {
             Self::ChannelSend | Self::ChannelReceive => "channel",
             Self::Timeout { .. } => "timeout",
             Self::Auth(_) => "auth",
+            Self::BufferFull => "buffer",
         }
     }
 }
