@@ -28,16 +28,8 @@ pub async fn calculate_service_metrics(
 ) -> Result<Vec<ServiceMetrics>> {
     let window_start = SystemTime::now() - Duration::from_secs(METRIC_WINDOW_SECS);
     
-    // Get all unique service names from storage
-    // In a real implementation, we'd have a method to list services
-    // For now, we'll use the known service names
-    let service_names = vec![
-        ServiceName::new("api-gateway".to_string())?,
-        ServiceName::new("user-service".to_string())?,
-        ServiceName::new("order-service".to_string())?,
-        ServiceName::new("payment-service".to_string())?,
-        ServiceName::new("inventory-service".to_string())?,
-    ];
+    // BLAZING FAST: Get service names from storage without hardcoding
+    let service_names = storage.list_services().await?;
     
     let mut metrics = Vec::new();
     
@@ -52,7 +44,7 @@ pub async fn calculate_service_metrics(
         }
         
         // Batch process spans for efficiency
-        let (span_count, error_count, latencies) = process_spans_batch(&spans);
+        let (span_count, error_count, mut latencies) = process_spans_batch(&spans);
         
         // Calculate RPS (requests per second)
         let request_rate = span_count as f64 / METRIC_WINDOW_SECS as f64;
@@ -64,19 +56,13 @@ pub async fn calculate_service_metrics(
             0.0
         };
         
-        // Calculate percentiles using efficient approximation
+        // BLAZING FAST: Calculate percentiles WITHOUT cloning
         let (p50, p95, p99) = if latencies.len() > 1000 {
             // Use histogram approximation for large datasets
             calculate_percentiles_histogram(&latencies)
         } else {
-            // Use exact calculation for smaller datasets
-            let mut sorted_latencies = latencies.clone();
-            sorted_latencies.sort_unstable();
-            (
-                calculate_percentile(&sorted_latencies, 0.50),
-                calculate_percentile(&sorted_latencies, 0.95),
-                calculate_percentile(&sorted_latencies, 0.99),
-            )
+            // ZERO ALLOCATION: Sort in-place for percentiles
+            calculate_percentiles_exact(&mut latencies)
         };
         
         // Calculate average duration
@@ -87,15 +73,17 @@ pub async fn calculate_service_metrics(
             Duration::from_millis(0)
         };
         
-        // Find min and max durations  
-        let mut sorted_for_minmax = latencies.clone();
-        sorted_for_minmax.sort_unstable();
-        let min_duration = sorted_for_minmax.first()
-            .map(|&ms| Duration::from_millis(ms))
-            .unwrap_or(Duration::from_millis(0));
-        let max_duration = sorted_for_minmax.last()
-            .map(|&ms| Duration::from_millis(ms))
-            .unwrap_or(Duration::from_millis(0));
+        // BLAZING FAST: Find min/max WITHOUT sorting or cloning
+        let (min_ms, max_ms) = latencies.iter()
+            .fold((u64::MAX, 0u64), |(min, max), &val| {
+                (min.min(val), max.max(val))
+            });
+        let min_duration = if latencies.is_empty() { 
+            Duration::from_millis(0) 
+        } else { 
+            Duration::from_millis(min_ms) 
+        };
+        let max_duration = Duration::from_millis(max_ms);
         
         // Create the service metrics
         let mut service_metrics = ServiceMetrics::new(service_name);
@@ -134,16 +122,36 @@ fn calculate_percentile(sorted_values: &[u64], percentile: f64) -> u64 {
     sorted_values[index]
 }
 
+/// BLAZING FAST: Calculate exact percentiles WITHOUT cloning
+/// This modifies the input array in-place for zero allocations
+#[inline]
+fn calculate_percentiles_exact(latencies: &mut Vec<u64>) -> (u64, u64, u64) {
+    if latencies.is_empty() {
+        return (0, 0, 0);
+    }
+    
+    // ZERO ALLOCATION: Sort in-place
+    latencies.sort_unstable();
+    
+    let len = latencies.len();
+    let p50 = latencies[len / 2];
+    let p95 = latencies[len * 95 / 100];
+    let p99 = latencies[len * 99 / 100];
+    
+    (p50, p95, p99)
+}
+
 /// Calculate percentiles using histogram approximation for large datasets.
 fn calculate_percentiles_histogram(latencies: &[u64]) -> (u64, u64, u64) {
     if latencies.is_empty() {
         return (0, 0, 0);
     }
     
-    // Find min and max for bucket calculation  
-    // SAFE: Already checked latencies.is_empty() above
-    let min_latency = *latencies.iter().min().expect("latencies not empty");
-    let max_latency = *latencies.iter().max().expect("latencies not empty");
+    // BLAZING FAST: Find min/max in single pass without panic
+    let (min_latency, max_latency) = latencies.iter()
+        .fold((u64::MAX, 0u64), |(min, max), &val| {
+            (min.min(val), max.max(val))
+        });
     
     if min_latency == max_latency {
         return (min_latency, min_latency, min_latency);
@@ -255,7 +263,7 @@ pub async fn calculate_windowed_metrics(
         
         if !spans.is_empty() {
             // Batch process spans for efficiency
-            let (span_count, error_count, latencies) = process_spans_batch(&spans);
+            let (span_count, error_count, mut latencies) = process_spans_batch(&spans);
             let request_rate = span_count as f64 / seconds as f64;
             let error_rate = error_count as f64 / span_count as f64;
             
