@@ -68,7 +68,7 @@ memmap2 = "0.9"  # Memory-mapped files for huge datasets
 rayon = "1.10"  # Parallel processing
 parking_lot = "0.12"  # Faster locks than std
 ahash = "0.8"  # Faster hashing - MUCH faster than default
-rkyv = { version = "0.7", features = ["validation", "archive_le"] }  # Zero-copy serialization
+rkyv = { version = "0.7", features = ["validation", "archive_le"], optional = true }  # Zero-copy serialization
 lz4 = "1.28"  # Fast compression for cold storage
 rocksdb = { version = "0.22", optional = true }  # Optional persistent storage
 crossbeam-channel = "0.5"  # Lock-free channels for trace ingestion
@@ -100,6 +100,7 @@ tonic-build = "0.12"
 [features]
 default = []
 persistent = ["rocksdb"]
+rkyv = ["dep:rkyv"]
 
 [lib]
 name = "urpo_lib"

@@ -2,11 +2,11 @@
 //!
 //! Run with: cargo run --example send_otel_data
 
-use opentelemetry::{global, trace::{Span, SpanKind, Status, Tracer}};
+use opentelemetry::{global, trace::{Span, SpanKind, Status, Tracer, TracerProvider as _}};
 use opentelemetry_otlp::{Protocol, WithExportConfig};
 use opentelemetry_sdk as sdk;
 use std::time::Duration;
-use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 fn init_tracer() -> impl Tracer {
     let exporter = opentelemetry_otlp::new_exporter()
@@ -27,10 +27,10 @@ fn init_tracer() -> impl Tracer {
         .tracing()
         .with_exporter(exporter)
         .with_trace_config(trace_config)
-        .install_batch(opentelemetry::runtime::Tokio)
+        .install_batch(opentelemetry_sdk::runtime::Tokio)
         .expect("Failed to install tracer");
 
-    global::set_tracer_provider(provider.provider().unwrap());
+    global::set_tracer_provider(provider.clone());
     provider.tracer("test-service")
 }
 
@@ -113,7 +113,7 @@ async fn main() {
         
         // Simulate an error occasionally
         if i % 3 == 0 {
-            service_span.record_error(&"Payment processing failed");
+            service_span.record_error(&std::io::Error::new(std::io::ErrorKind::Other, "Payment processing failed"));
             service_span.set_status(Status::error("Payment service unavailable"));
         } else {
             service_span.set_status(Status::Ok);
