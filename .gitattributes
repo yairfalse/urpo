@@ -1,0 +1,27 @@
+# Override GitHub language detection to show this is a Rust project
+
+# Mark build artifacts and dependencies as vendored (exclude from stats)
+node_modules/** linguist-vendored
+dist/** linguist-vendored
+.vite/** linguist-vendored
+src-tauri/target/** linguist-vendored
+*.min.js linguist-vendored
+
+# Mark generated files as such
+src/bindings.ts linguist-generated
+*.d.ts linguist-generated
+
+# Explicitly mark important languages
+*.rs linguist-language=Rust
+*.toml linguist-language=TOML
+
+# Mark documentation
+*.md linguist-documentation
+docs/** linguist-documentation
+
+# This is primarily a Rust project
+* linguist-detectable=false
+*.rs linguist-detectable=true
+*.toml linguist-detectable=true
+Cargo.toml linguist-detectable=true
+Cargo.lock linguist-detectable=true
