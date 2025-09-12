@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import * as d3 from 'd3';
-import { motion } from 'framer-motion';
 import { Activity, AlertCircle, CheckCircle, Clock, Network } from 'lucide-react';
 import { ServiceMetrics, TraceInfo } from '../../types';
 
@@ -325,10 +324,7 @@ export default function ServiceGraph({ services, traces }: ServiceGraphProps) {
 
       {/* Selected Service Details */}
       {selectedService && (
-        <motion.div
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="absolute top-20 right-4 w-80 bg-surface-50 border border-surface-300 rounded-lg p-4 shadow-xl"
+        <div className="absolute top-20 right-4 w-80 bg-surface-50 border border-surface-300 rounded-lg p-4 shadow-xl"
         >
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-text-900 font-semibold flex items-center gap-2">
@@ -380,12 +376,12 @@ export default function ServiceGraph({ services, traces }: ServiceGraphProps) {
                 ))}
             </div>
           </div>
-        </motion.div>
+        </div>
       )}
 
       {/* Trace Animation Overlay */}
       <div className="absolute bottom-4 left-4 flex items-center gap-2">
-        <Activity className="w-4 h-4 text-text-700 animate-pulse" />
+        <Activity className="w-4 h-4 text-text-700" />
         <span className="text-xs text-text-500">Live Trace Visualization</span>
       </div>
     </div>

@@ -6,7 +6,7 @@ import ServiceGraph from './components/charts/ServiceGraph';
 import ServiceMap from './components/tables/ServiceMap';
 import FlowTable from './components/tables/FlowTable';
 import { ServiceMetrics, TraceInfo, SystemMetrics as SystemMetricsType, ViewMode, NavigationItem } from './types';
-import { Network, Activity, BarChart3, Layers, GitBranch, Table, Share2 } from 'lucide-react';
+import { Network, Activity, BarChart3, Layers, GitBranch, Share2 } from 'lucide-react';
 import { isTauriAvailable, safeTauriInvoke } from './utils/tauri';
 import { 
   getUpdatedMockServices, 
@@ -18,7 +18,6 @@ import { POLLING } from './constants/ui';
 // PERFORMANCE: Memoize the entire app to prevent unnecessary re-renders
 const App = memo(() => {
   const [activeView, setActiveView] = useState<ViewMode>('graph');
-  const [selectedTrace, setSelectedTrace] = useState<TraceInfo | null>(null);
   const [services, setServices] = useState<ServiceMetrics[]>([]);
   const [traces, setTraces] = useState<TraceInfo[]>([]);
   const [systemMetrics, setSystemMetrics] = useState<SystemMetricsType | null>(null);
@@ -272,26 +271,26 @@ const App = memo(() => {
       {/* Ultra-Sharp Main Content */}
       <main className="flex-1 overflow-hidden gpu-layer">
         {activeView === 'graph' && (
-          <div className="h-full p-6 animate-slide-up">
+          <div className="h-full p-6">
             <ServiceGraph services={services} traces={traces} />
           </div>
         )}
         
         {activeView === 'flows' && (
-          <div className="h-full animate-slide-up">
+          <div className="h-full">
             <FlowTable traces={traces} onRefresh={loadTraces} />
           </div>
         )}
         
         {activeView === 'health' && (
-          <div className="p-6 space-y-6 animate-slide-up">
+          <div className="p-6 space-y-6">
             <ServiceHealthDashboard services={services} />
             {systemMetrics && <SystemMetrics metrics={systemMetrics} />}
           </div>
         )}
         
         {activeView === 'traces' && (
-          <div className="p-6 animate-slide-up">
+          <div className="p-6">
             <TraceExplorer 
               traces={traces} 
               onRefresh={loadTraces}
@@ -300,7 +299,7 @@ const App = memo(() => {
         )}
         
         {activeView === 'servicemap' && (
-          <div className="h-full animate-slide-up">
+          <div className="h-full">
             <ServiceMap />
           </div>
         )}
