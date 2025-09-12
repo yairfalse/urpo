@@ -20,6 +20,7 @@ pub mod manager;
 pub mod types;
 pub mod backend;
 pub mod span_pool;
+pub mod buffered;
 
 // Re-export commonly used types
 pub use fake_spans::SpanGenerator;
@@ -29,6 +30,7 @@ pub use manager::StorageManager;
 pub use types::{TraceInfo, StorageStats, StorageHealth, CleanupConfig};
 pub use backend::StorageBackend;
 pub use span_pool::{SpanPool, PooledSpan, GLOBAL_SPAN_POOL};
+pub use buffered::{BufferedStorage, BufferConfig, BufferStats};
 
 // UnifiedStorage is defined below
 
