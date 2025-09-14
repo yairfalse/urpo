@@ -7,7 +7,7 @@
 //! - Search: <1ms across 100K traces
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId, Throughput};
-use urpo_lib::core::{Span, TraceId, SpanId, ServiceName, SpanStatus};
+use urpo_lib::core::{Span, TraceId, SpanId, ServiceName, SpanStatus, SpanKind, SpanBuilder};
 use urpo_lib::storage::{InMemoryStorage, StorageBackend};
 use std::time::{Duration, SystemTime, Instant};
 use tokio::runtime::Runtime;
@@ -19,14 +19,15 @@ fn generate_test_spans(count: usize) -> Vec<Span> {
     let operations = ["GET /users", "POST /login", "SELECT *", "SET key", "auth.validate"];
     
     for i in 0..count {
-        let span = Span::builder()
+        let span = SpanBuilder::default()
             .trace_id(TraceId::new(format!("trace_{:016x}", i / 10)).unwrap())
             .span_id(SpanId::new(format!("span_{:016x}", i)).unwrap())
             .service_name(ServiceName::new(services[i % services.len()].to_string()).unwrap())
             .operation_name(operations[i % operations.len()].to_string())
+            .kind(SpanKind::Server)
             .start_time(SystemTime::now())
             .duration(Duration::from_micros((i % 1000) as u64))
-            .status(if i % 100 == 0 { SpanStatus::error("test error") } else { SpanStatus::Ok })
+            .status(if i % 100 == 0 { SpanStatus::Error("test error".to_string()) } else { SpanStatus::Ok })
             .build()
             .unwrap();
         spans.push(span);
@@ -49,12 +50,20 @@ fn bench_span_ingestion(c: &mut Criterion) {
             |b, &size| {
                 let rt = Runtime::new().unwrap();
                 let spans = generate_test_spans(size);
-                let storage = InMemoryStorage::new(1_000_000);
                 
-                b.to_async(&rt).iter(|| async {
-                    for span in &spans {
-                        storage.store_span(black_box(span.clone())).await.unwrap();
+                b.iter_custom(|iters| {
+                    let mut total_duration = Duration::ZERO;
+                    for _ in 0..iters {
+                        let storage = InMemoryStorage::new(1_000_000);
+                        let start = Instant::now();
+                        rt.block_on(async {
+                            for span in &spans {
+                                storage.store_span(black_box(span.clone())).await.unwrap();
+                            }
+                        });
+                        total_duration += start.elapsed();
                     }
+                    total_duration
                 });
             },
         );
@@ -64,10 +73,18 @@ fn bench_span_ingestion(c: &mut Criterion) {
     group.bench_function("single_span", |b| {
         let rt = Runtime::new().unwrap();
         let span = generate_test_spans(1).into_iter().next().unwrap();
-        let storage = InMemoryStorage::new(1_000_000);
         
-        b.to_async(&rt).iter(|| async {
-            storage.store_span(black_box(span.clone())).await.unwrap();
+        b.iter_custom(|iters| {
+            let mut total_duration = Duration::ZERO;
+            for _ in 0..iters {
+                let storage = InMemoryStorage::new(1_000_000);
+                let start = Instant::now();
+                rt.block_on(async {
+                    storage.store_span(black_box(span.clone())).await.unwrap();
+                });
+                total_duration += start.elapsed();
+            }
+            total_duration
         });
     });
     
@@ -92,39 +109,51 @@ fn bench_trace_query(c: &mut Criterion) {
     
     // Benchmark different query types
     group.bench_function("search_by_service", |b| {
-        b.to_async(&rt).iter(|| async {
-            let results = storage
-                .search_traces(black_box("frontend"), 100)
-                .await
-                .unwrap();
-            black_box(results);
+        let storage_clone = storage.clone();
+        b.iter(|| {
+            rt.block_on(async {
+                let results = storage_clone
+                    .search_traces(black_box("frontend"), 100)
+                    .await
+                    .unwrap();
+                black_box(results);
+            });
         });
     });
     
     group.bench_function("search_by_operation", |b| {
-        b.to_async(&rt).iter(|| async {
-            let results = storage
-                .search_traces(black_box("GET /users"), 100)
-                .await
-                .unwrap();
-            black_box(results);
+        let storage_clone = storage.clone();
+        b.iter(|| {
+            rt.block_on(async {
+                let results = storage_clone
+                    .search_traces(black_box("GET /users"), 100)
+                    .await
+                    .unwrap();
+                black_box(results);
+            });
         });
     });
     
     group.bench_function("get_error_traces", |b| {
-        b.to_async(&rt).iter(|| async {
-            let results = storage.get_error_traces(100).await.unwrap();
-            black_box(results);
+        let storage_clone = storage.clone();
+        b.iter(|| {
+            rt.block_on(async {
+                let results = storage_clone.get_error_traces(100).await.unwrap();
+                black_box(results);
+            });
         });
     });
     
     group.bench_function("list_recent_traces", |b| {
-        b.to_async(&rt).iter(|| async {
-            let results = storage
-                .list_recent_traces(100, None)
-                .await
-                .unwrap();
-            black_box(results);
+        let storage_clone = storage.clone();
+        b.iter(|| {
+            rt.block_on(async {
+                let results = storage_clone
+                    .list_traces(None, None, None, 100)
+                    .await
+                    .unwrap();
+                black_box(results);
+            });
         });
     });
     
@@ -150,7 +179,7 @@ fn bench_memory_usage(c: &mut Criterion) {
                 // Store 1M spans
                 rt.block_on(async {
                     for i in 0..1_000_000 {
-                        let span = Span::builder()
+                        let span = SpanBuilder::default()
                             .trace_id(TraceId::new(format!("t{:08x}", i / 100)).unwrap())
                             .span_id(SpanId::new(format!("s{:08x}", i)).unwrap())
                             .service_name(ServiceName::new("test".to_string()).unwrap())
@@ -240,9 +269,12 @@ fn bench_service_aggregation(c: &mut Criterion) {
     });
     
     group.bench_function("get_service_metrics", |b| {
-        b.to_async(&rt).iter(|| async {
-            let metrics = storage.get_service_metrics().await.unwrap();
-            black_box(metrics);
+        let storage_clone = storage.clone();
+        b.iter(|| {
+            rt.block_on(async {
+                let metrics = storage_clone.get_service_metrics().await.unwrap();
+                black_box(metrics);
+            });
         });
     });
     
@@ -257,19 +289,27 @@ fn bench_concurrent_operations(c: &mut Criterion) {
     c.bench_function("concurrent_10k_writes", |b| {
         let rt = Runtime::new().unwrap();
         
-        b.to_async(&rt).iter(|| async {
-            let storage = InMemoryStorage::new(1_000_000);
-            let spans = generate_test_spans(10_000);
-            let mut tasks = JoinSet::new();
-            
-            for span in spans {
-                let storage_clone = storage.clone();
-                tasks.spawn(async move {
-                    storage_clone.store_span(span).await.unwrap();
+        b.iter_custom(|iters| {
+            let mut total_duration = Duration::ZERO;
+            for _ in 0..iters {
+                let start = Instant::now();
+                rt.block_on(async {
+                    let storage = InMemoryStorage::new(1_000_000);
+                    let spans = generate_test_spans(10_000);
+                    let mut tasks = JoinSet::new();
+                    
+                    for span in spans {
+                        let storage_clone = storage.clone();
+                        tasks.spawn(async move {
+                            storage_clone.store_span(span).await.unwrap();
+                        });
+                    }
+                    
+                    while let Some(_) = tasks.join_next().await {}
                 });
+                total_duration += start.elapsed();
             }
-            
-            while let Some(_) = tasks.join_next().await {}
+            total_duration
         });
     });
 }
