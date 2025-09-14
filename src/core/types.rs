@@ -1,40 +1,194 @@
 use crate::core::error::{Result, UrpoError};
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use once_cell::sync::Lazy;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use smallvec::SmallVec;
 use std::fmt;
 use std::str::FromStr;
+use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
+// Static default strings to avoid allocations
+static DEFAULT_TRACE_ID: Lazy<Arc<str>> =
+    Lazy::new(|| Arc::from("00000000000000000000000000000000"));
+static DEFAULT_SPAN_ID: Lazy<Arc<str>> = Lazy::new(|| Arc::from("0000000000000000"));
+static DEFAULT_SERVICE_NAME: Lazy<Arc<str>> = Lazy::new(|| Arc::from("unknown"));
+
+/// Optimized attribute storage using SmallVec
+/// Most spans have <5 attributes, avoiding heap allocation in common case
+#[derive(Debug, Clone)]
+pub struct AttributeMap(pub SmallVec<[(Arc<str>, Arc<str>); 5]>);
+
+impl AttributeMap {
+    #[inline(always)]
+    pub fn new() -> Self {
+        AttributeMap(SmallVec::new())
+    }
+
+    #[inline]
+    pub fn push(&mut self, key: Arc<str>, value: Arc<str>) {
+        self.0.push((key, value));
+    }
+
+    #[inline]
+    pub fn get(&self, key: &str) -> Option<&str> {
+        self.0
+            .iter()
+            .find(|(k, _)| k.as_ref() == key)
+            .map(|(_, v)| v.as_ref())
+    }
+
+    #[inline]
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &str)> + '_ {
+        self.0.iter().map(|(k, v)| (k.as_ref(), v.as_ref()))
+    }
+
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    #[inline]
+    pub fn contains_key(&self, key: &str) -> bool {
+        self.0.iter().any(|(k, _)| k.as_ref() == key)
+    }
+}
+
+impl Default for AttributeMap {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<'a> IntoIterator for &'a AttributeMap {
+    type Item = (&'a str, &'a str);
+    type IntoIter = Box<dyn Iterator<Item = (&'a str, &'a str)> + 'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        Box::new(self.iter())
+    }
+}
+
+impl Serialize for AttributeMap {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(Some(self.0.len()))?;
+        for (k, v) in &self.0 {
+            map.serialize_entry(k.as_ref(), v.as_ref())?;
+        }
+        map.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for AttributeMap {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        use std::collections::HashMap;
+        let map = HashMap::<String, String>::deserialize(deserializer)?;
+        let mut attrs = AttributeMap::new();
+        for (k, v) in map {
+            attrs.push(Arc::from(k.as_str()), Arc::from(v.as_str()));
+        }
+        Ok(attrs)
+    }
+}
+
 /// Unique identifier for a trace
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "rkyv",
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
-pub struct TraceId(String);
+pub struct TraceId(Arc<str>);
+
+impl Serialize for TraceId {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.0)
+    }
+}
+
+impl<'de> Deserialize<'de> for TraceId {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Ok(TraceId(Arc::from(s)))
+    }
+}
 
 /// Unique identifier for a span within a trace
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct SpanId(String);
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct SpanId(Arc<str>);
+
+impl Serialize for SpanId {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.0)
+    }
+}
+
+impl<'de> Deserialize<'de> for SpanId {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Ok(SpanId(Arc::from(s)))
+    }
+}
 
 /// Service name identifier
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct ServiceName(String);
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ServiceName(Arc<str>);
+
+impl Serialize for ServiceName {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.0)
+    }
+}
+
+impl<'de> Deserialize<'de> for ServiceName {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Ok(ServiceName(Arc::from(s)))
+    }
+}
 
 impl Default for TraceId {
+    #[inline(always)]
     fn default() -> Self {
-        // Default trace ID for pool allocation
-        TraceId("00000000000000000000000000000000".to_string())
+        // Zero-allocation default using static Arc
+        TraceId(DEFAULT_TRACE_ID.clone())
     }
 }
 
 impl TraceId {
     /// Creates a new TraceId after validation
+    #[inline]
     pub fn new(id: String) -> Result<Self> {
         if id.is_empty() {
-            return Err(UrpoError::InvalidSpan(
-                "TraceId cannot be empty".to_string(),
-            ));
+            return Err(UrpoError::InvalidSpan("TraceId cannot be empty".to_string()));
         }
         // OTEL trace IDs are 16 bytes = 32 hex characters
         if id.len() > 32 {
@@ -43,7 +197,13 @@ impl TraceId {
                 id.len()
             )));
         }
-        Ok(TraceId(id))
+        Ok(TraceId(Arc::from(id)))
+    }
+
+    /// Creates a new TraceId from a string slice (zero-copy when possible)
+    #[inline]
+    pub fn from_str_unchecked(id: &str) -> Self {
+        TraceId(Arc::from(id))
     }
 
     /// Returns the string representation of the trace ID
@@ -51,8 +211,9 @@ impl TraceId {
         &self.0
     }
 
-    /// Returns the inner string value
-    pub fn into_inner(self) -> String {
+    /// Returns the inner Arc<str> for zero-copy cloning
+    #[inline(always)]
+    pub fn into_inner(self) -> Arc<str> {
         self.0
     }
 }
@@ -72,14 +233,16 @@ impl FromStr for TraceId {
 }
 
 impl Default for SpanId {
+    #[inline(always)]
     fn default() -> Self {
-        // Default span ID for pool allocation
-        SpanId("0000000000000000".to_string())
+        // Zero-allocation default using static Arc
+        SpanId(DEFAULT_SPAN_ID.clone())
     }
 }
 
 impl SpanId {
     /// Creates a new SpanId after validation
+    #[inline]
     pub fn new(id: String) -> Result<Self> {
         if id.is_empty() {
             return Err(UrpoError::InvalidSpan("SpanId cannot be empty".to_string()));
@@ -91,7 +254,13 @@ impl SpanId {
                 id.len()
             )));
         }
-        Ok(SpanId(id))
+        Ok(SpanId(Arc::from(id)))
+    }
+
+    /// Creates a new SpanId from a string slice (zero-copy when possible)
+    #[inline]
+    pub fn from_str_unchecked(id: &str) -> Self {
+        SpanId(Arc::from(id))
     }
 
     /// Returns the string representation of the span ID
@@ -99,8 +268,9 @@ impl SpanId {
         &self.0
     }
 
-    /// Returns the inner string value
-    pub fn into_inner(self) -> String {
+    /// Returns the inner Arc<str> for zero-copy cloning
+    #[inline(always)]
+    pub fn into_inner(self) -> Arc<str> {
         self.0
     }
 }
@@ -112,26 +282,32 @@ impl fmt::Display for SpanId {
 }
 
 impl Default for ServiceName {
+    #[inline(always)]
     fn default() -> Self {
-        // Default service name for pool allocation
-        ServiceName("unknown".to_string())
+        // Zero-allocation default using static Arc
+        ServiceName(DEFAULT_SERVICE_NAME.clone())
     }
 }
 
 impl ServiceName {
     /// Creates a new ServiceName after validation
+    #[inline]
     pub fn new(name: String) -> Result<Self> {
         if name.is_empty() {
-            return Err(UrpoError::InvalidSpan(
-                "ServiceName cannot be empty".to_string(),
-            ));
+            return Err(UrpoError::InvalidSpan("ServiceName cannot be empty".to_string()));
         }
         if name.len() > 255 {
             return Err(UrpoError::InvalidSpan(
                 "ServiceName cannot exceed 255 characters".to_string(),
             ));
         }
-        Ok(ServiceName(name))
+        Ok(ServiceName(Arc::from(name)))
+    }
+
+    /// Creates a new ServiceName from a string slice (zero-copy when possible)
+    #[inline]
+    pub fn from_str_unchecked(name: &str) -> Self {
+        ServiceName(Arc::from(name))
     }
 
     /// Returns the string representation of the service name
@@ -139,8 +315,9 @@ impl ServiceName {
         &self.0
     }
 
-    /// Returns the inner string value
-    pub fn into_inner(self) -> String {
+    /// Returns the inner Arc<str> for zero-copy cloning
+    #[inline(always)]
+    pub fn into_inner(self) -> Arc<str> {
         self.0
     }
 }
@@ -187,11 +364,13 @@ pub enum SpanStatus {
 
 impl SpanStatus {
     /// Returns true if the span status indicates an error
+    #[inline(always)]
     pub fn is_error(&self) -> bool {
         matches!(self, SpanStatus::Error(_))
     }
 
     /// Returns true if the span completed successfully
+    #[inline(always)]
     pub fn is_ok(&self) -> bool {
         matches!(self, SpanStatus::Ok)
     }
@@ -227,11 +406,11 @@ pub struct Span {
     /// Status of the span execution
     pub status: SpanStatus,
     /// Key-value attributes associated with the span
-    pub attributes: HashMap<String, String>,
+    pub attributes: AttributeMap,
     /// Tags for easier filtering and searching
-    pub tags: HashMap<String, String>,
+    pub tags: AttributeMap,
     /// Resource attributes (e.g., host, container info)
-    pub resource_attributes: HashMap<String, String>,
+    pub resource_attributes: AttributeMap,
 }
 
 impl Span {
@@ -251,21 +430,31 @@ impl Span {
     }
 
     /// Returns true if this span has child spans
+    #[inline(always)]
     pub fn has_parent(&self) -> bool {
         self.parent_span_id.is_some()
     }
 
+    /// Returns true if the span status indicates an error
+    #[inline(always)]
+    pub fn is_error(&self) -> bool {
+        self.status.is_error()
+    }
+
     /// Gets an attribute value by key
+    #[inline]
     pub fn get_attribute(&self, key: &str) -> Option<&str> {
-        self.attributes.get(key).map(|s| s.as_str())
+        self.attributes.get(key)
     }
 
     /// Gets a tag value by key
+    #[inline]
     pub fn get_tag(&self, key: &str) -> Option<&str> {
-        self.tags.get(key).map(|s| s.as_str())
+        self.tags.get(key)
     }
 
     /// Returns the duration in milliseconds
+    #[inline(always)]
     pub fn duration_ms(&self) -> u64 {
         self.duration.as_millis() as u64
     }
@@ -283,9 +472,9 @@ pub struct SpanBuilder {
     duration: Option<Duration>,
     kind: Option<SpanKind>,
     status: Option<SpanStatus>,
-    attributes: HashMap<String, String>,
-    tags: HashMap<String, String>,
-    resource_attributes: HashMap<String, String>,
+    attributes: AttributeMap,
+    tags: AttributeMap,
+    resource_attributes: AttributeMap,
 }
 
 impl SpanBuilder {
@@ -335,12 +524,14 @@ impl SpanBuilder {
     }
 
     pub fn attribute<K: Into<String>, V: Into<String>>(mut self, key: K, value: V) -> Self {
-        self.attributes.insert(key.into(), value.into());
+        self.attributes
+            .push(Arc::from(key.into().as_str()), Arc::from(value.into().as_str()));
         self
     }
 
     pub fn tag<K: Into<String>, V: Into<String>>(mut self, key: K, value: V) -> Self {
-        self.tags.insert(key.into(), value.into());
+        self.tags
+            .push(Arc::from(key.into().as_str()), Arc::from(value.into().as_str()));
         self
     }
 
@@ -349,7 +540,8 @@ impl SpanBuilder {
         key: K,
         value: V,
     ) -> Self {
-        self.resource_attributes.insert(key.into(), value.into());
+        self.resource_attributes
+            .push(Arc::from(key.into().as_str()), Arc::from(value.into().as_str()));
         self
     }
 
@@ -366,9 +558,9 @@ impl SpanBuilder {
             duration: Duration::from_millis(0),
             kind: SpanKind::default(),
             status: SpanStatus::Unknown,
-            attributes: HashMap::new(),
-            tags: HashMap::new(),
-            resource_attributes: HashMap::new(),
+            attributes: AttributeMap::new(),
+            tags: AttributeMap::new(),
+            resource_attributes: AttributeMap::new(),
         }
     }
 
@@ -423,9 +615,7 @@ impl Trace {
     /// Creates a new trace from a collection of spans
     pub fn from_spans(trace_id: TraceId, mut spans: Vec<Span>) -> Result<Self> {
         if spans.is_empty() {
-            return Err(UrpoError::InvalidSpan(
-                "Trace must contain at least one span".to_string(),
-            ));
+            return Err(UrpoError::InvalidSpan("Trace must contain at least one span".to_string()));
         }
 
         // Sort spans by start time
@@ -440,9 +630,7 @@ impl Trace {
         // Calculate total duration
         let first_start = spans
             .first()
-            .ok_or(UrpoError::InvalidSpan(
-                "Cannot create trace from empty spans".to_string(),
-            ))?
+            .ok_or(UrpoError::InvalidSpan("Cannot create trace from empty spans".to_string()))?
             .start_time;
         let last_end = spans
             .iter()
