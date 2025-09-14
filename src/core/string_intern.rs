@@ -5,8 +5,8 @@
 
 use dashmap::DashMap;
 use parking_lot::RwLock;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Arc;
 
 /// String intern ID - lightweight 4-byte identifier
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -84,7 +84,7 @@ impl StringIntern {
                 reverse.push(arc_str);
 
                 id
-            }
+            },
         }
     }
 

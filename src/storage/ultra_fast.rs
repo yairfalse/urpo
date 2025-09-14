@@ -40,29 +40,29 @@ pub struct CompactSpan {
     // ---- Cache Line 1 (64 bytes total) ----
     // Hot fields (frequently accessed together) - 32 bytes
     /// Trace ID as 128-bit integer for fast comparison
-    pub trace_id: u128,                    // 16 bytes, offset 0
+    pub trace_id: u128, // 16 bytes, offset 0
     /// Span ID as 64-bit integer
-    pub span_id: u64,                      // 8 bytes, offset 16
+    pub span_id: u64, // 8 bytes, offset 16
     /// Parent span ID (0 if root span)
-    pub parent_span_id: u64,               // 8 bytes, offset 24
+    pub parent_span_id: u64, // 8 bytes, offset 24
 
     // Timing data - 12 bytes
     /// Start time as nanoseconds since Unix epoch
-    pub start_time_ns: u64,                // 8 bytes, offset 32
+    pub start_time_ns: u64, // 8 bytes, offset 32
     /// Duration in nanoseconds (u32 allows up to 4.2 seconds)
-    pub duration_ns: u32,                  // 4 bytes, offset 40
+    pub duration_ns: u32, // 4 bytes, offset 40
 
     // Interned strings - 8 bytes
     /// Service name index (into string interning table)
-    pub service_idx: u32,                  // 4 bytes, offset 44
+    pub service_idx: u32, // 4 bytes, offset 44
     /// Operation name index (into string interning table)
-    pub operation_idx: u32,                // 4 bytes, offset 48
+    pub operation_idx: u32, // 4 bytes, offset 48
 
     // Metadata packed together - 8 bytes
     /// Attributes bitmap index (for complex attribute queries)
-    pub attributes_bitmap_idx: u32,        // 4 bytes, offset 52
+    pub attributes_bitmap_idx: u32, // 4 bytes, offset 52
     /// Packed metadata (kind, status, flags) in single u32 for atomic ops
-    pub metadata: u32,                     // 4 bytes, offset 56
+    pub metadata: u32, // 4 bytes, offset 56
     // metadata layout:
     // bits 0-2: kind (3 bits)
     // bits 3-4: status (2 bits)
@@ -70,7 +70,7 @@ pub struct CompactSpan {
     // bits 8-31: reserved (24 bits)
 
     // Padding to exactly 64 bytes
-    _padding: u32,                         // 4 bytes, offset 60
+    _padding: u32, // 4 bytes, offset 60
 }
 
 // Static assertion to ensure struct is exactly 64 bytes
@@ -82,7 +82,7 @@ impl CompactSpan {
     const fn pack_metadata(kind: u8, status: u8, flags: u8) -> u32 {
         ((kind as u32) & 0x7) |           // bits 0-2
         (((status as u32) & 0x3) << 3) |  // bits 3-4
-        (((flags as u32) & 0x7) << 5)     // bits 5-7
+        (((flags as u32) & 0x7) << 5) // bits 5-7
     }
 
     /// Extract kind from packed metadata

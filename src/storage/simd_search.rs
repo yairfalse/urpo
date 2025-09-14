@@ -70,6 +70,23 @@ unsafe fn find_trace_id_simd_internal(needle: u128, haystack: &[u128]) -> Option
     None
 }
 
+/// Public API for trace ID search with SIMD acceleration
+#[inline]
+pub fn find_trace_id_simd(needle: u128, haystack: &[u128]) -> Option<usize> {
+    #[cfg(target_arch = "x86_64")]
+    {
+        if is_x86_feature_detected!("avx2") {
+            unsafe { find_trace_id_simd_internal(needle, haystack) }
+        } else {
+            find_trace_id_scalar(needle, haystack)
+        }
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    {
+        find_trace_id_scalar(needle, haystack)
+    }
+}
+
 /// Scalar fallback for non-SIMD systems
 #[inline]
 fn find_trace_id_scalar(needle: u128, haystack: &[u128]) -> Option<usize> {
