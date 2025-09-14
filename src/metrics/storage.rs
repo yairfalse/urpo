@@ -14,10 +14,10 @@ use std::time::{Duration, SystemTime};
 #[derive(Debug, Clone)]
 pub struct ServiceHealth {
     pub service_id: u16,
-    pub request_rate: f64,     // requests per second
-    pub error_rate: f64,       // error percentage (0.0 - 100.0)
-    pub avg_latency_ms: f64,   // average latency in milliseconds
-    pub p95_latency_ms: f64,   // 95th percentile latency
+    pub request_rate: f64,   // requests per second
+    pub error_rate: f64,     // error percentage (0.0 - 100.0)
+    pub avg_latency_ms: f64, // average latency in milliseconds
+    pub p95_latency_ms: f64, // 95th percentile latency
     pub last_updated: SystemTime,
 }
 
@@ -107,8 +107,10 @@ impl MetricStorage {
     /// Get current memory usage estimate
     pub fn get_memory_usage(&self) -> usize {
         let base_size = std::mem::size_of::<Self>();
-        let aggregates_size = self.service_aggregates.len() * std::mem::size_of::<ServiceAggregator>();
-        let samples_size: usize = self.service_aggregates
+        let aggregates_size =
+            self.service_aggregates.len() * std::mem::size_of::<ServiceAggregator>();
+        let samples_size: usize = self
+            .service_aggregates
             .values()
             .map(|a| a.latency_samples.len() * std::mem::size_of::<f64>())
             .sum();
@@ -120,11 +122,13 @@ impl MetricStorage {
     fn process_single_metric(&mut self, metric: MetricPoint) -> Result<(), String> {
         // Ensure we don't exceed max services limit
         if !self.service_aggregates.contains_key(&metric.service_idx)
-            && self.service_aggregates.len() >= self.max_services {
+            && self.service_aggregates.len() >= self.max_services
+        {
             return Err(format!("Maximum services limit ({}) exceeded", self.max_services));
         }
 
-        let aggregator = self.service_aggregates
+        let aggregator = self
+            .service_aggregates
             .entry(metric.service_idx)
             .or_insert_with(|| ServiceAggregator::new(SystemTime::now()));
 
