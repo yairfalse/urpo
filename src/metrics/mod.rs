@@ -5,6 +5,8 @@
 //! - <25MB memory for 1M metric points
 //! - <1ms service health queries
 
+pub mod ring_buffer;
+pub mod string_pool;
 pub mod types;
 
 #[cfg(test)]

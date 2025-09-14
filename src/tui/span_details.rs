@@ -91,12 +91,7 @@ fn draw_basic_info(frame: &mut Frame, area: Rect, span: &Span) {
     let duration_us = span.duration.as_micros();
     let duration_ms = span.duration.as_millis();
     let duration_str = if duration_ms > 0 {
-        format!(
-            "{}.{}ms ({}μs)",
-            duration_ms,
-            (duration_us % 1000) / 100,
-            duration_us
-        )
+        format!("{}.{}ms ({}μs)", duration_ms, (duration_us % 1000) / 100, duration_us)
     } else {
         format!("{}μs", duration_us)
     };
@@ -155,7 +150,7 @@ fn draw_attributes(frame: &mut Frame, area: Rect, span: &Span) {
     let attributes: BTreeMap<String, String> = span
         .attributes
         .iter()
-        .map(|(k, v)| (k.clone(), v.clone()))
+        .map(|(k, v)| (k.to_string(), v.to_string()))
         .collect();
 
     let items: Vec<ListItem> = attributes
@@ -208,7 +203,7 @@ fn draw_tags(frame: &mut Frame, area: Rect, span: &Span) {
     let tags: BTreeMap<String, String> = span
         .tags
         .iter()
-        .map(|(k, v)| (k.clone(), v.clone()))
+        .map(|(k, v)| (k.to_string(), v.to_string()))
         .collect();
 
     let items: Vec<ListItem> = tags
@@ -259,7 +254,7 @@ fn draw_resource_attributes(frame: &mut Frame, area: Rect, span: &Span) {
         let sorted: BTreeMap<String, String> = span
             .resource_attributes
             .iter()
-            .map(|(k, v)| (k.clone(), v.clone()))
+            .map(|(k, v)| (k.to_string(), v.to_string()))
             .collect();
 
         for (key, value) in sorted.iter().take(5) {

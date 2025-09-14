@@ -157,14 +157,8 @@ logging:
         .unwrap();
 
     assert!(matches!(config.ui.theme, urpo::core::config::Theme::Auto));
-    assert!(matches!(
-        config.logging.level,
-        urpo::core::config::LogLevel::Debug
-    ));
-    assert!(matches!(
-        config.logging.rotation,
-        urpo::core::config::LogRotation::Hourly
-    ));
+    assert!(matches!(config.logging.level, urpo::core::config::LogLevel::Debug));
+    assert!(matches!(config.logging.rotation, urpo::core::config::LogRotation::Hourly));
     assert_eq!(config.ui.refresh_rate.as_millis(), 200);
 }
 

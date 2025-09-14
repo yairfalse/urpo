@@ -7,6 +7,7 @@ pub mod config;
 pub mod diagnostics;
 pub mod error;
 pub mod retry;
+pub mod string_intern;
 pub mod types;
 
 // Re-export commonly used types

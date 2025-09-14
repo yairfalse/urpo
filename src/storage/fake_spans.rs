@@ -126,11 +126,7 @@ impl SpanGenerator {
                 20,    // P50: 20ms
                 50,    // P95: 50ms
                 100,   // P99: 100ms
-                vec![
-                    "GET /api/v1/users",
-                    "POST /api/v1/orders",
-                    "GET /api/v1/products",
-                ],
+                vec!["GET /api/v1/users", "POST /api/v1/orders", "GET /api/v1/products"],
             ),
             ServiceConfig::new(
                 "user-service",
@@ -148,12 +144,7 @@ impl SpanGenerator {
                 30,    // P50: 30ms
                 80,    // P95: 80ms
                 150,   // P99: 150ms
-                vec![
-                    "createOrder",
-                    "getOrder",
-                    "updateOrderStatus",
-                    "cancelOrder",
-                ],
+                vec!["createOrder", "getOrder", "updateOrderStatus", "cancelOrder"],
             ),
             ServiceConfig::new(
                 "payment-service",
@@ -162,12 +153,7 @@ impl SpanGenerator {
                 100,  // P50: 100ms (external API calls)
                 300,  // P95: 300ms
                 500,  // P99: 500ms
-                vec![
-                    "processPayment",
-                    "refundPayment",
-                    "validateCard",
-                    "getPaymentStatus",
-                ],
+                vec!["processPayment", "refundPayment", "validateCard", "getPaymentStatus"],
             ),
             ServiceConfig::new(
                 "inventory-service",
@@ -176,12 +162,7 @@ impl SpanGenerator {
                 10,    // P50: 10ms (cached responses)
                 25,    // P95: 25ms
                 50,    // P99: 50ms
-                vec![
-                    "checkStock",
-                    "reserveItems",
-                    "updateInventory",
-                    "getProductInfo",
-                ],
+                vec!["checkStock", "reserveItems", "updateInventory", "getProductInfo"],
             ),
         ];
 
@@ -249,11 +230,7 @@ impl SpanGenerator {
         let mut resource_attributes = HashMap::new();
         resource_attributes.insert(
             "host.name".to_string(),
-            format!(
-                "{}-host-{}",
-                service.name.as_str(),
-                thread_rng().gen_range(1..=5)
-            ),
+            format!("{}-host-{}", service.name.as_str(), thread_rng().gen_range(1..=5)),
         );
         resource_attributes.insert(
             "container.id".to_string(),

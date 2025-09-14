@@ -11,11 +11,11 @@ use atomic_float::AtomicF64 as AtomicFloat;
 use dashmap::DashMap;
 use once_cell::sync::Lazy;
 use std::panic::{catch_unwind, AssertUnwindSafe};
-use std::sync::atomic::{AtomicF64, Ordering};
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use sysinfo::{CpuExt, System, SystemExt};
-use tauri::{AppHandle, Manager, State, Window};
+use sysinfo::System;
+use tauri::{Manager, State, Window};
 use tokio::sync::RwLock;
 
 use urpo_lib::{
@@ -119,11 +119,8 @@ macro_rules! safe_command {
                 };
 
                 tracing::error!("Command {} panicked: {}", $command_name, panic_msg);
-                Err(format!(
-                    "{} failed due to internal error: {}",
-                    $command_name, panic_msg
-                ))
-            }
+                Err(format!("{} failed due to internal error: {}", $command_name, panic_msg))
+            },
         };
 
         let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
@@ -179,10 +176,7 @@ async fn background_telemetry_task(window: Window) {
         // Log performance warnings for debugging
         let memory_pressure = TELEMETRY.memory_pressure.load(Ordering::Relaxed);
         if memory_pressure > 0.9 {
-            tracing::warn!(
-                "High memory pressure detected: {:.1}%",
-                memory_pressure * 100.0
-            );
+            tracing::warn!("High memory pressure detected: {:.1}%", memory_pressure * 100.0);
         }
 
         let cold_fetch_latency = TELEMETRY.cold_fetch_latency_ms.load(Ordering::Relaxed);
@@ -760,7 +754,7 @@ async fn get_service_map(
         // Check memory pressure and adjust parallelization accordingly
         let memory_pressure = TELEMETRY.memory_pressure.load(Ordering::Relaxed);
 
-        if memory_pressure > 0.8 || service_map.nodes.len() < 100 {
+        let (nodes, edges) = if memory_pressure > 0.8 || service_map.nodes.len() < 100 {
             // Sequential processing under memory pressure or for small datasets
             let nodes = service_map
                 .nodes
@@ -793,7 +787,7 @@ async fn get_service_map(
             (nodes, edges)
         } else {
             // Parallel processing for large datasets with rayon
-            let (nodes, edges) = tokio::task::spawn_blocking({
+            tokio::task::spawn_blocking({
                 let service_nodes = service_map.nodes;
                 let service_edges = service_map.edges;
                 move || {
@@ -829,9 +823,7 @@ async fn get_service_map(
                 }
             })
             .await
-            .map_err(|e| format!("Join error during parallel processing: {}", e))?;
-
-            (nodes, edges)
+            .map_err(|e| format!("Join error during parallel processing: {}", e))?
         };
 
         // Convert SystemTime to unix timestamp for frontend compatibility
@@ -875,10 +867,7 @@ fn main() {
 
     // Create storage manager with optional persistence
     let storage_manager = if config.storage.persistent {
-        tracing::info!(
-            "Starting with persistent storage at {:?}",
-            config.storage.data_dir
-        );
+        tracing::info!("Starting with persistent storage at {:?}", config.storage.data_dir);
         Arc::new(
             StorageManager::new_persistent(&config).expect("Failed to create persistent storage"),
         )
@@ -903,7 +892,7 @@ fn main() {
         config: config.clone(),
     };
 
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             get_service_metrics,
@@ -958,8 +947,8 @@ fn main() {
                 .tier_status
                 .insert("application".to_string(), "shutting_down".to_string());
             api.prevent_exit();
-        }
-        _ => {}
+        },
+        _ => {},
     });
 
     tracing::info!("Application shutdown complete");

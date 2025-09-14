@@ -75,12 +75,12 @@ impl HotTraceRing {
             Ok(()) => {
                 self.total_pushed.fetch_add(1, Ordering::Relaxed);
                 true
-            }
+            },
             Err(_) => {
                 // Buffer full - this is expected behavior under load
                 self.total_dropped.fetch_add(1, Ordering::Relaxed);
                 false
-            }
+            },
         }
     }
 
@@ -197,7 +197,7 @@ impl StorageEngine {
                 let _ = std::fs::create_dir_all(&warm_path);
                 let _ = std::fs::create_dir_all(&cold_path);
                 (hot_size, cold_path.to_string_lossy().to_string())
-            }
+            },
         };
 
         Ok(Self {

@@ -7,9 +7,10 @@
 //! 4. Query stored data
 
 use chrono::Utc;
-use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tokio::time::sleep;
+use urpo_lib::core::types::AttributeMap;
 use urpo_lib::core::{Config, ServiceName, Span, SpanId, SpanKind, SpanStatus, TraceId};
 use urpo_lib::storage::{InMemoryStorage, StorageBackend};
 
@@ -24,13 +25,10 @@ fn generate_test_span(
 ) -> Span {
     let start_time = Utc::now();
 
-    let mut attributes = HashMap::new();
-    attributes.insert("http.method".to_string(), "GET".to_string());
-    attributes.insert("http.url".to_string(), format!("/api/{}", operation));
-    attributes.insert(
-        "http.status_code".to_string(),
-        if is_error { "500" } else { "200" }.to_string(),
-    );
+    let mut attributes = AttributeMap::new();
+    attributes.push(Arc::from("http.method"), Arc::from("GET"));
+    attributes.push(Arc::from("http.url"), Arc::from(format!("/api/{}", operation)));
+    attributes.push(Arc::from("http.status_code"), Arc::from(if is_error { "500" } else { "200" }));
 
     {
         let mut builder = urpo_lib::core::SpanBuilder::default()
@@ -82,12 +80,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!("Storage backend created");
 
     // Simulate receiving spans from different services
-    let services = vec![
-        "auth-service",
-        "api-gateway",
-        "database-service",
-        "cache-service",
-    ];
+    let services = vec!["auth-service", "api-gateway", "database-service", "cache-service"];
     let operations = vec!["login", "get_user", "update_profile", "list_items"];
 
     tracing::info!("Generating and storing test spans...");

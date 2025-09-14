@@ -107,12 +107,12 @@ impl RingBuffer {
                 self.size.fetch_add(1, Ordering::Relaxed);
                 self.total_buffered.fetch_add(1, Ordering::Relaxed);
                 Ok(())
-            }
+            },
             Err(_pooled_span) => {
                 // Buffer overflow - drop span and record metric
                 self.total_dropped.fetch_add(1, Ordering::Relaxed);
                 Err(UrpoError::BufferFull)
-            }
+            },
         }
     }
 
@@ -127,7 +127,7 @@ impl RingBuffer {
                 Some(pooled_span) => {
                     batch.push(pooled_span.take()); // Take ownership
                     self.size.fetch_sub(1, Ordering::Relaxed);
-                }
+                },
                 None => break, // Buffer empty
             }
         }
@@ -285,7 +285,7 @@ impl BufferedStorage {
 
                     tracing::debug!("Flushed {} spans to storage", spans.len());
                     break;
-                }
+                },
                 false => {
                     let e = UrpoError::Storage("Failed to store spans".to_string());
                     retries += 1;
@@ -314,7 +314,7 @@ impl BufferedStorage {
                             delay
                         );
                     }
-                }
+                },
             }
         }
     }
@@ -379,7 +379,7 @@ impl StorageBackend for BufferedStorage {
                 if self.buffer.is_nearly_full() {
                     self.flush_notify.notify_one();
                 }
-            }
+            },
             Err(UrpoError::BufferFull) => {
                 // Buffer full - trigger emergency flush and retry once
                 self.flush_notify.notify_one();
@@ -393,7 +393,7 @@ impl StorageBackend for BufferedStorage {
                     tracing::warn!("Span dropped due to persistent buffer overflow");
                     return Err(UrpoError::BufferFull);
                 }
-            }
+            },
             Err(e) => return Err(e),
         }
 
@@ -622,10 +622,8 @@ mod tests {
         let storage = BufferedStorage::new(backend, config);
 
         // Store spans
-        let spans = vec![
-            SpanBuilder::default().build_default(),
-            SpanBuilder::default().build_default(),
-        ];
+        let spans =
+            vec![SpanBuilder::default().build_default(), SpanBuilder::default().build_default()];
         for span in spans {
             assert!(storage.store_span(span).await.is_ok());
         }

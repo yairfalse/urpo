@@ -271,7 +271,8 @@ impl InMemoryStorage {
                             .back()
                             .map(|(t, _)| *t)
                             .unwrap_or(SystemTime::now());
-                        self.active_services.insert(service_name.clone(), latest_time);
+                        self.active_services
+                            .insert(service_name.clone(), latest_time);
                     }
 
                     drop(entry); // Release the dashmap entry lock
@@ -434,7 +435,8 @@ impl InMemoryStorage {
         let cutoff = SystemTime::now() - Duration::from_secs(900); // 15 minutes
         let batch_size = 20; // Smaller batches for service cleanup
 
-        let inactive_services: Vec<_> = self.active_services
+        let inactive_services: Vec<_> = self
+            .active_services
             .iter()
             .filter(|entry| *entry.value() < cutoff)
             .map(|entry| entry.key().clone())
@@ -573,7 +575,10 @@ impl InMemoryStorage {
 
     /// List all active service names.
     pub async fn list_active_services(&self) -> Vec<ServiceName> {
-        self.active_services.iter().map(|entry| entry.key().clone()).collect()
+        self.active_services
+            .iter()
+            .map(|entry| entry.key().clone())
+            .collect()
     }
 
     /// Get detailed statistics for monitoring.
@@ -654,7 +659,9 @@ impl StorageBackend for InMemoryStorage {
                     if removed == 0 {
                         // No space could be freed, reject with backpressure error
                         return Err(crate::core::UrpoError::MemoryLimitExceeded {
-                            current: (self.counters.memory_bytes.load(Ordering::Relaxed) / 1024 / 1024) as usize,
+                            current: (self.counters.memory_bytes.load(Ordering::Relaxed)
+                                / 1024
+                                / 1024) as usize,
                             limit: (self.cleanup_config.max_memory_bytes / 1024 / 1024) as usize,
                         });
                     }
@@ -664,7 +671,8 @@ impl StorageBackend for InMemoryStorage {
                 let new_pressure = self.get_memory_pressure();
                 if new_pressure >= self.cleanup_config.emergency_threshold {
                     return Err(crate::core::UrpoError::MemoryLimitExceeded {
-                        current: (self.counters.memory_bytes.load(Ordering::Relaxed) / 1024 / 1024) as usize,
+                        current: (self.counters.memory_bytes.load(Ordering::Relaxed) / 1024 / 1024)
+                            as usize,
                         limit: (self.cleanup_config.max_memory_bytes / 1024 / 1024) as usize,
                     });
                 }
@@ -688,10 +696,13 @@ impl StorageBackend for InMemoryStorage {
 
             if evicted == 0 || self.spans.len() >= self.max_spans {
                 // Unable to free space, apply backpressure
-                self.counters.processing_errors.fetch_add(1, Ordering::Relaxed);
-                return Err(crate::core::UrpoError::Storage(
-                    format!("Storage at capacity limit: {} spans", self.max_spans)
-                ));
+                self.counters
+                    .processing_errors
+                    .fetch_add(1, Ordering::Relaxed);
+                return Err(crate::core::UrpoError::Storage(format!(
+                    "Storage at capacity limit: {} spans",
+                    self.max_spans
+                )));
             }
         }
 
@@ -723,14 +734,16 @@ impl StorageBackend for InMemoryStorage {
                 }
                 tracing::warn!(
                     "Trace exceeded maximum spans ({}), evicted {} spans",
-                    MAX_SPANS_PER_TRACE, to_remove
+                    MAX_SPANS_PER_TRACE,
+                    to_remove
                 );
             }
         }
 
         // Update service index with bounds and timestamp tracking
         {
-            let mut service_spans = self.services
+            let mut service_spans = self
+                .services
                 .entry(service_name.clone())
                 .or_insert_with(VecDeque::new);
             service_spans.push_back((start_time, span_id.clone()));
@@ -744,7 +757,9 @@ impl StorageBackend for InMemoryStorage {
                         // Remove from spans storage
                         if let Some((_, span)) = self.spans.remove(&old_span_id) {
                             let freed_memory = self.estimate_span_memory(&span);
-                            self.counters.memory_bytes.fetch_sub(freed_memory, Ordering::Relaxed);
+                            self.counters
+                                .memory_bytes
+                                .fetch_sub(freed_memory, Ordering::Relaxed);
                         }
                         self.counters.spans_evicted.fetch_add(1, Ordering::Relaxed);
                     }

@@ -197,19 +197,19 @@ impl FeatureFlags {
             DegradationMode::Normal => {
                 // All features enabled
                 *self = Self::default();
-            }
+            },
             DegradationMode::Conservative => {
                 // Disable some expensive features
                 self.log_correlation = false;
                 self.histograms = false;
-            }
+            },
             DegradationMode::Reduced => {
                 // Disable more features
                 self.log_correlation = false;
                 self.histograms = false;
                 self.percentiles = false;
                 self.trace_correlation = false;
-            }
+            },
             DegradationMode::Survival => {
                 // Only essential features
                 self.detailed_metrics = false;
@@ -218,7 +218,7 @@ impl FeatureFlags {
                 self.percentiles = false;
                 self.trace_correlation = false;
                 self.service_discovery = false;
-            }
+            },
             DegradationMode::Emergency => {
                 // Minimal functionality
                 *self = Self {
@@ -231,7 +231,7 @@ impl FeatureFlags {
                     percentiles: false,
                     log_correlation: false,
                 };
-            }
+            },
         }
     }
 }
@@ -511,7 +511,7 @@ impl DegradationController {
             memory_pressure: self.memory_pressure.load(Ordering::Relaxed) as f64 / 10000.0,
             cpu_pressure: self.cpu_pressure.load(Ordering::Relaxed) as f64 / 10000.0,
             error_rate: self.error_rate.load(Ordering::Relaxed) as f64 / 10000.0,
-            sampling: sampling,
+            sampling,
             features_enabled: count_enabled_features(&features),
             total_features: count_total_features(),
             mode_changes: history.len() as u32,
