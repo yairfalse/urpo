@@ -63,6 +63,7 @@ struct StorageCounters {
 }
 
 /// Production-ready in-memory storage with advanced memory management.
+#[derive(Clone)]
 pub struct InMemoryStorage {
     /// Spans indexed by span ID.
     spans: Arc<DashMap<SpanId, Span>>,
@@ -79,7 +80,7 @@ pub struct InMemoryStorage {
     /// Memory cleanup configuration.
     cleanup_config: CleanupConfig,
     /// Performance counters.
-    counters: StorageCounters,
+    counters: Arc<StorageCounters>,
     /// Last cleanup operation time.
     last_cleanup: Arc<Mutex<Instant>>,
     /// Active service names for efficient listing.
@@ -97,14 +98,14 @@ impl InMemoryStorage {
             max_spans,
             max_spans_per_service: max_spans / 10, // Allow each service ~10% of total capacity
             cleanup_config: CleanupConfig::default(),
-            counters: StorageCounters {
+            counters: Arc::new(StorageCounters {
                 spans_processed: AtomicU64::new(0),
                 processing_errors: AtomicU64::new(0),
                 cleanup_operations: AtomicU64::new(0),
                 memory_bytes: AtomicUsize::new(0),
                 spans_evicted: AtomicU64::new(0),
                 start_time: Instant::now(),
-            },
+            }),
             last_cleanup: Arc::new(Mutex::new(Instant::now())),
             active_services: Arc::new(RwLock::new(HashMap::new())),
         }
