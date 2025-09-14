@@ -6,13 +6,13 @@
 //! - Retention policy enforcement
 //! - Intelligent prefetching for queries
 
-use crate::core::{Result, UrpoError, Span, SpanId, TraceId, ServiceName};
+use crate::core::{Result, UrpoError, Span, ServiceName};
 use crate::storage::archive::{ArchiveReader, ArchiveWriter, PartitionGranularity};
 use parking_lot::RwLock;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::{SystemTime, Duration, UNIX_EPOCH};
+use std::time::{SystemTime, Duration};
 use tokio::sync::mpsc;
 
 /// Archive management configuration.
@@ -167,7 +167,7 @@ impl ArchiveManager {
         let stats = self.stats.clone();
         let _archival_rx = {
             let (tx, rx) = mpsc::unbounded_channel();
-            std::mem::replace(&mut self.archival_tx, tx);
+            let _ = std::mem::replace(&mut self.archival_tx, tx);
             rx
         };
         
@@ -418,7 +418,7 @@ impl ArchiveManager {
 
     /// Process force rotation request.
     async fn process_force_rotation(
-        config: &ArchiveConfig,
+        _config: &ArchiveConfig,
         writer: &Arc<RwLock<Option<ArchiveWriter>>>,
     ) -> Result<()> {
         let mut writer_guard = writer.write();
@@ -470,8 +470,8 @@ impl ArchiveManager {
 
     /// Check if partition rotation is needed.
     async fn check_partition_rotation(
-        config: &ArchiveConfig,
-        writer: &Arc<RwLock<Option<ArchiveWriter>>>,
+        _config: &ArchiveConfig,
+        _writer: &Arc<RwLock<Option<ArchiveWriter>>>,
     ) -> Result<()> {
         // This would check partition size/age and rotate if needed
         // For now, just ensure writer exists
@@ -538,7 +538,8 @@ impl Drop for ArchiveManager {
 mod tests {
     use super::*;
     use tempfile::TempDir;
-    use crate::core::{SpanStatus, SpanKind};
+    use crate::core::{SpanStatus, SpanKind, TraceId, SpanId};
+    use std::time::{Duration, UNIX_EPOCH};
 
     fn create_test_span(trace_id: &str, service: &str, start_offset_secs: u64) -> Span {
         Span {
