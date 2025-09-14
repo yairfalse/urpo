@@ -1,23 +1,35 @@
 //! EXTREME PERFORMANCE BENCHMARKS for Urpo
-//! 
+//!
 //! Target Requirements (from CLAUDE.md):
 //! - Startup Time: <200ms
 //! - Span Processing: <10μs per span
 //! - Memory Usage: <100MB for 1M spans
 //! - Search: <1ms across 100K traces
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId, Throughput};
-use urpo_lib::core::{Span, TraceId, SpanId, ServiceName, SpanStatus, SpanKind, SpanBuilder};
-use urpo_lib::storage::{InMemoryStorage, StorageBackend};
-use std::time::{Duration, SystemTime, Instant};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use std::time::{Duration, Instant, SystemTime};
 use tokio::runtime::Runtime;
+use urpo_lib::core::{ServiceName, Span, SpanBuilder, SpanId, SpanKind, SpanStatus, TraceId};
+use urpo_lib::storage::{InMemoryStorage, StorageBackend};
 
 // Helper to generate test spans
 fn generate_test_spans(count: usize) -> Vec<Span> {
     let mut spans = Vec::with_capacity(count);
-    let services = ["frontend", "api-gateway", "auth-service", "database", "cache"];
-    let operations = ["GET /users", "POST /login", "SELECT *", "SET key", "auth.validate"];
-    
+    let services = [
+        "frontend",
+        "api-gateway",
+        "auth-service",
+        "database",
+        "cache",
+    ];
+    let operations = [
+        "GET /users",
+        "POST /login",
+        "SELECT *",
+        "SET key",
+        "auth.validate",
+    ];
+
     for i in 0..count {
         let span = SpanBuilder::default()
             .trace_id(TraceId::new(format!("trace_{:016x}", i / 10)).unwrap())
@@ -27,7 +39,11 @@ fn generate_test_spans(count: usize) -> Vec<Span> {
             .kind(SpanKind::Server)
             .start_time(SystemTime::now())
             .duration(Duration::from_micros((i % 1000) as u64))
-            .status(if i % 100 == 0 { SpanStatus::Error("test error".to_string()) } else { SpanStatus::Ok })
+            .status(if i % 100 == 0 {
+                SpanStatus::Error("test error".to_string())
+            } else {
+                SpanStatus::Ok
+            })
             .build()
             .unwrap();
         spans.push(span);
@@ -41,7 +57,7 @@ fn bench_span_ingestion(c: &mut Criterion) {
     let mut group = c.benchmark_group("span_ingestion");
     group.significance_level(0.01);
     group.sample_size(100);
-    
+
     for size in [100, 1_000, 10_000, 100_000].iter() {
         group.throughput(Throughput::Elements(*size as u64));
         group.bench_with_input(
@@ -50,7 +66,7 @@ fn bench_span_ingestion(c: &mut Criterion) {
             |b, &size| {
                 let rt = Runtime::new().unwrap();
                 let spans = generate_test_spans(size);
-                
+
                 b.iter_custom(|iters| {
                     let mut total_duration = Duration::ZERO;
                     for _ in 0..iters {
@@ -68,12 +84,12 @@ fn bench_span_ingestion(c: &mut Criterion) {
             },
         );
     }
-    
+
     // Measure per-span processing time
     group.bench_function("single_span", |b| {
         let rt = Runtime::new().unwrap();
         let span = generate_test_spans(1).into_iter().next().unwrap();
-        
+
         b.iter_custom(|iters| {
             let mut total_duration = Duration::ZERO;
             for _ in 0..iters {
@@ -87,7 +103,7 @@ fn bench_span_ingestion(c: &mut Criterion) {
             total_duration
         });
     });
-    
+
     group.finish();
 }
 
@@ -96,17 +112,17 @@ fn bench_span_ingestion(c: &mut Criterion) {
 fn bench_trace_query(c: &mut Criterion) {
     let mut group = c.benchmark_group("trace_query");
     let rt = Runtime::new().unwrap();
-    
+
     // Setup: Insert test data
     let storage = InMemoryStorage::new(1_000_000);
     let spans = generate_test_spans(100_000);
-    
+
     rt.block_on(async {
         for span in spans {
             storage.store_span(span).await.unwrap();
         }
     });
-    
+
     // Benchmark different query types
     group.bench_function("search_by_service", |b| {
         let storage_clone = storage.clone();
@@ -120,7 +136,7 @@ fn bench_trace_query(c: &mut Criterion) {
             });
         });
     });
-    
+
     group.bench_function("search_by_operation", |b| {
         let storage_clone = storage.clone();
         b.iter(|| {
@@ -133,7 +149,7 @@ fn bench_trace_query(c: &mut Criterion) {
             });
         });
     });
-    
+
     group.bench_function("get_error_traces", |b| {
         let storage_clone = storage.clone();
         b.iter(|| {
@@ -143,7 +159,7 @@ fn bench_trace_query(c: &mut Criterion) {
             });
         });
     });
-    
+
     group.bench_function("list_recent_traces", |b| {
         let storage_clone = storage.clone();
         b.iter(|| {
@@ -156,7 +172,7 @@ fn bench_trace_query(c: &mut Criterion) {
             });
         });
     });
-    
+
     group.finish();
 }
 
@@ -166,16 +182,16 @@ fn bench_memory_usage(c: &mut Criterion) {
     c.bench_function("memory_1m_spans", |b| {
         b.iter_custom(|iters| {
             let mut total_duration = Duration::ZERO;
-            
+
             for _ in 0..iters {
                 let rt = Runtime::new().unwrap();
                 let storage = InMemoryStorage::new(1_000_000);
-                
+
                 // Measure memory before
                 let before_mem = get_memory_usage();
-                
+
                 let start = Instant::now();
-                
+
                 // Store 1M spans
                 rt.block_on(async {
                     for i in 0..1_000_000 {
@@ -189,19 +205,19 @@ fn bench_memory_usage(c: &mut Criterion) {
                             .status(SpanStatus::Ok)
                             .build()
                             .unwrap();
-                        
+
                         if let Err(_) = storage.store_span(span).await {
                             break; // Storage full
                         }
                     }
                 });
-                
+
                 total_duration += start.elapsed();
-                
+
                 // Measure memory after
                 let after_mem = get_memory_usage();
                 let memory_used_mb = (after_mem - before_mem) as f64 / 1_048_576.0;
-                
+
                 // Assert we're under 100MB
                 assert!(
                     memory_used_mb < 100.0,
@@ -209,7 +225,7 @@ fn bench_memory_usage(c: &mut Criterion) {
                     memory_used_mb
                 );
             }
-            
+
             total_duration
         });
     });
@@ -220,25 +236,22 @@ fn bench_memory_usage(c: &mut Criterion) {
 fn bench_startup_time(c: &mut Criterion) {
     use urpo_lib::core::{Config, ConfigBuilder};
     use urpo_lib::storage::StorageManager;
-    
+
     c.bench_function("startup_time", |b| {
         b.iter_custom(|iters| {
             let mut total_duration = Duration::ZERO;
-            
+
             for _ in 0..iters {
                 let start = Instant::now();
-                
+
                 // Simulate full application startup
-                let config = ConfigBuilder::new()
-                    .max_spans(100_000)
-                    .build()
-                    .unwrap();
-                
+                let config = ConfigBuilder::new().max_spans(100_000).build().unwrap();
+
                 let _storage = StorageManager::new_in_memory(config.storage.max_spans);
-                
+
                 let elapsed = start.elapsed();
                 total_duration += elapsed;
-                
+
                 // Assert we're under 200ms
                 assert!(
                     elapsed.as_millis() < 200,
@@ -246,7 +259,7 @@ fn bench_startup_time(c: &mut Criterion) {
                     elapsed
                 );
             }
-            
+
             total_duration
         });
     });
@@ -257,17 +270,17 @@ fn bench_startup_time(c: &mut Criterion) {
 fn bench_service_aggregation(c: &mut Criterion) {
     let mut group = c.benchmark_group("service_aggregation");
     let rt = Runtime::new().unwrap();
-    
+
     // Setup storage with data
     let storage = InMemoryStorage::new(1_000_000);
     let spans = generate_test_spans(10_000);
-    
+
     rt.block_on(async {
         for span in spans {
             storage.store_span(span).await.unwrap();
         }
     });
-    
+
     group.bench_function("get_service_metrics", |b| {
         let storage_clone = storage.clone();
         b.iter(|| {
@@ -277,7 +290,7 @@ fn bench_service_aggregation(c: &mut Criterion) {
             });
         });
     });
-    
+
     group.finish();
 }
 
@@ -285,10 +298,10 @@ fn bench_service_aggregation(c: &mut Criterion) {
 /// TARGET: Handle 10,000+ concurrent operations
 fn bench_concurrent_operations(c: &mut Criterion) {
     use tokio::task::JoinSet;
-    
+
     c.bench_function("concurrent_10k_writes", |b| {
         let rt = Runtime::new().unwrap();
-        
+
         b.iter_custom(|iters| {
             let mut total_duration = Duration::ZERO;
             for _ in 0..iters {
@@ -297,14 +310,14 @@ fn bench_concurrent_operations(c: &mut Criterion) {
                     let storage = InMemoryStorage::new(1_000_000);
                     let spans = generate_test_spans(10_000);
                     let mut tasks = JoinSet::new();
-                    
+
                     for span in spans {
                         let storage_clone = storage.clone();
                         tasks.spawn(async move {
                             storage_clone.store_span(span).await.unwrap();
                         });
                     }
-                    
+
                     while let Some(_) = tasks.join_next().await {}
                 });
                 total_duration += start.elapsed();
@@ -318,7 +331,7 @@ fn bench_concurrent_operations(c: &mut Criterion) {
 fn get_memory_usage() -> usize {
     // This is a simplified version - in production use proper memory profiling
     use std::fs;
-    
+
     if let Ok(status) = fs::read_to_string("/proc/self/status") {
         for line in status.lines() {
             if line.starts_with("VmRSS:") {
@@ -329,7 +342,7 @@ fn get_memory_usage() -> usize {
             }
         }
     }
-    
+
     // Fallback for non-Linux systems - use a rough estimate
     100_000_000 // 100MB default
 }

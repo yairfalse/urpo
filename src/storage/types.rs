@@ -1,7 +1,7 @@
 //! Storage data types and structures.
 
 use crate::core::{ServiceName, TraceId};
-use std::time::{SystemTime, Duration};
+use std::time::{Duration, SystemTime};
 
 /// Information about a trace for listing purposes.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -99,7 +99,7 @@ impl Default for CleanupConfig {
     fn default() -> Self {
         Self {
             max_spans: 1_000_000,
-            max_memory_bytes: 2_000_000_000, // 2GB
+            max_memory_bytes: 2_000_000_000,    // 2GB
             max_age: Duration::from_secs(3600), // 1 hour
             aggressive_cleanup: true,
             min_spans_per_service: 100,
@@ -107,7 +107,7 @@ impl Default for CleanupConfig {
             critical_threshold: 0.85,
             emergency_threshold: 0.95,
             retention_period: Duration::from_secs(24 * 3600), // 24 hours
-            cleanup_interval: Duration::from_secs(60), // 1 minute
+            cleanup_interval: Duration::from_secs(60),        // 1 minute
         }
     }
 }

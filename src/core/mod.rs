@@ -13,7 +13,5 @@ pub mod types;
 pub use config::{Config, ConfigBuilder, ConfigWatcher};
 pub use error::{Result, UrpoError};
 pub use types::{
-    ServiceMetrics, ServiceName, Span, SpanBuilder, SpanId, SpanKind, SpanStatus, 
-    Trace, TraceId,
+    ServiceMetrics, ServiceName, Span, SpanBuilder, SpanId, SpanKind, SpanStatus, Trace, TraceId,
 };
-

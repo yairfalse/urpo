@@ -8,6 +8,47 @@
 - **NO OTHER LANGUAGES** - Only Rust, TOML (for Cargo), and YAML (for CI)
 - **STRONG TYPING ONLY** - Never use dynamic typing patterns
 
+## 🏗️ Development Workflow
+
+### 1. Design Session First
+Before writing ANY code:
+```markdown
+## Design Session Checklist
+- [ ] What problem are we solving?
+- [ ] What's the simplest solution?
+- [ ] Can we break it into smaller functions?
+- [ ] What interfaces do we need?
+- [ ] What can go wrong?
+- [ ] Draw the flow (ASCII or diagram)
+```
+
+### 2. Write Tests Before Code
+```go
+// FIRST: Write the test
+func TestReconciler_HandleOrphans(t *testing.T) {
+    // Define expected behavior
+    orphan := Resource{ID: "i-123", Tags: map[string]string{}}
+
+    reconciler := NewReconciler()
+    decision := reconciler.HandleOrphan(orphan)
+
+    assert.Equal(t, "notify", decision.Action)
+}
+
+// THEN: Write minimal code to pass
+```
+
+### 3. Code in Small Chunks
+```bash
+# Work on dedicated branches
+git checkout -b feat/orphan-detection
+
+# Small iterations with verification
+1. Write function (max 30 lines) → fmt → vet → lint → commit
+2. Add validation → test → fmt → vet → lint → commit
+3. Add error handling → test → fmt → vet → lint → commit
+
+
 ## 🚀 PERFORMANCE MANIFESTO
 
 **Our Goal:** Build the fastest OTEL trace explorer in existence

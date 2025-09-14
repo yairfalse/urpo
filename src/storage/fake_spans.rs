@@ -59,7 +59,7 @@ impl ServiceConfig {
     fn generate_latency(&self) -> Duration {
         let mut rng = thread_rng();
         let percentile: f64 = rng.gen();
-        
+
         let ms = if percentile < 0.5 {
             // P0-P50: Linear between 0 and P50
             (self.base_p50_ms as f64 * percentile * 2.0) as u64
@@ -73,7 +73,7 @@ impl ServiceConfig {
             let range = self.base_p99_ms - self.base_p95_ms;
             let position = (percentile - 0.95) / 0.05;
             let base = self.base_p95_ms + (range as f64 * position) as u64;
-            
+
             // Add occasional outliers (1% chance of 2x latency)
             if rng.gen::<f64>() < 0.01 {
                 base * 2
@@ -81,7 +81,7 @@ impl ServiceConfig {
                 base
             }
         };
-        
+
         // Add some jitter
         let jitter = rng.gen_range(0.9..1.1);
         Duration::from_millis((ms as f64 * jitter) as u64)
@@ -126,7 +126,11 @@ impl SpanGenerator {
                 20,    // P50: 20ms
                 50,    // P95: 50ms
                 100,   // P99: 100ms
-                vec!["GET /api/v1/users", "POST /api/v1/orders", "GET /api/v1/products"],
+                vec![
+                    "GET /api/v1/users",
+                    "POST /api/v1/orders",
+                    "GET /api/v1/products",
+                ],
             ),
             ServiceConfig::new(
                 "user-service",
@@ -144,16 +148,26 @@ impl SpanGenerator {
                 30,    // P50: 30ms
                 80,    // P95: 80ms
                 150,   // P99: 150ms
-                vec!["createOrder", "getOrder", "updateOrderStatus", "cancelOrder"],
+                vec![
+                    "createOrder",
+                    "getOrder",
+                    "updateOrderStatus",
+                    "cancelOrder",
+                ],
             ),
             ServiceConfig::new(
                 "payment-service",
-                15.0,  // 15 RPS
-                0.02,  // 2% error rate (payment failures)
-                100,   // P50: 100ms (external API calls)
-                300,   // P95: 300ms
-                500,   // P99: 500ms
-                vec!["processPayment", "refundPayment", "validateCard", "getPaymentStatus"],
+                15.0, // 15 RPS
+                0.02, // 2% error rate (payment failures)
+                100,  // P50: 100ms (external API calls)
+                300,  // P95: 300ms
+                500,  // P99: 500ms
+                vec![
+                    "processPayment",
+                    "refundPayment",
+                    "validateCard",
+                    "getPaymentStatus",
+                ],
             ),
             ServiceConfig::new(
                 "inventory-service",
@@ -162,7 +176,12 @@ impl SpanGenerator {
                 10,    // P50: 10ms (cached responses)
                 25,    // P95: 25ms
                 50,    // P99: 50ms
-                vec!["checkStock", "reserveItems", "updateInventory", "getProductInfo"],
+                vec![
+                    "checkStock",
+                    "reserveItems",
+                    "updateInventory",
+                    "getProductInfo",
+                ],
             ),
         ];
 
@@ -177,14 +196,14 @@ impl SpanGenerator {
     async fn generate_id(&self, prefix: &str) -> String {
         let mut counter = self.id_counter.write().await;
         *counter += 1;
-        
+
         // Generate a random suffix for uniqueness
         let suffix: String = thread_rng()
             .sample_iter(&Alphanumeric)
             .take(8)
             .map(char::from)
             .collect();
-        
+
         format!("{}_{:08x}_{}", prefix, *counter, suffix)
     }
 
@@ -192,10 +211,10 @@ impl SpanGenerator {
     async fn generate_span(&self, service: &ServiceConfig) -> Result<Span> {
         let trace_id = TraceId::new(self.generate_id("trace").await)?;
         let span_id = SpanId::new(self.generate_id("span").await.chars().take(16).collect())?;
-        
+
         let operation = service.random_operation();
         let duration = service.generate_latency();
-        
+
         let status = if service.should_error() {
             let error_messages = vec![
                 "Connection timeout",
@@ -211,26 +230,40 @@ impl SpanGenerator {
         } else {
             SpanStatus::Ok
         };
-        
+
         // Add some realistic attributes
         let mut attributes = HashMap::new();
         attributes.insert("http.method".to_string(), "GET".to_string());
-        attributes.insert("http.status_code".to_string(), 
-            if status.is_ok() { "200" } else { "500" }.to_string());
+        attributes.insert(
+            "http.status_code".to_string(),
+            if status.is_ok() { "200" } else { "500" }.to_string(),
+        );
         attributes.insert("span.kind".to_string(), "server".to_string());
-        
+
         // Add some tags
         let mut tags = HashMap::new();
         tags.insert("environment".to_string(), "production".to_string());
         tags.insert("version".to_string(), "1.0.0".to_string());
-        
+
         // Add resource attributes
         let mut resource_attributes = HashMap::new();
-        resource_attributes.insert("host.name".to_string(), 
-            format!("{}-host-{}", service.name.as_str(), thread_rng().gen_range(1..=5)));
-        resource_attributes.insert("container.id".to_string(), 
-            self.generate_id("container").await.chars().take(12).collect());
-        
+        resource_attributes.insert(
+            "host.name".to_string(),
+            format!(
+                "{}-host-{}",
+                service.name.as_str(),
+                thread_rng().gen_range(1..=5)
+            ),
+        );
+        resource_attributes.insert(
+            "container.id".to_string(),
+            self.generate_id("container")
+                .await
+                .chars()
+                .take(12)
+                .collect(),
+        );
+
         Ok(Span::builder()
             .trace_id(trace_id)
             .span_id(span_id)
@@ -252,26 +285,26 @@ impl SpanGenerator {
         F: FnMut(Span) + Send + 'static,
     {
         *self.running.write().await = true;
-        
+
         // Calculate total RPS across all services
         let total_rps: f64 = self.services.iter().map(|s| s.base_rps).sum();
         let interval_ms = 1000.0 / total_rps;
-        
+
         let mut interval = time::interval(Duration::from_millis(interval_ms as u64));
-        
+
         while *self.running.read().await {
             interval.tick().await;
-            
+
             // Select a service weighted by its RPS
             let service = self.select_service_weighted();
-            
+
             // Generate a span for this service
             match self.generate_span(&service).await {
                 Ok(span) => callback(span),
                 Err(e) => tracing::warn!("Failed to generate span: {}", e),
             }
         }
-        
+
         Ok(())
     }
 
@@ -279,14 +312,14 @@ impl SpanGenerator {
     fn select_service_weighted(&self) -> ServiceConfig {
         let total_rps: f64 = self.services.iter().map(|s| s.current_rps()).sum();
         let mut selection = thread_rng().gen::<f64>() * total_rps;
-        
+
         for service in &self.services {
             selection -= service.current_rps();
             if selection <= 0.0 {
                 return service.clone();
             }
         }
-        
+
         // Fallback to first service
         self.services[0].clone()
     }
@@ -294,12 +327,12 @@ impl SpanGenerator {
     /// Generate a batch of spans for testing.
     pub async fn generate_batch(&self, count: usize) -> Result<Vec<Span>> {
         let mut spans = Vec::with_capacity(count);
-        
+
         for _ in 0..count {
             let service = self.select_service_weighted();
             spans.push(self.generate_span(&service).await?);
         }
-        
+
         Ok(spans)
     }
 
@@ -329,9 +362,11 @@ mod tests {
         let generator = SpanGenerator::new();
         let service = &generator.services[0];
         // BULLETPROOF: Test should panic on failure
-        let span = generator.generate_span(service).await
+        let span = generator
+            .generate_span(service)
+            .await
             .expect("Test span generation should succeed");
-        
+
         assert_eq!(span.service_name, service.name);
         assert!(!span.operation_name.is_empty());
         assert!(span.duration.as_millis() > 0);
@@ -340,12 +375,14 @@ mod tests {
     #[tokio::test]
     async fn test_generate_batch() {
         let generator = SpanGenerator::new();
-        // BULLETPROOF: Test should panic on failure  
-        let spans = generator.generate_batch(100).await
+        // BULLETPROOF: Test should panic on failure
+        let spans = generator
+            .generate_batch(100)
+            .await
             .expect("Test batch generation should succeed");
-        
+
         assert_eq!(spans.len(), 100);
-        
+
         // Check that we have spans from multiple services
         let mut services = std::collections::HashSet::new();
         for span in &spans {
@@ -358,22 +395,23 @@ mod tests {
     async fn test_error_rate() {
         let generator = SpanGenerator::new();
         // BULLETPROOF: Test should panic on failure
-        let spans = generator.generate_batch(1000).await
+        let spans = generator
+            .generate_batch(1000)
+            .await
             .expect("Test batch generation should succeed");
-        
+
         // Find payment service spans (highest error rate)
-        let payment_spans: Vec<_> = spans.iter()
+        let payment_spans: Vec<_> = spans
+            .iter()
             .filter(|s| s.service_name.as_str() == "payment-service")
             .collect();
-        
+
         assert!(!payment_spans.is_empty());
-        
-        let error_count = payment_spans.iter()
-            .filter(|s| s.status.is_error())
-            .count();
-        
+
+        let error_count = payment_spans.iter().filter(|s| s.status.is_error()).count();
+
         let error_rate = error_count as f64 / payment_spans.len() as f64;
-        
+
         // Should be roughly 2% with some variance
         assert!(error_rate > 0.0);
         assert!(error_rate < 0.1); // Should be less than 10%
@@ -383,21 +421,23 @@ mod tests {
     async fn test_latency_distribution() {
         let generator = SpanGenerator::new();
         let service = &generator.services[0]; // api-gateway
-        
+
         let mut latencies = Vec::new();
         for _ in 0..1000 {
             // BULLETPROOF: Test should panic on failure
-        let span = generator.generate_span(service).await
-            .expect("Test span generation should succeed");
+            let span = generator
+                .generate_span(service)
+                .await
+                .expect("Test span generation should succeed");
             latencies.push(span.duration.as_millis() as u64);
         }
-        
+
         latencies.sort_unstable();
-        
+
         let p50 = latencies[500];
         let p95 = latencies[950];
         let p99 = latencies[990];
-        
+
         // Check that percentiles are in reasonable ranges
         assert!(p50 <= service.base_p50_ms * 2);
         assert!(p95 <= service.base_p95_ms * 2);

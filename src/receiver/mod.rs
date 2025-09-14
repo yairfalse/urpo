@@ -5,7 +5,7 @@
 
 pub mod http;
 
-use crate::core::{Result, Span as UrpoSpan, SpanId, SpanStatus, TraceId, ServiceName, UrpoError};
+use crate::core::{Result, ServiceName, Span as UrpoSpan, SpanId, SpanStatus, TraceId, UrpoError};
 use crate::storage::UnifiedStorage;
 use chrono::{DateTime, Utc};
 use opentelemetry_proto::tonic::collector::trace::v1::{
@@ -39,7 +39,7 @@ impl OtelReceiver {
     ) -> Self {
         Self::new(grpc_port, http_port, storage.as_backend(), health_monitor)
     }
-    
+
     /// Create a new OTEL receiver.
     pub fn new(
         grpc_port: u16,
@@ -57,11 +57,15 @@ impl OtelReceiver {
 
     /// Run both GRPC and HTTP receivers
     pub async fn run(self: Arc<Self>) -> Result<()> {
-        tracing::info!("Starting OTEL receivers on ports {} (GRPC) and {} (HTTP)", self.grpc_port, self.http_port);
-        
+        tracing::info!(
+            "Starting OTEL receivers on ports {} (GRPC) and {} (HTTP)",
+            self.grpc_port,
+            self.http_port
+        );
+
         let grpc_addr = SocketAddr::from(([0, 0, 0, 0], self.grpc_port));
         let http_addr = SocketAddr::from(([0, 0, 0, 0], self.http_port));
-        
+
         // Start GRPC server
         let mut grpc_handle = {
             let receiver = self.clone();
@@ -72,7 +76,7 @@ impl OtelReceiver {
             })
         };
 
-        // Start HTTP server  
+        // Start HTTP server
         let mut http_handle = {
             let receiver = self.clone();
             tokio::spawn(async move {
@@ -81,7 +85,7 @@ impl OtelReceiver {
                 }
             })
         };
-        
+
         // Wait for shutdown signal or server error
         tokio::select! {
             _ = tokio::signal::ctrl_c() => {
@@ -90,12 +94,12 @@ impl OtelReceiver {
                 http_handle.abort();
                 Ok(())
             }
-            result = &mut grpc_handle => {
+            _result = &mut grpc_handle => {
                 tracing::warn!("GRPC server stopped unexpectedly");
                 http_handle.abort();
                 Ok(())
             }
-            result = &mut http_handle => {
+            _result = &mut http_handle => {
                 tracing::warn!("HTTP server stopped unexpectedly");
                 grpc_handle.abort();
                 Ok(())
@@ -110,13 +114,12 @@ impl OtelReceiver {
         });
 
         tracing::info!("GRPC server binding to {}", addr);
-        
+
         // Create server builder and bind
-        let server = Server::builder()
-            .add_service(service);
-            
+        let server = Server::builder().add_service(service);
+
         tracing::debug!("Starting server.serve() on {}", addr);
-        
+
         // Serve with proper error handling
         match server.serve(addr).await {
             Ok(_) => {
@@ -127,11 +130,20 @@ impl OtelReceiver {
                 tracing::error!("GRPC server error: {} (binding to {})", e, addr);
                 // Check if it's a binding/address error
                 if e.to_string().contains("Address already in use") {
-                    Err(UrpoError::network(format!("Port {} already in use", addr.port())))
+                    Err(UrpoError::network(format!(
+                        "Port {} already in use",
+                        addr.port()
+                    )))
                 } else if e.to_string().contains("Permission denied") {
-                    Err(UrpoError::network(format!("Permission denied binding to {}", addr)))
+                    Err(UrpoError::network(format!(
+                        "Permission denied binding to {}",
+                        addr
+                    )))
                 } else {
-                    Err(UrpoError::protocol(format!("Failed to start GRPC server: {}", e)))
+                    Err(UrpoError::protocol(format!(
+                        "Failed to start GRPC server: {}",
+                        e
+                    )))
                 }
             }
         }
@@ -140,17 +152,19 @@ impl OtelReceiver {
     /// Start the HTTP server.
     pub async fn start_http(self: Arc<Self>, addr: SocketAddr) -> Result<()> {
         tracing::info!("Starting HTTP OTLP receiver on {}", addr);
-        
+
         let app = http::create_http_router(self);
-        
-        let listener = tokio::net::TcpListener::bind(addr).await
-            .map_err(|e| UrpoError::network(format!("Failed to bind HTTP server to {}: {}", addr, e)))?;
-        
+
+        let listener = tokio::net::TcpListener::bind(addr).await.map_err(|e| {
+            UrpoError::network(format!("Failed to bind HTTP server to {}: {}", addr, e))
+        })?;
+
         tracing::info!("HTTP OTLP receiver listening on {}", addr);
-        
-        axum::serve(listener, app).await
+
+        axum::serve(listener, app)
+            .await
             .map_err(|e| UrpoError::protocol(format!("HTTP server error: {}", e)))?;
-            
+
         Ok(())
     }
 
@@ -193,7 +207,7 @@ impl TraceService for GrpcTraceService {
             total_resource_spans += 1;
             let resource = resource_spans.resource.unwrap_or_default();
             let service_name = extract_service_name(&resource.attributes);
-            
+
             tracing::debug!(
                 "Processing resource spans for service: {}, scope_spans count: {}",
                 service_name,
@@ -202,28 +216,32 @@ impl TraceService for GrpcTraceService {
 
             for scope_spans in resource_spans.scope_spans {
                 total_scope_spans += 1;
-                let scope_name = scope_spans.scope
+                let scope_name = scope_spans
+                    .scope
                     .as_ref()
                     .map(|s| s.name.as_str())
                     .unwrap_or("unknown");
-                
+
                 tracing::debug!(
                     "Processing scope: {}, spans count: {}",
                     scope_name,
                     scope_spans.spans.len()
                 );
-                
+
                 for otel_span in scope_spans.spans {
                     total_spans += 1;
                     let span_name = otel_span.name.clone();
                     let trace_id_hex = hex::encode(&otel_span.trace_id);
                     let span_id_hex = hex::encode(&otel_span.span_id);
-                    
+
                     match convert_otel_span(otel_span, service_name.clone()) {
                         Ok(span) => {
                             tracing::debug!(
                                 "Converted span: service={}, operation={}, trace_id={}, span_id={}",
-                                service_name, span_name, trace_id_hex, span_id_hex
+                                service_name,
+                                span_name,
+                                trace_id_hex,
+                                span_id_hex
                             );
                             spans.push(span);
                         }
@@ -263,7 +281,10 @@ fn extract_service_name(attributes: &[opentelemetry_proto::tonic::common::v1::Ke
     for attr in attributes {
         if attr.key == "service.name" {
             if let Some(value) = &attr.value {
-                if let Some(opentelemetry_proto::tonic::common::v1::any_value::Value::StringValue(s)) = &value.value {
+                if let Some(
+                    opentelemetry_proto::tonic::common::v1::any_value::Value::StringValue(s),
+                ) = &value.value
+                {
                     return s.clone();
                 }
             }
@@ -280,18 +301,22 @@ fn convert_otel_span(
     // OTEL trace IDs are 16 bytes (32 hex chars), span IDs are 8 bytes (16 hex chars)
     let trace_id_hex = hex::encode(&otel_span.trace_id);
     let span_id_hex = hex::encode(&otel_span.span_id);
-    
+
     // Validate IDs are not empty
     if trace_id_hex.is_empty() || trace_id_hex == "00000000000000000000000000000000" {
-        return Err(UrpoError::InvalidSpan("Invalid trace ID: empty or all zeros".to_string()));
+        return Err(UrpoError::InvalidSpan(
+            "Invalid trace ID: empty or all zeros".to_string(),
+        ));
     }
     if span_id_hex.is_empty() || span_id_hex == "0000000000000000" {
-        return Err(UrpoError::InvalidSpan("Invalid span ID: empty or all zeros".to_string()));
+        return Err(UrpoError::InvalidSpan(
+            "Invalid span ID: empty or all zeros".to_string(),
+        ));
     }
-    
+
     let trace_id = TraceId::new(trace_id_hex)?;
     let span_id = SpanId::new(span_id_hex)?;
-    
+
     let parent_span_id = if otel_span.parent_span_id.is_empty() {
         None
     } else {
@@ -308,7 +333,7 @@ fn convert_otel_span(
     } else {
         ServiceName::new(service_name)?
     };
-    
+
     // Map span kind to an attribute instead
     let kind_str = match otel_span.kind() {
         opentelemetry_proto::tonic::trace::v1::span::SpanKind::Unspecified => "internal",
@@ -344,7 +369,10 @@ fn convert_otel_span(
     // Store events as attributes for now since we don't have SpanEvent in core types
     for (i, event) in otel_span.events.into_iter().enumerate() {
         attributes.insert(format!("event.{}.name", i), event.name);
-        attributes.insert(format!("event.{}.time", i), nanos_to_datetime(event.time_unix_nano).to_rfc3339());
+        attributes.insert(
+            format!("event.{}.time", i),
+            nanos_to_datetime(event.time_unix_nano).to_rfc3339(),
+        );
         for attr in event.attributes {
             if let Some(value) = attr.value {
                 attributes.insert(format!("event.{}.{}", i, attr.key), value_to_string(value));
@@ -354,19 +382,19 @@ fn convert_otel_span(
 
     // Add span kind to attributes
     attributes.insert("span.kind".to_string(), kind_str.to_string());
-    
+
     // Calculate duration from start and end times
-    let start_system = std::time::SystemTime::UNIX_EPOCH + 
-        std::time::Duration::from_nanos(otel_span.start_time_unix_nano);
-    let end_system = std::time::SystemTime::UNIX_EPOCH + 
-        std::time::Duration::from_nanos(otel_span.end_time_unix_nano);
-    
+    let start_system = std::time::SystemTime::UNIX_EPOCH
+        + std::time::Duration::from_nanos(otel_span.start_time_unix_nano);
+    let end_system = std::time::SystemTime::UNIX_EPOCH
+        + std::time::Duration::from_nanos(otel_span.end_time_unix_nano);
+
     let duration = if end_system > start_system {
         end_system.duration_since(start_system).unwrap_or_default()
     } else {
         std::time::Duration::from_millis(0)
     };
-    
+
     let mut builder = UrpoSpan::builder()
         .trace_id(trace_id)
         .span_id(span_id)
@@ -376,11 +404,11 @@ fn convert_otel_span(
         .duration(duration)
         .status(status)
         .attribute("span.kind", kind_str);
-    
+
     if let Some(parent_id) = parent_span_id {
         builder = builder.parent_span_id(parent_id);
     }
-    
+
     builder.build()
 }
 
@@ -394,18 +422,14 @@ fn nanos_to_datetime(nanos: u64) -> DateTime<Utc> {
 /// Convert OTEL value to string.
 fn value_to_string(value: opentelemetry_proto::tonic::common::v1::AnyValue) -> String {
     use opentelemetry_proto::tonic::common::v1::any_value::Value;
-    
+
     match value.value {
         Some(Value::StringValue(s)) => s,
         Some(Value::BoolValue(b)) => b.to_string(),
         Some(Value::IntValue(i)) => i.to_string(),
         Some(Value::DoubleValue(d)) => d.to_string(),
         Some(Value::ArrayValue(arr)) => {
-            let values: Vec<String> = arr
-                .values
-                .into_iter()
-                .map(value_to_string)
-                .collect();
+            let values: Vec<String> = arr.values.into_iter().map(value_to_string).collect();
             format!("[{}]", values.join(", "))
         }
         Some(Value::KvlistValue(kv)) => {
@@ -424,7 +448,6 @@ fn value_to_string(value: opentelemetry_proto::tonic::common::v1::AnyValue) -> S
     }
 }
 
-
 //         // Wait for both to complete (they shouldn't unless there's an error)
 //         tokio::select! {
 //             result = grpc_handle => {
@@ -438,7 +461,6 @@ fn value_to_string(value: opentelemetry_proto::tonic::common::v1::AnyValue) -> S
 //         }
 //     }
 // }
-
 
 #[cfg(test)]
 mod tests {
@@ -454,29 +476,27 @@ mod tests {
 
     // fn test_should_sample() {
     //     let (tx, _rx) = mpsc::channel(10);
-    //     
+    //
     //     let receiver = OtelReceiver::new(tx.clone(), 1.0);
     //     assert!(receiver.should_sample());
-    //     
+    //
     //     let receiver = OtelReceiver::new(tx.clone(), 0.0);
     //     assert!(!receiver.should_sample());
     // }
 
     #[test]
     fn test_extract_service_name() {
-        use opentelemetry_proto::tonic::common::v1::{AnyValue, KeyValue, any_value::Value};
-        
-        let attributes = vec![
-            KeyValue {
-                key: "service.name".to_string(),
-                value: Some(AnyValue {
-                    value: Some(Value::StringValue("test-service".to_string())),
-                }),
-            },
-        ];
-        
+        use opentelemetry_proto::tonic::common::v1::{any_value::Value, AnyValue, KeyValue};
+
+        let attributes = vec![KeyValue {
+            key: "service.name".to_string(),
+            value: Some(AnyValue {
+                value: Some(Value::StringValue("test-service".to_string())),
+            }),
+        }];
+
         assert_eq!(extract_service_name(&attributes), "test-service");
-        
+
         let empty_attributes = vec![];
         assert_eq!(extract_service_name(&empty_attributes), "unknown");
     }

@@ -4,14 +4,17 @@
 //! and operational metrics for production deployment.
 
 use std::collections::HashMap;
-use std::sync::{Arc, atomic::{AtomicU64, AtomicBool, Ordering}};
+use std::sync::{
+    atomic::{AtomicBool, AtomicU64, Ordering},
+    Arc,
+};
 use std::time::{Duration, SystemTime};
-use tokio::sync::{RwLock, Mutex};
+use tokio::sync::{Mutex, RwLock};
 use tokio::time::interval;
 
 use crate::core::Result;
-use crate::storage::{StorageStats, StorageHealth};
-use crate::storage::performance::{PerformanceStats, PerformanceManager};
+use crate::storage::performance::{PerformanceManager, PerformanceStats};
+use crate::storage::{StorageHealth, StorageStats};
 
 /// System health status.
 #[derive(Debug, Clone, PartialEq)]
@@ -31,12 +34,12 @@ impl SystemHealth {
     pub fn color(&self) -> &'static str {
         match self {
             SystemHealth::Healthy => "green",
-            SystemHealth::Degraded => "yellow", 
+            SystemHealth::Degraded => "yellow",
             SystemHealth::Unhealthy => "orange",
             SystemHealth::Critical => "red",
         }
     }
-    
+
     /// Get severity score (0-100).
     pub fn severity(&self) -> u8 {
         match self {
@@ -298,45 +301,40 @@ impl ErrorTracker {
             total: AtomicU64::new(0),
         }
     }
-    
+
     fn record_error(&mut self, category: &str, message: String) {
         self.total.fetch_add(1, Ordering::Relaxed);
-        
+
         // Update category count
         self.categories
             .entry(category.to_string())
             .or_insert_with(|| AtomicU64::new(0))
             .fetch_add(1, Ordering::Relaxed);
-        
+
         // Add to recent errors
         self.recent.push((SystemTime::now(), message));
-        
+
         // Limit recent errors
         if self.recent.len() > 100 {
             self.recent.remove(0);
         }
     }
-    
+
     fn get_metrics(&self, max_recent: usize) -> ErrorMetrics {
         let mut error_categories = HashMap::new();
         for (cat, count) in &self.categories {
             error_categories.insert(cat.clone(), count.load(Ordering::Relaxed));
         }
-        
-        let recent_errors = self.recent
-            .iter()
-            .rev()
-            .take(max_recent)
-            .cloned()
-            .collect();
-        
+
+        let recent_errors = self.recent.iter().rev().take(max_recent).cloned().collect();
+
         ErrorMetrics {
             total_errors: self.total.load(Ordering::Relaxed),
             errors_per_minute: 0, // Would need time-based tracking
             error_rate: 0.0,      // Would need span count
             error_categories,
             recent_errors,
-            critical_errors: 0,  // Would need severity classification
+            critical_errors: 0, // Would need severity classification
         }
     }
 }
@@ -357,15 +355,15 @@ impl UptimeTracker {
             downtime_events: Vec::new(),
         }
     }
-    
+
     fn record_restart(&mut self, _reason: String) {
         self.restarts += 1;
         // In a real implementation, would track downtime
     }
-    
+
     fn get_metrics(&self) -> UptimeMetrics {
         let uptime = self.start_time.elapsed().unwrap_or(Duration::new(0, 0));
-        
+
         UptimeMetrics {
             start_time: self.start_time,
             uptime,
@@ -381,7 +379,7 @@ impl Monitor {
     /// Create a new monitoring system.
     pub fn new(perf_manager: Arc<PerformanceManager>) -> Self {
         let config = MonitoringConfig::default();
-        
+
         let initial_metrics = SystemMetrics {
             health: SystemHealth::Healthy,
             storage: crate::storage::StorageStats {
@@ -407,7 +405,7 @@ impl Monitor {
             uptime: UptimeMetrics::default(),
             timestamp: SystemTime::now(),
         };
-        
+
         Self {
             metrics: Arc::new(RwLock::new(initial_metrics)),
             perf_manager,
@@ -418,18 +416,18 @@ impl Monitor {
             shutdown: Arc::new(AtomicBool::new(false)),
         }
     }
-    
+
     /// Start monitoring in background.
     pub async fn start(&self) -> Result<()> {
         // Start metrics collection
         self.start_metrics_collection().await?;
-        
+
         // Start health checks
         self.start_health_checks().await?;
-        
+
         Ok(())
     }
-    
+
     /// Start metrics collection loop.
     async fn start_metrics_collection(&self) -> Result<()> {
         let metrics = self.metrics.clone();
@@ -438,34 +436,34 @@ impl Monitor {
         let uptime_tracker = self.uptime_tracker.clone();
         let shutdown = self.shutdown.clone();
         let config = self.config.clone();
-        
+
         tokio::spawn(async move {
             let mut interval = interval(config.metrics_interval);
-            
+
             while !shutdown.load(Ordering::Relaxed) {
                 interval.tick().await;
-                
+
                 // Collect performance metrics
                 let performance = perf_manager.get_stats().await;
-                
+
                 // Collect error metrics
                 let errors = {
                     let error_tracker = error_tracker.lock().await;
                     error_tracker.get_metrics(config.max_recent_errors)
                 };
-                
+
                 // Collect uptime metrics
                 let uptime = {
                     let uptime_tracker = uptime_tracker.lock().await;
                     uptime_tracker.get_metrics()
                 };
-                
+
                 // Collect resource metrics (simplified)
                 let resources = Self::collect_resource_metrics().await;
-                
+
                 // Determine overall health
                 let health = Self::determine_health(&performance, &resources, &errors, &config);
-                
+
                 // Update metrics
                 let mut metrics = metrics.write().await;
                 metrics.performance = performance;
@@ -476,34 +474,40 @@ impl Monitor {
                 metrics.timestamp = SystemTime::now();
             }
         });
-        
+
         Ok(())
     }
-    
+
     /// Start health check loop.
     async fn start_health_checks(&self) -> Result<()> {
         let health_checks = self.health_checks.clone();
         let shutdown = self.shutdown.clone();
         let config = self.config.clone();
-        
+
         tokio::spawn(async move {
             let mut interval = interval(config.health_check_interval);
-            
+
             while !shutdown.load(Ordering::Relaxed) {
                 interval.tick().await;
-                
+
                 let mut checks = health_checks.write().await;
                 for (name, check) in checks.iter_mut() {
-                    if check.enabled && check.last_check.elapsed().unwrap_or(Duration::MAX) >= check.interval {
+                    if check.enabled
+                        && check.last_check.elapsed().unwrap_or(Duration::MAX) >= check.interval
+                    {
                         // Perform health check (simplified)
                         let healthy = Self::perform_health_check(name).await;
-                        
+
                         check.last_check = SystemTime::now();
                         check.healthy = healthy;
-                        
+
                         if !healthy {
                             check.consecutive_failures += 1;
-                            tracing::warn!("Health check '{}' failed {} times", name, check.consecutive_failures);
+                            tracing::warn!(
+                                "Health check '{}' failed {} times",
+                                name,
+                                check.consecutive_failures
+                            );
                         } else {
                             check.consecutive_failures = 0;
                         }
@@ -511,10 +515,10 @@ impl Monitor {
                 }
             }
         });
-        
+
         Ok(())
     }
-    
+
     /// Collect system resource metrics.
     async fn collect_resource_metrics() -> ResourceMetrics {
         // In a real implementation, this would use system APIs
@@ -531,7 +535,7 @@ impl Monitor {
             threads: 10,
         }
     }
-    
+
     /// Determine overall system health.
     fn determine_health(
         performance: &PerformanceStats,
@@ -540,35 +544,39 @@ impl Monitor {
         config: &MonitoringConfig,
     ) -> SystemHealth {
         let mut severity = 0u8;
-        
+
         // Check memory usage
         if resources.memory_mb > config.memory_critical_mb {
             severity = severity.max(100); // Critical
         } else if resources.memory_mb > config.memory_warning_mb {
             severity = severity.max(50); // Degraded
         }
-        
+
         // Check CPU usage
         if resources.cpu_percent > config.cpu_critical_percent {
             severity = severity.max(100); // Critical
         } else if resources.cpu_percent > config.cpu_warning_percent {
             severity = severity.max(50); // Degraded
         }
-        
+
         // Check error rate
-        if errors.error_rate > 0.1 { // > 10% error rate
+        if errors.error_rate > 0.1 {
+            // > 10% error rate
             severity = severity.max(75); // Unhealthy
-        } else if errors.error_rate > 0.05 { // > 5% error rate
+        } else if errors.error_rate > 0.05 {
+            // > 5% error rate
             severity = severity.max(25); // Degraded
         }
-        
+
         // Check performance
-        if performance.avg_latency_us > 100_000 { // > 100ms
+        if performance.avg_latency_us > 100_000 {
+            // > 100ms
             severity = severity.max(75); // Unhealthy
-        } else if performance.avg_latency_us > 50_000 { // > 50ms
+        } else if performance.avg_latency_us > 50_000 {
+            // > 50ms
             severity = severity.max(25); // Degraded
         }
-        
+
         match severity {
             0..=10 => SystemHealth::Healthy,
             11..=40 => SystemHealth::Degraded,
@@ -576,62 +584,62 @@ impl Monitor {
             _ => SystemHealth::Critical,
         }
     }
-    
+
     /// Perform a specific health check.
     async fn perform_health_check(name: &str) -> bool {
         match name {
-            "storage" => true, // Would check storage connectivity
+            "storage" => true,       // Would check storage connectivity
             "grpc_receiver" => true, // Would check GRPC server status
             "http_receiver" => true, // Would check HTTP server status
-            "memory" => true, // Would check memory usage
+            "memory" => true,        // Would check memory usage
             _ => true,
         }
     }
-    
+
     /// Record an error for monitoring.
     pub async fn record_error(&self, category: &str, message: String) {
         let mut error_tracker = self.error_tracker.lock().await;
         error_tracker.record_error(category, message);
     }
-    
+
     /// Update storage metrics.
     pub async fn update_storage_metrics(&self, storage_stats: StorageStats) {
         let mut metrics = self.metrics.write().await;
         metrics.storage = storage_stats;
     }
-    
+
     /// Update receiver metrics.
     pub async fn update_receiver_metrics(&self, receiver_metrics: ReceiverMetrics) {
         let mut metrics = self.metrics.write().await;
         metrics.receiver = receiver_metrics;
     }
-    
+
     /// Get current system metrics.
     pub async fn get_metrics(&self) -> SystemMetrics {
         self.metrics.read().await.clone()
     }
-    
+
     /// Get system health status.
     pub async fn get_health(&self) -> SystemHealth {
         self.metrics.read().await.health.clone()
     }
-    
+
     /// Register a health check.
     pub async fn register_health_check(&self, check: HealthCheck) {
         let mut health_checks = self.health_checks.write().await;
         health_checks.insert(check.name.clone(), check);
     }
-    
+
     /// Get all health check results.
     pub async fn get_health_checks(&self) -> HashMap<String, HealthCheck> {
         self.health_checks.read().await.clone()
     }
-    
+
     /// Stop monitoring.
     pub fn stop(&self) {
         self.shutdown.store(true, Ordering::Relaxed);
     }
-    
+
     /// Create default health checks.
     pub async fn setup_default_health_checks(&self) {
         let checks = vec![
@@ -663,7 +671,7 @@ impl Monitor {
                 error_message: None,
             },
         ];
-        
+
         for check in checks {
             self.register_health_check(check).await;
         }
@@ -680,12 +688,12 @@ impl HealthEndpoint {
     pub fn new(monitor: Arc<Monitor>) -> Self {
         Self { monitor }
     }
-    
+
     /// Get health status in a format suitable for HTTP endpoints.
     pub async fn get_health_response(&self) -> HealthResponse {
         let metrics = self.monitor.get_metrics().await;
         let health_checks = self.monitor.get_health_checks().await;
-        
+
         HealthResponse {
             status: metrics.health,
             timestamp: metrics.timestamp,
@@ -728,20 +736,20 @@ pub struct HealthSummary {
 mod tests {
     use super::*;
     use crate::storage::performance::PerformanceManager;
-    
+
     #[tokio::test]
     async fn test_monitor_creation() {
         let perf_manager = Arc::new(PerformanceManager::new());
         let monitor = Monitor::new(perf_manager);
-        
+
         let metrics = monitor.get_metrics().await;
         assert_eq!(metrics.health, SystemHealth::Healthy);
     }
-    
+
     #[tokio::test]
     async fn test_health_determination() {
         let config = MonitoringConfig::default();
-        
+
         // Test healthy system
         let performance = PerformanceStats {
             avg_latency_us: 5000, // 5ms
@@ -756,40 +764,45 @@ mod tests {
             error_rate: 0.01, // 1%
             ..Default::default()
         };
-        
+
         let health = Monitor::determine_health(&performance, &resources, &errors, &config);
         assert_eq!(health, SystemHealth::Healthy);
-        
+
         // Test critical system
         let resources_critical = ResourceMetrics {
-            memory_mb: 600.0, // Above critical threshold
+            memory_mb: 600.0,  // Above critical threshold
             cpu_percent: 95.0, // Above critical threshold
             ..Default::default()
         };
-        
-        let health_critical = Monitor::determine_health(&performance, &resources_critical, &errors, &config);
+
+        let health_critical =
+            Monitor::determine_health(&performance, &resources_critical, &errors, &config);
         assert_eq!(health_critical, SystemHealth::Critical);
     }
-    
+
     #[tokio::test]
     async fn test_error_tracking() {
         let perf_manager = Arc::new(PerformanceManager::new());
         let monitor = Monitor::new(perf_manager);
-        
-        monitor.record_error("grpc", "Connection failed".to_string()).await;
-        monitor.record_error("storage", "Disk full".to_string()).await;
-        
+
+        monitor
+            .record_error("grpc", "Connection failed".to_string())
+            .await;
+        monitor
+            .record_error("storage", "Disk full".to_string())
+            .await;
+
         let metrics = monitor.get_metrics().await;
         assert!(metrics.errors.total_errors >= 2);
         assert!(metrics.errors.error_categories.contains_key("grpc"));
         assert!(metrics.errors.error_categories.contains_key("storage"));
     }
-    
+
     #[tokio::test]
     async fn test_health_checks() {
         let perf_manager = Arc::new(PerformanceManager::new());
         let monitor = Monitor::new(perf_manager);
-        
+
         let check = HealthCheck {
             name: "test_check".to_string(),
             enabled: true,
@@ -799,9 +812,9 @@ mod tests {
             consecutive_failures: 0,
             error_message: None,
         };
-        
+
         monitor.register_health_check(check).await;
-        
+
         let checks = monitor.get_health_checks().await;
         assert!(checks.contains_key("test_check"));
         assert!(checks["test_check"].healthy);

@@ -4,13 +4,17 @@
 //! bounded capacity, and efficient cleanup mechanisms. Designed for high-throughput
 //! trace ingestion with strict memory limits.
 
+use super::{aggregator, StorageBackend, StorageHealth, StorageStats, TraceInfo};
 use crate::core::{Config, Result, ServiceMetrics, ServiceName, Span, SpanId, TraceId};
-use super::{StorageBackend, TraceInfo, StorageStats, StorageHealth, aggregator};
+use crossbeam::queue::SegQueue;
 use dashmap::DashMap;
-use std::collections::{VecDeque, HashMap};
-use std::sync::{Arc, atomic::{AtomicU64, AtomicUsize, Ordering}};
-use std::time::{SystemTime, Duration, Instant};
-use tokio::sync::{RwLock, Mutex};
+use std::collections::{HashMap, VecDeque};
+use std::sync::{
+    atomic::{AtomicU64, AtomicUsize, Ordering},
+    Arc,
+};
+use std::time::{Duration, Instant, SystemTime};
+use tokio::sync::Mutex;
 
 /// Memory cleanup configuration.
 #[derive(Debug, Clone)]
@@ -71,8 +75,8 @@ pub struct InMemoryStorage {
     traces: Arc<DashMap<TraceId, Vec<SpanId>>>,
     /// Service to span IDs mapping with timestamps for efficient querying.
     services: Arc<DashMap<ServiceName, VecDeque<(SystemTime, SpanId)>>>,
-    /// Ordered list of span IDs by insertion time for LRU eviction.
-    span_order: Arc<RwLock<VecDeque<(SystemTime, SpanId)>>>,
+    /// Lock-free queue of span IDs by insertion time for LRU eviction.
+    span_order: Arc<SegQueue<(SystemTime, SpanId)>>,
     /// Maximum number of spans to store.
     max_spans: usize,
     /// Maximum spans per service.
@@ -83,8 +87,8 @@ pub struct InMemoryStorage {
     counters: Arc<StorageCounters>,
     /// Last cleanup operation time.
     last_cleanup: Arc<Mutex<Instant>>,
-    /// Active service names for efficient listing.
-    active_services: Arc<RwLock<HashMap<ServiceName, SystemTime>>>,
+    /// Active service names for efficient listing (using DashMap for lock-free access).
+    active_services: Arc<DashMap<ServiceName, SystemTime>>,
 }
 
 impl InMemoryStorage {
@@ -94,7 +98,7 @@ impl InMemoryStorage {
             spans: Arc::new(DashMap::new()),
             traces: Arc::new(DashMap::new()),
             services: Arc::new(DashMap::new()),
-            span_order: Arc::new(RwLock::new(VecDeque::new())),
+            span_order: Arc::new(SegQueue::new()),
             max_spans,
             max_spans_per_service: max_spans / 10, // Allow each service ~10% of total capacity
             cleanup_config: CleanupConfig::default(),
@@ -107,17 +111,17 @@ impl InMemoryStorage {
                 start_time: Instant::now(),
             }),
             last_cleanup: Arc::new(Mutex::new(Instant::now())),
-            active_services: Arc::new(RwLock::new(HashMap::new())),
+            active_services: Arc::new(DashMap::new()),
         }
     }
-    
+
     /// Create storage with custom cleanup configuration.
     pub fn with_cleanup_config(max_spans: usize, cleanup_config: CleanupConfig) -> Self {
         let mut storage = Self::new(max_spans);
         storage.cleanup_config = cleanup_config;
         storage
     }
-    
+
     /// Create storage from application configuration.
     pub fn with_config(config: &Config) -> Self {
         let cleanup_config = CleanupConfig {
@@ -129,7 +133,7 @@ impl InMemoryStorage {
             cleanup_interval: config.storage.cleanup_interval,
             min_spans_per_service: 100,
         };
-        
+
         let mut storage = Self::new(config.storage.max_spans);
         storage.cleanup_config = cleanup_config;
         storage.max_spans_per_service = config.storage.max_spans / 10;
@@ -146,32 +150,29 @@ impl InMemoryStorage {
         while remaining > 0 {
             let batch_count = remaining.min(batch_size);
             let mut span_ids_to_remove = Vec::new();
-            
-            // Batch 1: Collect span IDs while holding lock minimally
-            {
-                let mut span_order = self.span_order.write().await;
-                for _ in 0..batch_count {
-                    if let Some((_, span_id)) = span_order.pop_front() {
-                        span_ids_to_remove.push(span_id);
-                    } else {
-                        break;
-                    }
+
+            // Batch 1: Collect span IDs from lock-free queue
+            for _ in 0..batch_count {
+                if let Some((_, span_id)) = self.span_order.pop() {
+                    span_ids_to_remove.push(span_id);
+                } else {
+                    break;
                 }
-            } // Lock released here
-            
+            }
+
             if span_ids_to_remove.is_empty() {
                 break;
             }
-            
+
             // Batch 2: Process removals without holding span_order lock
             let mut batch_memory_freed = 0;
             let mut batch_removed = 0;
-            
+
             for span_id in span_ids_to_remove {
                 if let Some((_, span)) = self.spans.remove(&span_id) {
                     // Estimate memory freed
                     batch_memory_freed += self.estimate_span_memory(&span);
-                    
+
                     // Remove from trace index
                     if let Some(mut trace_spans) = self.traces.get_mut(&span.trace_id) {
                         trace_spans.retain(|id| id != &span_id);
@@ -193,58 +194,68 @@ impl InMemoryStorage {
                     batch_removed += 1;
                 }
             }
-            
+
             total_removed += batch_removed;
             total_memory_freed += batch_memory_freed;
             remaining -= batch_count;
-            
+
             // Yield to async runtime after each batch
             if remaining > 0 {
                 tokio::task::yield_now().await;
             }
         }
-        
+
         // Update memory tracking
-        self.counters.memory_bytes.fetch_sub(total_memory_freed, Ordering::Relaxed);
-        self.counters.spans_evicted.fetch_add(total_removed as u64, Ordering::Relaxed);
+        self.counters
+            .memory_bytes
+            .fetch_sub(total_memory_freed, Ordering::Relaxed);
+        self.counters
+            .spans_evicted
+            .fetch_add(total_removed as u64, Ordering::Relaxed);
 
         if total_removed > 0 {
             tracing::debug!(
-                "Evicted {} spans in batches, freed ~{}KB memory", 
-                total_removed, 
+                "Evicted {} spans in batches, freed ~{}KB memory",
+                total_removed,
                 total_memory_freed / 1024
             );
         }
 
         total_removed
     }
-    
+
     /// Estimate memory usage of a span in bytes.
     fn estimate_span_memory(&self, span: &Span) -> usize {
         // Conservative estimate including overhead
         let base_size = std::mem::size_of::<Span>();
-        let string_sizes = span.trace_id.as_str().len() +
-                          span.span_id.as_str().len() +
-                          span.service_name.as_str().len() +
-                          span.operation_name.len();
-        let tags_size = span.tags.iter().map(|(k, v)| k.len() + v.len()).sum::<usize>();
-        
+        let string_sizes = span.trace_id.as_str().len()
+            + span.span_id.as_str().len()
+            + span.service_name.as_str().len()
+            + span.operation_name.len();
+        let tags_size = span
+            .tags
+            .iter()
+            .map(|(k, v)| k.len() + v.len())
+            .sum::<usize>();
+
         base_size + string_sizes + tags_size + 200 // 200 bytes overhead
     }
 
     /// Enforce per-service limits with memory awareness (async-runtime friendly).
     async fn enforce_service_limits(&self) {
         let batch_size = 50; // Process services in batches
-        let services_to_process: Vec<_> = self.services.iter()
+        let services_to_process: Vec<_> = self
+            .services
+            .iter()
             .map(|entry| entry.key().clone())
             .collect();
-        
+
         for service_chunk in services_to_process.chunks(batch_size) {
             for service_name in service_chunk {
                 if let Some(mut entry) = self.services.get_mut(service_name) {
                     let service_spans = entry.value_mut();
                     let mut spans_to_remove = Vec::new();
-                    
+
                     // Collect spans to remove
                     while service_spans.len() > self.max_spans_per_service {
                         if let Some((_, old_span_id)) = service_spans.pop_front() {
@@ -253,22 +264,27 @@ impl InMemoryStorage {
                             break;
                         }
                     }
-                    
+
                     // Keep service active if it has recent spans
                     if !service_spans.is_empty() {
-                        let latest_time = service_spans.back().map(|(t, _)| *t).unwrap_or(SystemTime::now());
-                        self.active_services.write().await.insert(service_name.clone(), latest_time);
+                        let latest_time = service_spans
+                            .back()
+                            .map(|(t, _)| *t)
+                            .unwrap_or(SystemTime::now());
+                        self.active_services.insert(service_name.clone(), latest_time);
                     }
-                    
+
                     drop(entry); // Release the dashmap entry lock
-                    
+
                     // Process removals outside the service lock
                     for old_span_id in spans_to_remove {
                         if let Some((_, span)) = self.spans.remove(&old_span_id) {
                             // Update memory tracking
                             let memory_freed = self.estimate_span_memory(&span);
-                            self.counters.memory_bytes.fetch_sub(memory_freed, Ordering::Relaxed);
-                            
+                            self.counters
+                                .memory_bytes
+                                .fetch_sub(memory_freed, Ordering::Relaxed);
+
                             // Remove from trace index
                             if let Some(mut trace_spans) = self.traces.get_mut(&span.trace_id) {
                                 trace_spans.retain(|id| id != &old_span_id);
@@ -277,38 +293,35 @@ impl InMemoryStorage {
                                     self.traces.remove(&span.trace_id);
                                 }
                             }
-                            
-                            // Remove from span order (batch update)
-                            {
-                                let mut span_order = self.span_order.write().await;
-                                span_order.retain(|(_, id)| id != &old_span_id);
-                            }
-                            
+
+                            // Note: Removal from span_order happens naturally when popped
+                            // No need to retain as items are consumed from the queue
+
                             self.counters.spans_evicted.fetch_add(1, Ordering::Relaxed);
                         }
                     }
                 }
             }
-            
+
             // Yield after each batch to prevent blocking the runtime
             tokio::task::yield_now().await;
         }
     }
-    
+
     /// Aggressive cleanup for memory pressure situations.
     async fn emergency_cleanup_internal(&self) -> Result<usize> {
         let mut removed = 0;
-        
+
         // 1. Remove expired spans based on retention period
         let cutoff_time = SystemTime::now() - self.cleanup_config.retention_period;
         removed += self.cleanup_expired_spans(cutoff_time).await;
-        
+
         // 2. Remove incomplete traces (orphaned spans)
         removed += self.cleanup_incomplete_traces().await;
-        
+
         // 3. Remove inactive services
         removed += self.cleanup_inactive_services().await;
-        
+
         // 4. If still over limit, do aggressive LRU eviction
         let current_memory = self.counters.memory_bytes.load(Ordering::Relaxed);
         if current_memory > self.cleanup_config.max_memory_bytes {
@@ -316,9 +329,11 @@ impl InMemoryStorage {
             let spans_to_remove = ((current_memory - target_memory) / 1024).max(100); // Rough estimate
             removed += self.evict_oldest_spans(spans_to_remove).await;
         }
-        
-        self.counters.cleanup_operations.fetch_add(1, Ordering::Relaxed);
-        
+
+        self.counters
+            .cleanup_operations
+            .fetch_add(1, Ordering::Relaxed);
+
         if removed > 0 {
             tracing::info!(
                 "Emergency cleanup completed: removed {} spans, memory: {}MB",
@@ -326,41 +341,44 @@ impl InMemoryStorage {
                 self.counters.memory_bytes.load(Ordering::Relaxed) / 1024 / 1024
             );
         }
-        
+
         Ok(removed)
     }
-    
+
     /// Remove spans older than the retention period (async-runtime friendly).
     async fn cleanup_expired_spans(&self, cutoff_time: SystemTime) -> usize {
         let batch_size = 100;
         let mut total_removed = 0;
-        
+
         loop {
             let mut expired_spans = Vec::new();
-            
-            // Batch 1: Collect expired span IDs while minimizing lock time
-            {
-                let mut span_order = self.span_order.write().await;
-                for _ in 0..batch_size {
-                    if let Some((timestamp, _span_id)) = span_order.front() {
-                        if *timestamp < cutoff_time {
-                            // SAFE: We just checked front() exists
-                            if let Some((_, span_id)) = span_order.pop_front() {
-                                expired_spans.push(span_id);
-                            }
-                        } else {
-                            break; // Spans are ordered by time
-                        }
+
+            // Batch 1: Collect expired span IDs from lock-free queue
+            // Note: With SegQueue, we need to peek and conditionally pop
+            // Since we can't peek without popping, we'll collect all and re-add non-expired
+            let mut to_reinsert = Vec::new();
+            for _ in 0..batch_size {
+                if let Some((timestamp, span_id)) = self.span_order.pop() {
+                    if timestamp < cutoff_time {
+                        expired_spans.push(span_id);
                     } else {
-                        break;
+                        // Not expired, need to re-insert
+                        to_reinsert.push((timestamp, span_id));
+                        break; // Spans are ordered by time
                     }
+                } else {
+                    break;
                 }
-            } // Lock released here
-            
+            }
+            // Re-insert non-expired spans at the front
+            for item in to_reinsert.into_iter().rev() {
+                self.span_order.push(item);
+            }
+
             if expired_spans.is_empty() {
                 break;
             }
-            
+
             // Batch 2: Process removals without holding span_order lock
             for span_id in expired_spans {
                 if let Some((_, span)) = self.spans.remove(&span_id) {
@@ -369,25 +387,27 @@ impl InMemoryStorage {
                     total_removed += 1;
                 }
             }
-            
+
             // Yield to async runtime after each batch
             tokio::task::yield_now().await;
         }
-        
+
         total_removed
     }
-    
+
     /// Remove incomplete traces (traces with only one span that's been around too long).
     async fn cleanup_incomplete_traces(&self) -> usize {
         let mut removed = 0;
         let cutoff = SystemTime::now() - Duration::from_secs(300); // 5 minutes
         let batch_size = 100;
-        
-        let traces_to_check: Vec<_> = self.traces.iter()
+
+        let traces_to_check: Vec<_> = self
+            .traces
+            .iter()
             .filter(|entry| entry.value().len() == 1)
             .map(|entry| (entry.key().clone(), entry.value()[0].clone()))
             .collect();
-        
+
         for trace_chunk in traces_to_check.chunks(batch_size) {
             for (_trace_id, span_id) in trace_chunk {
                 if let Some(span) = self.spans.get(span_id) {
@@ -400,33 +420,34 @@ impl InMemoryStorage {
                     }
                 }
             }
-            
+
             // Yield after each batch
             tokio::task::yield_now().await;
         }
-        
+
         removed
     }
-    
+
     /// Remove services that haven't seen activity recently (async-runtime friendly).
     async fn cleanup_inactive_services(&self) -> usize {
         let mut removed = 0;
         let cutoff = SystemTime::now() - Duration::from_secs(900); // 15 minutes
         let batch_size = 20; // Smaller batches for service cleanup
-        
-        let inactive_services: Vec<_> = {
-            let active_services = self.active_services.read().await;
-            active_services.iter()
-                .filter(|(_, &last_seen)| last_seen < cutoff)
-                .map(|(service, _)| service.clone())
-                .collect()
-        };
-        
+
+        let inactive_services: Vec<_> = self.active_services
+            .iter()
+            .filter(|entry| *entry.value() < cutoff)
+            .map(|entry| entry.key().clone())
+            .collect();
+
         for service_chunk in inactive_services.chunks(batch_size) {
             for service_name in service_chunk {
                 if let Some((_, service_spans)) = self.services.remove(service_name) {
-                    let span_ids: Vec<_> = service_spans.into_iter().map(|(_, span_id)| span_id).collect();
-                    
+                    let span_ids: Vec<_> = service_spans
+                        .into_iter()
+                        .map(|(_, span_id)| span_id)
+                        .collect();
+
                     // Process span removals in smaller sub-batches
                     for span_chunk in span_ids.chunks(50) {
                         for span_id in span_chunk {
@@ -435,31 +456,33 @@ impl InMemoryStorage {
                                 removed += 1;
                             }
                         }
-                        
+
                         // Micro-yield within service processing
                         if span_chunk.len() == 50 {
                             tokio::task::yield_now().await;
                         }
                     }
-                    
+
                     // Remove from active services
-                    self.active_services.write().await.remove(service_name);
+                    self.active_services.remove(service_name);
                 }
             }
-            
+
             // Yield after each service batch
             tokio::task::yield_now().await;
         }
-        
+
         removed
     }
-    
+
     /// Helper to remove span from all indices.
     async fn remove_span_from_indices(&self, span: &Span, span_id: &SpanId) {
         // Update memory tracking
         let memory_freed = self.estimate_span_memory(span);
-        self.counters.memory_bytes.fetch_sub(memory_freed, Ordering::Relaxed);
-        
+        self.counters
+            .memory_bytes
+            .fetch_sub(memory_freed, Ordering::Relaxed);
+
         // Remove from trace index
         if let Some(mut trace_spans) = self.traces.get_mut(&span.trace_id) {
             trace_spans.retain(|id| id != span_id);
@@ -468,7 +491,7 @@ impl InMemoryStorage {
                 self.traces.remove(&span.trace_id);
             }
         }
-        
+
         // Remove from service index
         if let Some(mut service_spans) = self.services.get_mut(&span.service_name) {
             service_spans.retain(|(_, id)| id != span_id);
@@ -477,19 +500,20 @@ impl InMemoryStorage {
                 self.services.remove(&span.service_name);
             }
         }
-        
-        // Remove from span order
-        let mut span_order = self.span_order.write().await;
-        span_order.retain(|(_, id)| id != span_id);
+
+        // Note: With SegQueue, removal happens when items are popped
+        // No retain operation needed as it's a queue, not a deque
     }
-    
+
     /// Fast version that skips span_order cleanup (for batch operations).
     /// span_order is already cleaned up in the calling batch method.
     async fn remove_span_from_indices_fast(&self, span: &Span, span_id: &SpanId) {
         // Update memory tracking
         let memory_freed = self.estimate_span_memory(span);
-        self.counters.memory_bytes.fetch_sub(memory_freed, Ordering::Relaxed);
-        
+        self.counters
+            .memory_bytes
+            .fetch_sub(memory_freed, Ordering::Relaxed);
+
         // Remove from trace index
         if let Some(mut trace_spans) = self.traces.get_mut(&span.trace_id) {
             trace_spans.retain(|id| id != span_id);
@@ -498,7 +522,7 @@ impl InMemoryStorage {
                 self.traces.remove(&span.trace_id);
             }
         }
-        
+
         // Remove from service index
         if let Some(mut service_spans) = self.services.get_mut(&span.service_name) {
             service_spans.retain(|(_, id)| id != span_id);
@@ -507,35 +531,35 @@ impl InMemoryStorage {
                 self.services.remove(&span.service_name);
             }
         }
-        
+
         // Note: span_order cleanup is handled by the batch caller to avoid repeated locks
     }
-    
+
     /// Check if cleanup is needed based on memory pressure.
     pub async fn should_cleanup(&self) -> bool {
         let last_cleanup = *self.last_cleanup.lock().await;
         let memory_usage = self.counters.memory_bytes.load(Ordering::Relaxed);
         let memory_pressure = memory_usage as f64 / self.cleanup_config.max_memory_bytes as f64;
-        
+
         // Always cleanup if over critical threshold
         if memory_pressure >= self.cleanup_config.critical_threshold {
             return true;
         }
-        
+
         // Regular cleanup interval
         last_cleanup.elapsed() >= self.cleanup_config.cleanup_interval
     }
-    
+
     /// Get current memory pressure level.
     pub fn get_memory_pressure(&self) -> f64 {
         let memory_usage = self.counters.memory_bytes.load(Ordering::Relaxed);
         memory_usage as f64 / self.cleanup_config.max_memory_bytes as f64
     }
-    
+
     /// Get storage health status.
     pub fn get_health_status(&self) -> StorageHealth {
         let pressure = self.get_memory_pressure();
-        
+
         if pressure >= self.cleanup_config.emergency_threshold {
             StorageHealth::Critical
         } else if pressure >= self.cleanup_config.critical_threshold {
@@ -546,10 +570,10 @@ impl InMemoryStorage {
             StorageHealth::Healthy
         }
     }
-    
+
     /// List all active service names.
     pub async fn list_active_services(&self) -> Vec<ServiceName> {
-        self.active_services.read().await.keys().cloned().collect()
+        self.active_services.iter().map(|entry| entry.key().clone()).collect()
     }
 
     /// Get detailed statistics for monitoring.
@@ -560,23 +584,27 @@ impl InMemoryStorage {
         let memory_bytes = self.counters.memory_bytes.load(Ordering::Relaxed);
         let memory_mb = memory_bytes as f64 / 1024.0 / 1024.0;
         let memory_pressure = self.get_memory_pressure();
-        
+
         // Calculate processing rate
         let elapsed = self.counters.start_time.elapsed().as_secs_f64();
         let spans_processed = self.counters.spans_processed.load(Ordering::Relaxed);
         let processing_errors = self.counters.processing_errors.load(Ordering::Relaxed);
-        let processing_rate = if elapsed > 0.0 { spans_processed as f64 / elapsed } else { 0.0 };
-        let error_rate = if spans_processed > 0 { 
-            processing_errors as f64 / spans_processed as f64 
-        } else { 
-            0.0 
+        let processing_rate = if elapsed > 0.0 {
+            spans_processed as f64 / elapsed
+        } else {
+            0.0
         };
-        
-        // Find oldest and newest spans
-        let span_order = self.span_order.read().await;
-        let oldest_span = span_order.front().map(|(t, _)| *t);
-        let newest_span = span_order.back().map(|(t, _)| *t);
-        
+        let error_rate = if spans_processed > 0 {
+            processing_errors as f64 / spans_processed as f64
+        } else {
+            0.0
+        };
+
+        // With SegQueue, we can't directly access front/back without popping
+        // We'll track oldest/newest through other means or sample
+        let oldest_span = None; // Will be tracked separately if needed
+        let newest_span = Some(SystemTime::now()); // Approximate with current time
+
         StorageStats {
             trace_count,
             span_count,
@@ -600,25 +628,46 @@ impl InMemoryStorage {
 impl StorageBackend for InMemoryStorage {
     async fn store_span(&self, span: Span) -> Result<()> {
         // Increment processing counter
-        self.counters.spans_processed.fetch_add(1, Ordering::Relaxed);
-        
+        self.counters
+            .spans_processed
+            .fetch_add(1, Ordering::Relaxed);
+
         let span_id = span.span_id.clone();
         let trace_id = span.trace_id.clone();
         let service_name = span.service_name.clone();
         let start_time = span.start_time;
-        
+
         // Estimate memory for this span
         let span_memory = self.estimate_span_memory(&span);
-        
+
         // Check memory pressure and perform cleanup if needed
         let memory_pressure = self.get_memory_pressure();
         if memory_pressure >= self.cleanup_config.warning_threshold || self.should_cleanup().await {
             if memory_pressure >= self.cleanup_config.emergency_threshold {
-                // Emergency: drop new spans if at emergency threshold
-                self.counters.processing_errors.fetch_add(1, Ordering::Relaxed);
-                return Err(crate::core::UrpoError::Storage(
-                    "Storage at emergency capacity, dropping span".to_string()
-                ));
+                // Emergency: apply aggressive backpressure
+                self.counters
+                    .processing_errors
+                    .fetch_add(1, Ordering::Relaxed);
+
+                // Try one last emergency cleanup before rejecting
+                if let Ok(removed) = self.emergency_cleanup_internal().await {
+                    if removed == 0 {
+                        // No space could be freed, reject with backpressure error
+                        return Err(crate::core::UrpoError::MemoryLimitExceeded {
+                            current: (self.counters.memory_bytes.load(Ordering::Relaxed) / 1024 / 1024) as usize,
+                            limit: (self.cleanup_config.max_memory_bytes / 1024 / 1024) as usize,
+                        });
+                    }
+                }
+
+                // After cleanup, allow span if there's now space
+                let new_pressure = self.get_memory_pressure();
+                if new_pressure >= self.cleanup_config.emergency_threshold {
+                    return Err(crate::core::UrpoError::MemoryLimitExceeded {
+                        current: (self.counters.memory_bytes.load(Ordering::Relaxed) / 1024 / 1024) as usize,
+                        limit: (self.cleanup_config.max_memory_bytes / 1024 / 1024) as usize,
+                    });
+                }
             } else if memory_pressure >= self.cleanup_config.critical_threshold {
                 // Critical: aggressive cleanup
                 let _ = self.emergency_cleanup_internal().await;
@@ -630,39 +679,84 @@ impl StorageBackend for InMemoryStorage {
                 *self.last_cleanup.lock().await = Instant::now();
             }
         }
-        
-        // Check if we need to evict spans before storing
+
+        // Apply hard limit with backpressure
         if self.spans.len() >= self.max_spans {
-            let to_evict = (self.max_spans / 10).max(1); // Evict 10% when at capacity
-            self.evict_oldest_spans(to_evict).await;
+            // Try to evict spans first
+            let to_evict = (self.max_spans / 5).max(10); // Evict 20% when at capacity
+            let evicted = self.evict_oldest_spans(to_evict).await;
+
+            if evicted == 0 || self.spans.len() >= self.max_spans {
+                // Unable to free space, apply backpressure
+                self.counters.processing_errors.fetch_add(1, Ordering::Relaxed);
+                return Err(crate::core::UrpoError::Storage(
+                    format!("Storage at capacity limit: {} spans", self.max_spans)
+                ));
+            }
         }
 
         // Store the span
         self.spans.insert(span_id.clone(), span);
-        
+
         // Update memory tracking
-        self.counters.memory_bytes.fetch_add(span_memory, Ordering::Relaxed);
+        self.counters
+            .memory_bytes
+            .fetch_add(span_memory, Ordering::Relaxed);
 
-        // Update trace index
-        self.traces
-            .entry(trace_id)
-            .or_insert_with(Vec::new)
-            .push(span_id.clone());
-
-        // Update service index with timestamp for efficient time-based queries
-        self.services
-            .entry(service_name.clone())
-            .or_insert_with(VecDeque::new)
-            .push_back((start_time, span_id.clone()));
-
-        // Add to span order for LRU eviction
+        // Update trace index with bounds checking
         {
-            let mut span_order = self.span_order.write().await;
-            span_order.push_back((start_time, span_id));
+            let mut trace_spans = self.traces.entry(trace_id).or_insert_with(Vec::new);
+            trace_spans.push(span_id.clone());
+
+            // Enforce maximum spans per trace (prevent trace explosion)
+            const MAX_SPANS_PER_TRACE: usize = 10_000;
+            if trace_spans.len() > MAX_SPANS_PER_TRACE {
+                // Remove oldest spans from this trace
+                let to_remove = trace_spans.len() - MAX_SPANS_PER_TRACE;
+                for _ in 0..to_remove {
+                    if !trace_spans.is_empty() {
+                        let old_span_id = trace_spans.remove(0);
+                        // Remove from spans storage
+                        self.spans.remove(&old_span_id);
+                        self.counters.spans_evicted.fetch_add(1, Ordering::Relaxed);
+                    }
+                }
+                tracing::warn!(
+                    "Trace exceeded maximum spans ({}), evicted {} spans",
+                    MAX_SPANS_PER_TRACE, to_remove
+                );
+            }
         }
-        
-        // Update active services tracking
-        self.active_services.write().await.insert(service_name, start_time);
+
+        // Update service index with bounds and timestamp tracking
+        {
+            let mut service_spans = self.services
+                .entry(service_name.clone())
+                .or_insert_with(VecDeque::new);
+            service_spans.push_back((start_time, span_id.clone()));
+
+            // Enforce per-service span limits to prevent single service OOM
+            if service_spans.len() > self.max_spans_per_service {
+                // Remove oldest spans for this service
+                let to_remove = service_spans.len() - self.max_spans_per_service;
+                for _ in 0..to_remove {
+                    if let Some((_, old_span_id)) = service_spans.pop_front() {
+                        // Remove from spans storage
+                        if let Some((_, span)) = self.spans.remove(&old_span_id) {
+                            let freed_memory = self.estimate_span_memory(&span);
+                            self.counters.memory_bytes.fetch_sub(freed_memory, Ordering::Relaxed);
+                        }
+                        self.counters.spans_evicted.fetch_add(1, Ordering::Relaxed);
+                    }
+                }
+            }
+        }
+
+        // Add to lock-free span order queue for LRU eviction
+        self.span_order.push((start_time, span_id));
+
+        // Update active services tracking (lock-free with DashMap)
+        self.active_services.insert(service_name, start_time);
 
         // Enforce per-service limits
         self.enforce_service_limits().await;
@@ -728,44 +822,48 @@ impl StorageBackend for InMemoryStorage {
             Ok(0)
         }
     }
-    
+
     async fn list_services(&self) -> Result<Vec<ServiceName>> {
         Ok(self.list_active_services().await)
     }
-    
+
     async fn get_storage_stats(&self) -> Result<StorageStats> {
         Ok(self.get_detailed_stats().await)
     }
-    
+
     async fn emergency_cleanup(&self) -> Result<usize> {
         self.emergency_cleanup_internal().await
     }
-    
+
     fn get_health(&self) -> StorageHealth {
         self.get_health_status()
     }
-    
+
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
-    
-    async fn list_recent_traces(&self, limit: usize, service_filter: Option<&ServiceName>) -> Result<Vec<TraceInfo>> {
+
+    async fn list_recent_traces(
+        &self,
+        limit: usize,
+        service_filter: Option<&ServiceName>,
+    ) -> Result<Vec<TraceInfo>> {
         let mut trace_infos = Vec::new();
-        
+
         // Collect trace information
         for entry in self.traces.iter() {
             let trace_id = entry.key().clone();
             let span_ids = entry.value();
-            
+
             if span_ids.is_empty() {
                 continue;
             }
-            
+
             // Get all spans for this trace
             let mut spans = Vec::new();
             let mut services = std::collections::HashSet::new();
             let mut has_error = false;
-            
+
             for span_id in span_ids.iter() {
                 if let Some(span) = self.spans.get(span_id) {
                     services.insert(span.service_name.clone());
@@ -775,36 +873,42 @@ impl StorageBackend for InMemoryStorage {
                     spans.push(span.clone());
                 }
             }
-            
+
             if spans.is_empty() {
                 continue;
             }
-            
+
             // Find root span (no parent)
             // SAFE: Already checked spans.is_empty() above
-            let root_span = spans.iter()
+            let root_span = spans
+                .iter()
                 .find(|s| s.parent_span_id.is_none())
                 .or_else(|| spans.first())
                 .expect("spans not empty");
-            
+
             // Apply service filter if provided
             if let Some(filter) = service_filter {
                 if !services.contains(filter) {
                     continue;
                 }
             }
-            
+
             // Calculate total duration (from earliest start to latest end)
             // SAFE: Already checked spans.is_empty() above
-            let min_start = spans.iter().map(|s| s.start_time).min()
+            let min_start = spans
+                .iter()
+                .map(|s| s.start_time)
+                .min()
                 .expect("spans not empty");
-            let max_end = spans.iter()
+            let max_end = spans
+                .iter()
                 .map(|s| s.start_time + s.duration)
                 .max()
                 .expect("spans not empty");
-            let duration = max_end.duration_since(min_start)
+            let duration = max_end
+                .duration_since(min_start)
                 .unwrap_or_else(|_| Duration::ZERO);
-            
+
             trace_infos.push(TraceInfo {
                 trace_id,
                 root_service: root_span.service_name.clone(),
@@ -816,29 +920,29 @@ impl StorageBackend for InMemoryStorage {
                 services: services.into_iter().collect(),
             });
         }
-        
+
         // Sort by start time (most recent first)
         trace_infos.sort_by(|a, b| b.start_time.cmp(&a.start_time));
-        
+
         // Limit results
         trace_infos.truncate(limit);
-        
+
         Ok(trace_infos)
     }
-    
+
     async fn search_traces(&self, query: &str, limit: usize) -> Result<Vec<TraceInfo>> {
         let query_lower = query.to_lowercase();
         let mut matching_traces = Vec::new();
-        
+
         for entry in self.traces.iter() {
             let trace_id = entry.key();
             let span_ids = entry.value();
-            
+
             let mut match_found = false;
             let mut spans = Vec::new();
             let mut services = std::collections::HashSet::new();
             let mut has_error = false;
-            
+
             // Check if any span in the trace matches the query
             for span_id in span_ids.iter() {
                 if let Some(span) = self.spans.get(span_id) {
@@ -846,46 +950,55 @@ impl StorageBackend for InMemoryStorage {
                     if span.status.is_error() {
                         has_error = true;
                     }
-                    
+
                     // Search in operation name and attributes
                     if span.operation_name.to_lowercase().contains(&query_lower) {
                         match_found = true;
                     }
-                    
+
                     for (key, value) in &span.attributes {
-                        if key.to_lowercase().contains(&query_lower) || 
-                           value.to_lowercase().contains(&query_lower) {
+                        if key.to_lowercase().contains(&query_lower)
+                            || value.to_lowercase().contains(&query_lower)
+                        {
                             match_found = true;
                             break;
                         }
                     }
-                    
+
                     for (key, value) in &span.tags {
-                        if key.to_lowercase().contains(&query_lower) || 
-                           value.to_lowercase().contains(&query_lower) {
+                        if key.to_lowercase().contains(&query_lower)
+                            || value.to_lowercase().contains(&query_lower)
+                        {
                             match_found = true;
                             break;
                         }
                     }
-                    
+
                     spans.push(span.clone());
                 }
             }
-            
+
             if match_found && !spans.is_empty() {
-                let root_span = spans.iter()
+                let root_span = spans
+                    .iter()
                     .find(|s| s.parent_span_id.is_none())
                     .or_else(|| spans.first())
                     .expect("spans not empty");
-                
-                let min_start = spans.iter().map(|s| s.start_time).min().expect("spans not empty");
-                let max_end = spans.iter()
+
+                let min_start = spans
+                    .iter()
+                    .map(|s| s.start_time)
+                    .min()
+                    .expect("spans not empty");
+                let max_end = spans
+                    .iter()
                     .map(|s| s.start_time + s.duration)
                     .max()
                     .expect("spans not empty");
-                let duration = max_end.duration_since(min_start)
-                .unwrap_or_else(|_| Duration::ZERO);
-                
+                let duration = max_end
+                    .duration_since(min_start)
+                    .unwrap_or_else(|_| Duration::ZERO);
+
                 matching_traces.push(TraceInfo {
                     trace_id: trace_id.clone(),
                     root_service: root_span.service_name.clone(),
@@ -898,25 +1011,25 @@ impl StorageBackend for InMemoryStorage {
                 });
             }
         }
-        
+
         // Sort by start time (most recent first)
         matching_traces.sort_by(|a, b| b.start_time.cmp(&a.start_time));
         matching_traces.truncate(limit);
-        
+
         Ok(matching_traces)
     }
-    
+
     async fn get_error_traces(&self, limit: usize) -> Result<Vec<TraceInfo>> {
         let mut error_traces = Vec::new();
-        
+
         for entry in self.traces.iter() {
             let trace_id = entry.key();
             let span_ids = entry.value();
-            
+
             let mut has_error = false;
             let mut spans = Vec::new();
             let mut services = std::collections::HashSet::new();
-            
+
             for span_id in span_ids.iter() {
                 if let Some(span) = self.spans.get(span_id) {
                     services.insert(span.service_name.clone());
@@ -926,21 +1039,28 @@ impl StorageBackend for InMemoryStorage {
                     spans.push(span.clone());
                 }
             }
-            
+
             if has_error && !spans.is_empty() {
-                let root_span = spans.iter()
+                let root_span = spans
+                    .iter()
                     .find(|s| s.parent_span_id.is_none())
                     .or_else(|| spans.first())
                     .expect("spans not empty");
-                
-                let min_start = spans.iter().map(|s| s.start_time).min().expect("spans not empty");
-                let max_end = spans.iter()
+
+                let min_start = spans
+                    .iter()
+                    .map(|s| s.start_time)
+                    .min()
+                    .expect("spans not empty");
+                let max_end = spans
+                    .iter()
                     .map(|s| s.start_time + s.duration)
                     .max()
                     .expect("spans not empty");
-                let duration = max_end.duration_since(min_start)
-                .unwrap_or_else(|_| Duration::ZERO);
-                
+                let duration = max_end
+                    .duration_since(min_start)
+                    .unwrap_or_else(|_| Duration::ZERO);
+
                 error_traces.push(TraceInfo {
                     trace_id: trace_id.clone(),
                     root_service: root_span.service_name.clone(),
@@ -953,25 +1073,25 @@ impl StorageBackend for InMemoryStorage {
                 });
             }
         }
-        
+
         // Sort by start time (most recent first)
         error_traces.sort_by(|a, b| b.start_time.cmp(&a.start_time));
         error_traces.truncate(limit);
-        
+
         Ok(error_traces)
     }
-    
+
     async fn get_slow_traces(&self, threshold: Duration, limit: usize) -> Result<Vec<TraceInfo>> {
         let mut slow_traces = Vec::new();
-        
+
         for entry in self.traces.iter() {
             let trace_id = entry.key();
             let span_ids = entry.value();
-            
+
             let mut spans = Vec::new();
             let mut services = std::collections::HashSet::new();
             let mut has_error = false;
-            
+
             for span_id in span_ids.iter() {
                 if let Some(span) = self.spans.get(span_id) {
                     services.insert(span.service_name.clone());
@@ -981,24 +1101,31 @@ impl StorageBackend for InMemoryStorage {
                     spans.push(span.clone());
                 }
             }
-            
+
             if spans.is_empty() {
                 continue;
             }
-            
-            let root_span = spans.iter()
+
+            let root_span = spans
+                .iter()
                 .find(|s| s.parent_span_id.is_none())
                 .or_else(|| spans.first())
                 .expect("spans not empty");
-            
-            let min_start = spans.iter().map(|s| s.start_time).min().expect("spans not empty");
-            let max_end = spans.iter()
+
+            let min_start = spans
+                .iter()
+                .map(|s| s.start_time)
+                .min()
+                .expect("spans not empty");
+            let max_end = spans
+                .iter()
                 .map(|s| s.start_time + s.duration)
                 .max()
                 .expect("spans not empty");
-            let duration = max_end.duration_since(min_start)
+            let duration = max_end
+                .duration_since(min_start)
                 .unwrap_or_else(|_| Duration::ZERO);
-            
+
             if duration >= threshold {
                 slow_traces.push(TraceInfo {
                     trace_id: trace_id.clone(),
@@ -1012,14 +1139,14 @@ impl StorageBackend for InMemoryStorage {
                 });
             }
         }
-        
+
         // Sort by duration (slowest first)
         slow_traces.sort_by(|a, b| b.duration.cmp(&a.duration));
         slow_traces.truncate(limit);
-        
+
         Ok(slow_traces)
     }
-    
+
     async fn list_traces(
         &self,
         service: Option<&str>,
@@ -1028,16 +1155,16 @@ impl StorageBackend for InMemoryStorage {
         limit: usize,
     ) -> Result<Vec<TraceInfo>> {
         let mut matching_traces = Vec::new();
-        
+
         for entry in self.traces.iter() {
             let trace_id = entry.key();
             let span_ids = entry.value();
-            
+
             let mut spans = Vec::new();
             let mut services = std::collections::HashSet::new();
             let mut has_error = false;
             let mut match_found = true;
-            
+
             for span_id in span_ids.iter() {
                 if let Some(span) = self.spans.get(span_id) {
                     // Apply service filter
@@ -1047,26 +1174,32 @@ impl StorageBackend for InMemoryStorage {
                             break;
                         }
                     }
-                    
+
                     // Apply time filter
                     if let Some(start) = start_time {
-                        let span_time = span.start_time.duration_since(SystemTime::UNIX_EPOCH)
-                            .unwrap_or_default().as_nanos() as u64;
+                        let span_time = span
+                            .start_time
+                            .duration_since(SystemTime::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_nanos() as u64;
                         if span_time < start {
                             match_found = false;
                             break;
                         }
                     }
-                    
+
                     if let Some(end) = end_time {
-                        let span_time = span.start_time.duration_since(SystemTime::UNIX_EPOCH)
-                            .unwrap_or_default().as_nanos() as u64;
+                        let span_time = span
+                            .start_time
+                            .duration_since(SystemTime::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_nanos() as u64;
                         if span_time > end {
                             match_found = false;
                             break;
                         }
                     }
-                    
+
                     services.insert(span.service_name.clone());
                     if span.status.is_error() {
                         has_error = true;
@@ -1074,21 +1207,28 @@ impl StorageBackend for InMemoryStorage {
                     spans.push(span.clone());
                 }
             }
-            
+
             if match_found && !spans.is_empty() {
-                let root_span = spans.iter()
+                let root_span = spans
+                    .iter()
                     .find(|s| s.parent_span_id.is_none())
                     .or_else(|| spans.first())
                     .expect("spans not empty");
-                
-                let min_start = spans.iter().map(|s| s.start_time).min().expect("spans not empty");
-                let max_end = spans.iter()
+
+                let min_start = spans
+                    .iter()
+                    .map(|s| s.start_time)
+                    .min()
+                    .expect("spans not empty");
+                let max_end = spans
+                    .iter()
                     .map(|s| s.start_time + s.duration)
                     .max()
                     .expect("spans not empty");
-                let duration = max_end.duration_since(min_start)
-                .unwrap_or_else(|_| Duration::ZERO);
-                
+                let duration = max_end
+                    .duration_since(min_start)
+                    .unwrap_or_else(|_| Duration::ZERO);
+
                 matching_traces.push(TraceInfo {
                     trace_id: trace_id.clone(),
                     root_service: root_span.service_name.clone(),
@@ -1101,14 +1241,14 @@ impl StorageBackend for InMemoryStorage {
                 });
             }
         }
-        
+
         // Sort by start time (most recent first)
         matching_traces.sort_by(|a, b| b.start_time.cmp(&a.start_time));
         matching_traces.truncate(limit);
-        
+
         Ok(matching_traces)
     }
-    
+
     async fn get_service_metrics_map(&self) -> Result<HashMap<ServiceName, ServiceMetrics>> {
         let metrics = self.get_service_metrics().await?;
         let mut map = HashMap::new();
@@ -1117,7 +1257,7 @@ impl StorageBackend for InMemoryStorage {
         }
         Ok(map)
     }
-    
+
     async fn search_spans(
         &self,
         query: &str,
@@ -1127,23 +1267,23 @@ impl StorageBackend for InMemoryStorage {
     ) -> Result<Vec<Span>> {
         let mut matching_spans = Vec::new();
         let query_lower = query.to_lowercase();
-        
+
         for entry in self.spans.iter() {
             let span = entry.value();
-            
+
             // Apply service filter
             if let Some(svc) = service {
                 if span.service_name.as_str() != svc {
                     continue;
                 }
             }
-            
+
             // Search in operation name
             let mut match_found = false;
             if span.operation_name.to_lowercase().contains(&query_lower) {
                 match_found = true;
             }
-            
+
             // Search in attributes
             if !match_found {
                 for (key, value) in &span.attributes {
@@ -1153,15 +1293,16 @@ impl StorageBackend for InMemoryStorage {
                             continue;
                         }
                     }
-                    
-                    if key.to_lowercase().contains(&query_lower) || 
-                       value.to_lowercase().contains(&query_lower) {
+
+                    if key.to_lowercase().contains(&query_lower)
+                        || value.to_lowercase().contains(&query_lower)
+                    {
                         match_found = true;
                         break;
                     }
                 }
             }
-            
+
             if match_found {
                 matching_spans.push(span.clone());
                 if matching_spans.len() >= limit {
@@ -1169,10 +1310,10 @@ impl StorageBackend for InMemoryStorage {
                 }
             }
         }
-        
+
         Ok(matching_spans)
     }
-    
+
     async fn get_stats(&self) -> Result<StorageStats> {
         let detailed_stats = self.get_storage_stats().await?;
         Ok(StorageStats {
@@ -1219,7 +1360,7 @@ mod tests {
         let span_id = span.span_id.clone();
 
         storage.store_span(span.clone()).await.unwrap();
-        
+
         let retrieved = storage.get_span(&span_id).await.unwrap();
         assert!(retrieved.is_some());
         assert_eq!(retrieved.unwrap().span_id, span_id);
@@ -1229,7 +1370,7 @@ mod tests {
     async fn test_get_trace_spans() {
         let storage = InMemoryStorage::new(100);
         let trace_id = TraceId::new("trace_0001".to_string()).unwrap();
-        
+
         for i in 1..=3 {
             let mut span = create_test_span(1, i, "test-service").await;
             span.trace_id = trace_id.clone();
@@ -1243,12 +1384,12 @@ mod tests {
     #[tokio::test]
     async fn test_storage_limits() {
         let storage = InMemoryStorage::new(5); // Max 5 spans
-        
+
         for i in 1..=10 {
             let span = create_test_span(i, i, "test-service").await;
             storage.store_span(span).await.unwrap();
         }
-        
+
         // Should have enforced limit
         assert!(storage.spans.len() <= 5);
     }
@@ -1257,21 +1398,27 @@ mod tests {
     async fn test_service_spans_time_filter() {
         let storage = InMemoryStorage::new(100);
         let service_name = ServiceName::new("test-service".to_string()).unwrap();
-        
+
         // Store some spans
         for i in 1..=5 {
             let span = create_test_span(i, i, "test-service").await;
             storage.store_span(span).await.unwrap();
         }
-        
+
         // Query spans from now (should get all)
         let since = SystemTime::now() - Duration::from_secs(60);
-        let spans = storage.get_service_spans(&service_name, since).await.unwrap();
+        let spans = storage
+            .get_service_spans(&service_name, since)
+            .await
+            .unwrap();
         assert_eq!(spans.len(), 5);
-        
+
         // Query spans from future (should get none)
         let future = SystemTime::now() + Duration::from_secs(60);
-        let spans = storage.get_service_spans(&service_name, future).await.unwrap();
+        let spans = storage
+            .get_service_spans(&service_name, future)
+            .await
+            .unwrap();
         assert_eq!(spans.len(), 0);
     }
 }

@@ -28,7 +28,7 @@ pub fn sparkline_trend(values: &[f64]) -> String {
         .iter()
         .fold(f64::NEG_INFINITY, |a, &b| a.max(b))
         .max(1.0);
-    
+
     let last_n = 5;
     let chars: Vec<char> = values
         .iter()
@@ -49,7 +49,7 @@ pub fn sparkline_trend(values: &[f64]) -> String {
     for c in chars {
         result.push(c);
     }
-    
+
     result
 }
 
@@ -98,7 +98,7 @@ pub fn format_percentage_colored(value: f64) -> (String, Color) {
 pub fn progress_bar(value: f64, width: usize) -> String {
     let filled = (value * width as f64) as usize;
     let empty = width.saturating_sub(filled);
-    
+
     let mut bar = String::new();
     for _ in 0..filled {
         bar.push('█');
@@ -106,7 +106,7 @@ pub fn progress_bar(value: f64, width: usize) -> String {
     for _ in 0..empty {
         bar.push('░');
     }
-    
+
     bar
 }
 
@@ -176,14 +176,17 @@ pub fn get_tree_connectors(is_last: bool, has_children: bool) -> (&'static str, 
 }
 
 /// Format span attributes for display.
-pub fn format_attributes(attrs: &std::collections::HashMap<String, String>, max_width: usize) -> String {
+pub fn format_attributes(
+    attrs: &std::collections::HashMap<String, String>,
+    max_width: usize,
+) -> String {
     if attrs.is_empty() {
         return String::new();
     }
-    
+
     let mut result = String::new();
     let mut current_len = 0;
-    
+
     for (key, value) in attrs.iter().take(3) {
         let attr = format!("{}={}", key, value);
         if current_len + attr.len() > max_width && current_len > 0 {
@@ -197,7 +200,7 @@ pub fn format_attributes(attrs: &std::collections::HashMap<String, String>, max_
         result.push_str(&attr);
         current_len += attr.len();
     }
-    
+
     result
 }
 
@@ -217,7 +220,7 @@ mod tests {
         let values = vec![1.0, 2.0, 3.0, 4.0, 5.0];
         let trend = sparkline_trend(&values);
         assert_eq!(trend.len(), 5);
-        
+
         let empty: Vec<f64> = vec![];
         assert_eq!(sparkline_trend(&empty), "     ");
     }
@@ -225,7 +228,7 @@ mod tests {
     #[test]
     fn test_format_duration() {
         use std::time::Duration;
-        
+
         assert_eq!(format_duration(Duration::from_millis(50)), "50ms");
         assert_eq!(format_duration(Duration::from_millis(1500)), "1.50s");
         assert_eq!(format_duration(Duration::from_millis(12345)), "12.3s");
