@@ -227,14 +227,14 @@ impl CompactSpan {
 /// This reduces memory usage and enables fast comparisons using integer indices.
 #[derive(Debug)]
 pub struct StringIntern {
-    /// Service names mapped to indices
-    services: RwLock<FxHashMap<String, u16>>,
-    /// Operation names mapped to indices
-    operations: RwLock<FxHashMap<String, u16>>,
-    /// Reverse mapping for service indices
-    service_names: RwLock<Vec<String>>,
-    /// Reverse mapping for operation indices
-    operation_names: RwLock<Vec<String>>,
+    /// Service names mapped to indices (using Arc for zero-copy)
+    services: RwLock<FxHashMap<Arc<str>, u16>>,
+    /// Operation names mapped to indices (using Arc for zero-copy)
+    operations: RwLock<FxHashMap<Arc<str>, u16>>,
+    /// Reverse mapping for service indices (Arc for zero-copy)
+    service_names: RwLock<Vec<Arc<str>>>,
+    /// Reverse mapping for operation indices (Arc for zero-copy)
+    operation_names: RwLock<Vec<Arc<str>>>,
     /// Next service index
     next_service_idx: AtomicU16,
     /// Next operation index
@@ -266,20 +266,22 @@ impl StringIntern {
             }
         }
 
-        // Slow path: add new service
+        // Slow path: add new service (zero-copy with Arc)
+        let arc_str: Arc<str> = Arc::from(service_str);
+        
         let mut services = self.services.write();
         if let Some(&idx) = services.get(service_str) {
             return idx; // Double-check in case another thread added it
         }
 
         let idx = self.next_service_idx.fetch_add(1, Ordering::Relaxed);
-        services.insert(service_str.to_string(), idx);
+        services.insert(arc_str.clone(), idx);
 
         let mut service_names = self.service_names.write();
         if service_names.len() <= idx as usize {
-            service_names.resize(idx as usize + 1, String::new());
+            service_names.resize(idx as usize + 1, Arc::from(""));
         }
-        service_names[idx as usize] = service_str.to_string();
+        service_names[idx as usize] = arc_str;
 
         idx
     }
@@ -294,26 +296,28 @@ impl StringIntern {
             }
         }
 
-        // Slow path: add new operation
+        // Slow path: add new operation (zero-copy with Arc)
+        let arc_str: Arc<str> = Arc::from(operation_name);
+        
         let mut operations = self.operations.write();
         if let Some(&idx) = operations.get(operation_name) {
             return idx; // Double-check in case another thread added it
         }
 
         let idx = self.next_operation_idx.fetch_add(1, Ordering::Relaxed);
-        operations.insert(operation_name.to_string(), idx);
+        operations.insert(arc_str.clone(), idx);
 
         let mut operation_names = self.operation_names.write();
         if operation_names.len() <= idx as usize {
-            operation_names.resize(idx as usize + 1, String::new());
+            operation_names.resize(idx as usize + 1, Arc::from(""));
         }
-        operation_names[idx as usize] = operation_name.to_string();
+        operation_names[idx as usize] = arc_str;
 
         idx
     }
 
-    /// Get service name by index.
-    pub fn get_service_name(&self, idx: u16) -> Option<String> {
+    /// Get service name by index (zero-copy with Arc).
+    pub fn get_service_name(&self, idx: u16) -> Option<Arc<str>> {
         let service_names = self.service_names.read();
         service_names.get(idx as usize).cloned()
     }
@@ -324,8 +328,8 @@ impl StringIntern {
         services.get(service_name).copied()
     }
 
-    /// Get operation name by index.
-    pub fn get_operation_name(&self, idx: u16) -> Option<String> {
+    /// Get operation name by index (zero-copy with Arc).
+    pub fn get_operation_name(&self, idx: u16) -> Option<Arc<str>> {
         let operation_names = self.operation_names.read();
         operation_names.get(idx as usize).cloned()
     }

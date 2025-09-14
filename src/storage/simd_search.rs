@@ -227,6 +227,23 @@ unsafe fn compute_scores_simd_internal(lengths: &[u32], weights: &[f32]) -> Vec<
     scores
 }
 
+/// Public API for batch scoring with SIMD acceleration
+#[inline]
+pub fn compute_scores_simd(lengths: &[u32], weights: &[f32]) -> Vec<f32> {
+    #[cfg(target_arch = "x86_64")]
+    {
+        if is_x86_feature_detected!("avx2") {
+            unsafe { compute_scores_simd_internal(lengths, weights) }
+        } else {
+            compute_scores_scalar(lengths, weights)
+        }
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    {
+        compute_scores_scalar(lengths, weights)
+    }
+}
+
 /// Scalar fallback for score computation
 #[inline]
 fn compute_scores_scalar(lengths: &[u32], weights: &[f32]) -> Vec<f32> {
@@ -238,15 +255,21 @@ fn compute_scores_scalar(lengths: &[u32], weights: &[f32]) -> Vec<f32> {
 }
 
 /// Batch check if any values in the array match the target using SIMD
-#[cfg(target_arch = "x86_64")]
 #[inline]
 pub fn contains_u64_simd(haystack: &[u64], needle: u64) -> bool {
-    unsafe {
-        if is_x86_feature_detected!("avx2") {
-            contains_u64_avx2(haystack, needle)
-        } else {
-            haystack.contains(&needle)
+    #[cfg(target_arch = "x86_64")]
+    {
+        unsafe {
+            if is_x86_feature_detected!("avx2") {
+                contains_u64_avx2(haystack, needle)
+            } else {
+                haystack.contains(&needle)
+            }
         }
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    {
+        haystack.contains(&needle)
     }
 }
 
@@ -293,13 +316,11 @@ mod tests {
         let haystack: Vec<u128> = (0..1000).map(|i| i as u128 * 12345).collect();
         let needle = 500 * 12345;
 
-        unsafe {
-            let result = find_trace_id_simd(needle, &haystack);
-            assert_eq!(result, Some(500));
+        let result = find_trace_id_simd(needle, &haystack);
+        assert_eq!(result, Some(500));
 
-            let not_found = find_trace_id_simd(u128::MAX, &haystack);
-            assert_eq!(not_found, None);
-        }
+        let not_found = find_trace_id_simd(u128::MAX, &haystack);
+        assert_eq!(not_found, None);
     }
 
     #[test]
@@ -307,10 +328,8 @@ mod tests {
         let text = b"hello world hello universe hello cosmos";
         let pattern = b"hello";
 
-        unsafe {
-            let matches = find_pattern_simd(pattern, text);
-            assert_eq!(matches, vec![0, 12, 27]);
-        }
+        let matches = find_pattern_simd(pattern, text);
+        assert_eq!(matches, vec![0, 12, 27]);
     }
 
     #[test]
@@ -318,10 +337,8 @@ mod tests {
         let lengths = vec![10, 20, 30, 40, 50, 60, 70, 80];
         let weights = vec![0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5];
 
-        unsafe {
-            let scores = compute_scores_simd(&lengths, &weights);
-            assert_eq!(scores, vec![5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 35.0, 40.0]);
-        }
+        let scores = compute_scores_simd(&lengths, &weights);
+        assert_eq!(scores, vec![5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 35.0, 40.0]);
     }
 
     #[test]
