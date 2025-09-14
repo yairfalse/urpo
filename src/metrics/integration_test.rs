@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod integration_tests {
     use crate::metrics::{
-        storage::{MetricStorage, ServiceHealth},
+        storage::MetricStorage,
         types::MetricPoint,
     };
 

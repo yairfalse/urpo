@@ -305,7 +305,7 @@ mod tests {
             name: "cpu_usage".to_string(),
             description: "CPU usage percentage".to_string(),
             unit: "%".to_string(),
-            metadata: None,
+            metadata: vec![],
             data: Some(opentelemetry_proto::tonic::metrics::v1::metric::Data::Gauge(
                 Gauge {
                     data_points: vec![NumberDataPoint {
@@ -338,7 +338,7 @@ mod tests {
             name: "request_count".to_string(),
             description: "Total requests".to_string(),
             unit: "1".to_string(),
-            metadata: None,
+            metadata: vec![],
             data: Some(opentelemetry_proto::tonic::metrics::v1::metric::Data::Sum(Sum {
                 data_points: vec![NumberDataPoint {
                     attributes: vec![],
@@ -370,7 +370,7 @@ mod tests {
             name: "empty_metric".to_string(),
             description: "".to_string(),
             unit: "".to_string(),
-            metadata: None,
+            metadata: vec![],
             data: None,
         };
 
@@ -402,7 +402,7 @@ mod tests {
                                 name: "test_metric".to_string(),
                                 description: "Test metric".to_string(),
                                 unit: "ms".to_string(),
-                                metadata: None,
+                                metadata: vec![],
                                 data: Some(
                                     opentelemetry_proto::tonic::metrics::v1::metric::Data::Gauge(
                                         Gauge {
