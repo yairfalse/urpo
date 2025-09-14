@@ -1,0 +1,31 @@
+# Clippy configuration for Urpo - Ultra-fast OTEL trace explorer
+# Focused on performance, correctness, and maintainability
+
+# Disable overly pedantic lints that don't align with performance goals
+avoid-breaking-exported-api = false
+
+# Cognitive complexity (keep hot paths simple)
+cognitive-complexity-threshold = 30
+
+# Type complexity (balance readability with performance)
+type-complexity-threshold = 100
+
+# Allow large error types for performance (avoid Box<dyn Error>)
+large-error-threshold = 128
+
+# Allow more function parameters for performance APIs
+too-many-arguments-threshold = 8
+
+# Disable lints that conflict with high-performance code
+# We allow these for maximum speed
+allow-expect-in-tests = true
+allow-unwrap-in-tests = true
+allow-panic-in-tests = true
+allow-dbg-in-tests = true
+allow-print-in-tests = true
+
+# Allow indexing in performance-critical code where bounds are verified
+allow-indexing-slicing-in-tests = true
+
+# Performance-focused lint levels (using standard clippy configuration)
+# These are set via Cargo.toml [lints.clippy] section instead

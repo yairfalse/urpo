@@ -3,8 +3,6 @@
 //! All types are designed for zero-allocation hot paths
 //! and cache-line optimization.
 
-use crate::core::Result;
-
 /// OpenTelemetry metric types with ultra-fast processing
 #[derive(Debug, Clone)]
 pub enum MetricType {
@@ -23,7 +21,7 @@ pub enum MetricType {
 /// Metric data point optimized for cache efficiency
 /// Size: 32 bytes exactly for cache line optimization
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct MetricPoint {
     /// Timestamp (8 bytes)
     pub timestamp: u64,

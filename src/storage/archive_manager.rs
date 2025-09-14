@@ -179,10 +179,7 @@ impl ArchiveManager {
 
         self.bg_handle = Some(handle);
 
-        tracing::info!(
-            "Archive manager started with {:?} partitioning",
-            self.config.granularity
-        );
+        tracing::info!("Archive manager started with {:?} partitioning", self.config.granularity);
         Ok(())
     }
 
@@ -336,10 +333,8 @@ impl ArchiveManager {
 
         // Create readers for each partition
         for partition_key in partition_keys {
-            let reader = Arc::new(ArchiveReader::new(
-                &self.config.archive_dir,
-                self.config.granularity,
-            ));
+            let reader =
+                Arc::new(ArchiveReader::new(&self.config.archive_dir, self.config.granularity));
             reader.load_indices().map_err(|e| {
                 UrpoError::Storage(format!(
                     "Failed to load indices for partition {}: {}",

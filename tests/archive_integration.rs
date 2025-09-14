@@ -54,10 +54,7 @@ mod archive_tests {
         let bytes_per_id = bitmap_size_bytes as f64 / trace_ids_count as f64;
 
         assert!(bytes_per_id < 0.01, "Less than 0.01 bytes per trace ID");
-        println!(
-            "✅ Index efficiency: {:.4} bytes per trace ID",
-            bytes_per_id
-        );
+        println!("✅ Index efficiency: {:.4} bytes per trace ID", bytes_per_id);
     }
 
     #[test]

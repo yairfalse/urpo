@@ -83,10 +83,7 @@ async fn handle_traces_v1(
     // Store spans
     if let Err(e) = state.receiver.process_spans(spans).await {
         tracing::error!("Failed to process spans: {}", e);
-        return Err(HttpError::Internal(format!(
-            "Failed to process spans: {}",
-            e
-        )));
+        return Err(HttpError::Internal(format!("Failed to process spans: {}", e)));
     }
 
     tracing::debug!("Successfully processed HTTP trace export request");
@@ -296,19 +293,18 @@ fn json_to_span(
             if let (Some(key), Some(value)) =
                 (attr.get("key").and_then(|k| k.as_str()), attr.get("value"))
             {
-                let any_value = if let Some(str_val) =
-                    value.get("stringValue").and_then(|v| v.as_str())
-                {
-                    AnyValue {
+                let any_value =
+                    if let Some(str_val) = value.get("stringValue").and_then(|v| v.as_str()) {
+                        AnyValue {
                         value: Some(
                             opentelemetry_proto::tonic::common::v1::any_value::Value::StringValue(
                                 str_val.to_string(),
                             ),
                         ),
                     }
-                } else {
-                    continue;
-                };
+                    } else {
+                        continue;
+                    };
 
                 attributes.push(KeyValue {
                     key: key.to_string(),
@@ -389,13 +385,13 @@ fn process_export_request(
                             service_name, span_name, trace_id_hex, span_id_hex
                         );
                         spans.push(span);
-                    }
+                    },
                     Err(e) => {
                         tracing::warn!(
                             "Failed to convert HTTP span: service={}, operation={}, trace_id={}, span_id={}, error={}",
                             service_name, span_name, trace_id_hex, span_id_hex, e
                         );
-                    }
+                    },
                 }
             }
         }

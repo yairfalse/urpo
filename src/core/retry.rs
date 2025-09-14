@@ -91,7 +91,7 @@ where
                 );
 
                 sleep(actual_backoff).await;
-            }
+            },
         }
     }
 }
@@ -124,7 +124,7 @@ pub struct CircuitBreaker {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-enum CircuitState {
+pub enum CircuitState {
     Closed,
     Open,
     HalfOpen,
@@ -166,8 +166,8 @@ impl CircuitBreaker {
                 } else {
                     return Err(UrpoError::network("Circuit breaker is open"));
                 }
-            }
-            CircuitState::HalfOpen | CircuitState::Closed => {}
+            },
+            CircuitState::HalfOpen | CircuitState::Closed => {},
         }
 
         let current_state = *state;
@@ -193,7 +193,7 @@ impl CircuitBreaker {
                 }
 
                 Ok(result)
-            }
+            },
             Err(error) => {
                 self.failures.fetch_add(1, Ordering::Relaxed);
 
@@ -210,7 +210,7 @@ impl CircuitBreaker {
                 }
 
                 Err(error)
-            }
+            },
         }
     }
 

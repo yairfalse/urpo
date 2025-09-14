@@ -94,21 +94,17 @@ fn bench_hot_ring_buffer(c: &mut Criterion) {
     for capacity in [1000, 10_000, 100_000].iter() {
         group.throughput(Throughput::Elements(*capacity as u64));
 
-        group.bench_with_input(
-            BenchmarkId::from_parameter(capacity),
-            capacity,
-            |b, &capacity| {
-                let ring = HotTraceRing::new(capacity);
-                let string_intern = StringIntern::new();
-                let span = generate_test_span(1, 1);
-                let compact = CompactSpan::from_span(&span, &string_intern);
+        group.bench_with_input(BenchmarkId::from_parameter(capacity), capacity, |b, &capacity| {
+            let ring = HotTraceRing::new(capacity);
+            let string_intern = StringIntern::new();
+            let span = generate_test_span(1, 1);
+            let compact = CompactSpan::from_span(&span, &string_intern);
 
-                b.iter(|| {
-                    let success = ring.try_push(black_box(compact.clone()));
-                    black_box(success);
-                })
-            },
-        );
+            b.iter(|| {
+                let success = ring.try_push(black_box(compact.clone()));
+                black_box(success);
+            })
+        });
     }
 
     group.finish();

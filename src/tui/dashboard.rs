@@ -133,10 +133,7 @@ fn draw_header(frame: &mut Frame, area: Rect, app: &Dashboard) {
         Line::from(""),
         Line::from(vec![
             Span::raw("  "),
-            Span::styled(
-                now.format("%Y-%m-%d").to_string(),
-                Style::default().fg(Color::DarkGray),
-            ),
+            Span::styled(now.format("%Y-%m-%d").to_string(), Style::default().fg(Color::DarkGray)),
             Span::raw(" "),
             Span::styled(
                 now.format("%H:%M:%S").to_string(),
@@ -198,11 +195,7 @@ fn draw_stats_bar(frame: &mut Frame, area: Rect, app: &Dashboard) {
 
     // Slowest service
     let latency_info = if let Some(slowest) = services_by_latency.first() {
-        format!(
-            "{}: {}ms",
-            slowest.name.as_str(),
-            slowest.latency_p99.as_millis()
-        )
+        format!("{}: {}ms", slowest.name.as_str(), slowest.latency_p99.as_millis())
     } else {
         "No services".to_string()
     };
@@ -222,11 +215,7 @@ fn draw_stats_bar(frame: &mut Frame, area: Rect, app: &Dashboard) {
     let sort_filter = Paragraph::new(vec![Line::from(vec![
         Span::raw(" Sort: "),
         Span::styled(
-            format!(
-                "{} {}",
-                app.sort_by.as_str(),
-                if app.sort_desc { "↓" } else { "↑" }
-            ),
+            format!("{} {}", app.sort_by.as_str(), if app.sort_desc { "↓" } else { "↑" }),
             Style::default().fg(Color::Cyan),
         ),
         Span::raw(" | Filter: "),
@@ -429,11 +418,7 @@ fn draw_service_table(frame: &mut Frame, area: Rect, app: &mut Dashboard) {
         Block::default()
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
-            .title(format!(
-                " Services ({}/{}) ",
-                services.len(),
-                app.services.len()
-            ))
+            .title(format!(" Services ({}/{}) ", services.len(), app.services.len()))
             .title_alignment(Alignment::Center)
             .border_style(Style::default().fg(Color::Cyan)),
     );
@@ -500,15 +485,9 @@ fn draw_footer_bar(frame: &mut Frame, area: Rect, app: &Dashboard) {
 
     let system_stats = Paragraph::new(vec![Line::from(vec![
         Span::raw(" Memory: "),
-        Span::styled(
-            format!("{:.0}MB", app.memory_usage_mb),
-            Style::default().fg(memory_color),
-        ),
+        Span::styled(format!("{:.0}MB", app.memory_usage_mb), Style::default().fg(memory_color)),
         Span::raw(" | Processing: "),
-        Span::styled(
-            format!("{:.0}/s", app.spans_per_sec),
-            Style::default().fg(Color::Green),
-        ),
+        Span::styled(format!("{:.0}/s", app.spans_per_sec), Style::default().fg(Color::Green)),
     ])])
     .block(
         Block::default()
@@ -577,17 +556,4 @@ fn create_mini_sparkline(data: &[u64]) -> String {
         .collect();
 
     last_5.iter().collect()
-}
-
-/// Format large numbers with K/M/B suffixes.
-fn format_number(n: u64) -> String {
-    if n >= 1_000_000_000 {
-        format!("{:.1}B", n as f64 / 1_000_000_000.0)
-    } else if n >= 1_000_000 {
-        format!("{:.1}M", n as f64 / 1_000_000.0)
-    } else if n >= 1_000 {
-        format!("{:.1}K", n as f64 / 1_000.0)
-    } else {
-        n.to_string()
-    }
 }

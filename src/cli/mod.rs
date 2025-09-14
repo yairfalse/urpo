@@ -146,18 +146,18 @@ impl Cli {
             Ok(content) => {
                 builder = builder.from_yaml(&content)?;
                 tracing::info!("Loaded configuration from: {:?}", config_path);
-            }
+            },
             Err(e) if self.config.is_some() => {
                 // User explicitly specified a config file that doesn't exist
                 return Err(UrpoError::config(format!(
                     "Failed to read config file {:?}: {}",
                     config_path, e
                 )));
-            }
+            },
             Err(_) => {
                 // Default config file doesn't exist, that's OK
                 tracing::debug!("No config file found at {:?}, using defaults", config_path);
-            }
+            },
         }
 
         // 2. Apply CLI overrides
@@ -295,7 +295,7 @@ async fn execute_subcommand(command: Commands, cli: &Cli) -> Result<()> {
                 cli,
             )
             .await
-        }
+        },
     }
 }
 
@@ -378,10 +378,7 @@ async fn execute_export(
             .map_err(|e| UrpoError::config(format!("Failed to get trace: {}", e)))?;
 
         if spans.is_empty() {
-            return Err(UrpoError::config(format!(
-                "Trace not found: {}",
-                trace_id.as_str()
-            )));
+            return Err(UrpoError::config(format!("Trace not found: {}", trace_id.as_str())));
         }
 
         // Export the trace

@@ -85,6 +85,9 @@ mimalloc = { version = "0.1", default-features = false }  # Ultra-fast allocator
 rustc-hash = "2.0"  # Fast hashing
 fastrand = "2.0"  # Fast random numbers
 bumpalo = "3.0"  # Arena allocation
+smallvec = { version = "1.13", features = ["union", "const_generics", "const_new", "serde"] }  # Stack-allocated small vectors
+lru = "0.12"  # LRU cache for bounded memory
+clipboard = { version = "0.5", optional = true }  # Clipboard support for TUI
 
 
 [dev-dependencies]
@@ -104,7 +107,7 @@ tonic-build = "0.12"
 default = []
 persistent = ["rocksdb"]
 rkyv = ["dep:rkyv"]
-clipboard = []  # Clipboard functionality for TUI
+clipboard = ["dep:clipboard"]  # Clipboard functionality for TUI
 
 [lib]
 name = "urpo_lib"
@@ -134,3 +137,42 @@ overflow-checks = false  # Disable overflow checks for maximum speed
 [profile.bench]
 inherits = "release"
 debug = true             # Keep debug info for profiling
+
+# Clippy lints for performance-focused development
+[lints.clippy]
+# Performance-critical lints (DENY level)
+unnecessary_to_owned = "deny"
+clone_on_ref_ptr = "deny"
+redundant_clone = "deny"
+inefficient_to_string = "deny"
+string_add = "deny"
+large_types_passed_by_value = "deny"
+boxed_local = "deny"
+mutex_atomic = "deny"
+arc_with_non_send_sync = "deny"
+manual_memcpy = "deny"
+
+# Performance warnings
+cast_possible_truncation = "warn"
+cast_precision_loss = "warn"
+arithmetic_side_effects = "warn"
+iter_nth = "warn"
+single_match_else = "warn"
+cognitive_complexity = "warn"
+
+# Style lints for maintainability
+len_without_is_empty = "deny"
+needless_bool = "deny"
+bool_comparison = "deny"
+explicit_iter_loop = "warn"
+
+# Allow performance-oriented patterns
+expect_used = "allow"
+unwrap_used = "allow"
+panic = "allow"
+comparison_chain = "allow"
+match_bool = "allow"
+similar_names = "allow"
+unreadable_literal = "allow"
+redundant_else = "allow"
+unnested_or_patterns = "allow"

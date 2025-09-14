@@ -41,7 +41,7 @@ impl PartitionGranularity {
                 let week = datetime.format("%G").to_string();
                 let week_num = datetime.format("%V").to_string();
                 format!("{}W{}", week, week_num)
-            }
+            },
         }
     }
 
@@ -58,7 +58,7 @@ impl PartitionGranularity {
                 })?
                 .and_utc();
                 Ok(SystemTime::from(dt))
-            }
+            },
             Self::Daily => {
                 let dt = chrono::NaiveDateTime::parse_from_str(
                     &format!("{}_00_00_00", key),
@@ -69,7 +69,7 @@ impl PartitionGranularity {
                 })?
                 .and_utc();
                 Ok(SystemTime::from(dt))
-            }
+            },
             Self::Weekly => {
                 // Parse format like "2024W15"
                 if let Some(captures) = regex::Regex::new(r"(\d{4})W(\d{2})")
@@ -90,16 +90,11 @@ impl PartitionGranularity {
                         .and_hms_opt(0, 0, 0)
                         .ok_or_else(|| UrpoError::Storage("Invalid time".to_string()))?;
 
-                    Ok(SystemTime::from(
-                        DateTime::<Utc>::from_naive_utc_and_offset(dt, Utc),
-                    ))
+                    Ok(SystemTime::from(DateTime::<Utc>::from_naive_utc_and_offset(dt, Utc)))
                 } else {
-                    Err(UrpoError::Storage(format!(
-                        "Invalid weekly partition key format: {}",
-                        key
-                    )))
+                    Err(UrpoError::Storage(format!("Invalid weekly partition key format: {}", key)))
                 }
-            }
+            },
         }
     }
 }
@@ -367,7 +362,7 @@ impl ArchiveIndex {
 }
 
 /// Service name interning for efficient storage.
-struct ServiceInterning {
+pub struct ServiceInterning {
     name_to_id: AHashMap<String, u16>,
     next_id: u16,
 }

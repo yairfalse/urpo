@@ -160,7 +160,7 @@ async fn health_handler(State(state): State<ApiState>) -> impl IntoResponse {
                 }),
             )
                 .into_response();
-        }
+        },
     };
 
     let response = HealthResponse {
@@ -204,7 +204,7 @@ async fn list_traces_handler(
                 }),
             )
                 .into_response();
-        }
+        },
     };
 
     // Filter by error status if requested
@@ -227,7 +227,7 @@ async fn list_traces_handler(
                     }),
                 )
                     .into_response();
-            }
+            },
         };
 
         let storage_ref = state.storage.read().await;
@@ -276,7 +276,7 @@ async fn get_trace_handler(
                 }),
             )
                 .into_response();
-        }
+        },
     };
 
     // Get trace spans
@@ -302,7 +302,7 @@ async fn get_trace_handler(
                 )
                     .into_response();
             }
-        }
+        },
     };
 
     Json(spans).into_response()
@@ -322,7 +322,7 @@ async fn list_services_handler(State(state): State<ApiState>) -> impl IntoRespon
                 }),
             )
                 .into_response();
-        }
+        },
     };
 
     // Convert to simple service list with metrics
@@ -358,7 +358,7 @@ async fn get_service_map_handler(State(state): State<ApiState>) -> impl IntoResp
                 }),
             )
                 .into_response()
-        }
+        },
     }
 }
 
@@ -386,12 +386,7 @@ async fn search_handler(
         .storage
         .read()
         .await
-        .search_spans(
-            &params.q,
-            params.service.as_deref(),
-            params.attribute_key.as_deref(),
-            limit,
-        )
+        .search_spans(&params.q, params.service.as_deref(), params.attribute_key.as_deref(), limit)
         .await
     {
         Ok(r) => r,
@@ -404,7 +399,7 @@ async fn search_handler(
                 }),
             )
                 .into_response();
-        }
+        },
     };
 
     // Return search results
@@ -450,14 +445,8 @@ mod tests {
     #[test]
     fn test_export_format_parsing() {
         assert_eq!("json".parse::<ExportFormat>().unwrap(), ExportFormat::Json);
-        assert_eq!(
-            "jaeger".parse::<ExportFormat>().unwrap(),
-            ExportFormat::Jaeger
-        );
-        assert_eq!(
-            "otel".parse::<ExportFormat>().unwrap(),
-            ExportFormat::OpenTelemetry
-        );
+        assert_eq!("jaeger".parse::<ExportFormat>().unwrap(), ExportFormat::Jaeger);
+        assert_eq!("otel".parse::<ExportFormat>().unwrap(), ExportFormat::OpenTelemetry);
         assert_eq!("csv".parse::<ExportFormat>().unwrap(), ExportFormat::Csv);
         assert!("invalid".parse::<ExportFormat>().is_err());
     }

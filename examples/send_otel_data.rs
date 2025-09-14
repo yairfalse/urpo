@@ -144,12 +144,7 @@ async fn main() {
     // Create spans from multiple services
     println!("\nSending traces from multiple services...");
 
-    let services = vec![
-        "auth-service",
-        "user-service",
-        "order-service",
-        "inventory-service",
-    ];
+    let services = vec!["auth-service", "user-service", "order-service", "inventory-service"];
 
     for service_name in &services {
         // Create a tracer for each service

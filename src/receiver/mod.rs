@@ -125,27 +125,18 @@ impl OtelReceiver {
             Ok(_) => {
                 tracing::info!("GRPC server stopped gracefully");
                 Ok(())
-            }
+            },
             Err(e) => {
                 tracing::error!("GRPC server error: {} (binding to {})", e, addr);
                 // Check if it's a binding/address error
                 if e.to_string().contains("Address already in use") {
-                    Err(UrpoError::network(format!(
-                        "Port {} already in use",
-                        addr.port()
-                    )))
+                    Err(UrpoError::network(format!("Port {} already in use", addr.port())))
                 } else if e.to_string().contains("Permission denied") {
-                    Err(UrpoError::network(format!(
-                        "Permission denied binding to {}",
-                        addr
-                    )))
+                    Err(UrpoError::network(format!("Permission denied binding to {}", addr)))
                 } else {
-                    Err(UrpoError::protocol(format!(
-                        "Failed to start GRPC server: {}",
-                        e
-                    )))
+                    Err(UrpoError::protocol(format!("Failed to start GRPC server: {}", e)))
                 }
-            }
+            },
         }
     }
 
@@ -244,13 +235,13 @@ impl TraceService for GrpcTraceService {
                                 span_id_hex
                             );
                             spans.push(span);
-                        }
+                        },
                         Err(e) => {
                             tracing::warn!(
                                 "Failed to convert span: service={}, operation={}, trace_id={}, span_id={}, error={}",
                                 service_name, span_name, trace_id_hex, span_id_hex, e
                             );
-                        }
+                        },
                     }
                 }
             }
@@ -304,14 +295,10 @@ fn convert_otel_span(
 
     // Validate IDs are not empty
     if trace_id_hex.is_empty() || trace_id_hex == "00000000000000000000000000000000" {
-        return Err(UrpoError::InvalidSpan(
-            "Invalid trace ID: empty or all zeros".to_string(),
-        ));
+        return Err(UrpoError::InvalidSpan("Invalid trace ID: empty or all zeros".to_string()));
     }
     if span_id_hex.is_empty() || span_id_hex == "0000000000000000" {
-        return Err(UrpoError::InvalidSpan(
-            "Invalid span ID: empty or all zeros".to_string(),
-        ));
+        return Err(UrpoError::InvalidSpan("Invalid span ID: empty or all zeros".to_string()));
     }
 
     let trace_id = TraceId::new(trace_id_hex)?;
@@ -353,7 +340,7 @@ fn convert_otel_span(
             opentelemetry_proto::tonic::trace::v1::status::StatusCode::Ok => SpanStatus::Ok,
             opentelemetry_proto::tonic::trace::v1::status::StatusCode::Error => {
                 SpanStatus::Error(status.message.clone())
-            }
+            },
         }
     } else {
         SpanStatus::Unknown
@@ -431,7 +418,7 @@ fn value_to_string(value: opentelemetry_proto::tonic::common::v1::AnyValue) -> S
         Some(Value::ArrayValue(arr)) => {
             let values: Vec<String> = arr.values.into_iter().map(value_to_string).collect();
             format!("[{}]", values.join(", "))
-        }
+        },
         Some(Value::KvlistValue(kv)) => {
             let pairs: Vec<String> = kv
                 .values
@@ -442,7 +429,7 @@ fn value_to_string(value: opentelemetry_proto::tonic::common::v1::AnyValue) -> S
                 })
                 .collect();
             format!("{{{}}}", pairs.join(", "))
-        }
+        },
         Some(Value::BytesValue(bytes)) => format!("bytes({})", bytes.len()),
         None => String::new(),
     }

@@ -5,7 +5,7 @@
 //! zero-copy operations and minimal allocations.
 
 use crate::core::{Result, Span, UrpoError};
-use crate::storage::archive::{ArchiveIndex, ArchiveWriter};
+use crate::storage::archive::ArchiveIndex;
 use crate::storage::tiered_engine::TieredStorageEngine;
 use crate::storage::ultra_fast::{CompactSpan, StringIntern};
 use ahash::AHashMap;
@@ -154,12 +154,22 @@ impl FastArchiveIndex {
 
         // Serialize bitmaps for storage
         for (&service_id, bitmap) in &self.service_bitmaps {
-            let serialized = bitmap.serialize_into_vec();
+            let mut serialized = Vec::new();
+            bitmap.serialize_into(&mut serialized).unwrap();
             index.service_traces.insert(service_id, serialized);
         }
 
-        index.error_traces = self.error_bitmap.serialize_into_vec();
-        index.slow_traces = self.slow_bitmap.serialize_into_vec();
+        let mut error_serialized = Vec::new();
+        self.error_bitmap
+            .serialize_into(&mut error_serialized)
+            .unwrap();
+        index.error_traces = error_serialized;
+
+        let mut slow_serialized = Vec::new();
+        self.slow_bitmap
+            .serialize_into(&mut slow_serialized)
+            .unwrap();
+        index.slow_traces = slow_serialized;
         index.service_names = service_intern.get_all_services();
 
         index
@@ -300,7 +310,7 @@ impl FastArchiveWriter {
     pub fn flush(&mut self) -> Result<()> {
         if let Some(index) = self.current_index.take() {
             // Convert to standard archive index
-            let archive_index = index.to_archive_index(&self.service_intern);
+            let _archive_index = index.to_archive_index(&self.service_intern);
 
             // TODO: Write to disk using existing ArchiveWriter
             // This would integrate with the existing archive system

@@ -20,14 +20,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Built config with GRPC port: {}", config.server.grpc_port);
     println!("Built config with HTTP port: {}", config.server.http_port);
-    println!(
-        "Built config with memory limit: {}MB",
-        config.storage.max_memory_mb
-    );
-    println!(
-        "Built config with sampling rate: {}",
-        config.sampling.default_rate
-    );
+    println!("Built config with memory limit: {}MB", config.storage.max_memory_mb);
+    println!("Built config with sampling rate: {}", config.sampling.default_rate);
 
     // Example 2: Loading from YAML
     println!("\n=== YAML Configuration Example ===");
@@ -64,10 +58,7 @@ features:
     println!("YAML config GRPC port: {}", yaml_config.server.grpc_port);
     println!("YAML config max spans: {}", yaml_config.storage.max_spans);
     println!("YAML config theme: {:?}", yaml_config.ui.theme);
-    println!(
-        "YAML config retention: {:?}",
-        yaml_config.storage.retention_duration
-    );
+    println!("YAML config retention: {:?}", yaml_config.storage.retention_duration);
 
     // Show per-service sampling rates
     println!("Per-service sampling rates:");
@@ -117,12 +108,7 @@ sampling:
         )?
         .build()?;
 
-    let services = [
-        "default-service",
-        "always-sample",
-        "never-sample",
-        "half-sample",
-    ];
+    let services = ["default-service", "always-sample", "never-sample", "half-sample"];
     for service in &services {
         let rate = sampling_config.get_sampling_rate(service);
         println!("Service '{}' sampling rate: {}", service, rate);
@@ -175,10 +161,7 @@ storage:
         }
     });
 
-    println!(
-        "Initial config memory limit: {}MB",
-        config_rx.borrow().storage.max_memory_mb
-    );
+    println!("Initial config memory limit: {}MB", config_rx.borrow().storage.max_memory_mb);
 
     // Update the config file
     let updated_config_content = r#"
@@ -197,10 +180,7 @@ storage:
     // Check if config was updated
     if config_rx.has_changed()? {
         let updated_config = config_rx.borrow_and_update();
-        println!(
-            "Updated config memory limit: {}MB",
-            updated_config.storage.max_memory_mb
-        );
+        println!("Updated config memory limit: {}MB", updated_config.storage.max_memory_mb);
     } else {
         println!("Config file watching not triggered (this is expected in some environments)");
     }
