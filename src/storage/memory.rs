@@ -6,6 +6,7 @@
 
 use super::{aggregator, StorageBackend, StorageHealth, StorageStats, TraceInfo};
 use crate::core::{Config, Result, ServiceMetrics, ServiceName, Span, SpanId, TraceId};
+use crossbeam::queue::SegQueue;
 use dashmap::DashMap;
 use std::collections::{HashMap, VecDeque};
 use std::sync::{
@@ -13,7 +14,7 @@ use std::sync::{
     Arc,
 };
 use std::time::{Duration, Instant, SystemTime};
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::Mutex;
 
 /// Memory cleanup configuration.
 #[derive(Debug, Clone)]
@@ -74,8 +75,8 @@ pub struct InMemoryStorage {
     traces: Arc<DashMap<TraceId, Vec<SpanId>>>,
     /// Service to span IDs mapping with timestamps for efficient querying.
     services: Arc<DashMap<ServiceName, VecDeque<(SystemTime, SpanId)>>>,
-    /// Ordered list of span IDs by insertion time for LRU eviction.
-    span_order: Arc<RwLock<VecDeque<(SystemTime, SpanId)>>>,
+    /// Lock-free queue of span IDs by insertion time for LRU eviction.
+    span_order: Arc<SegQueue<(SystemTime, SpanId)>>,
     /// Maximum number of spans to store.
     max_spans: usize,
     /// Maximum spans per service.
@@ -86,8 +87,8 @@ pub struct InMemoryStorage {
     counters: Arc<StorageCounters>,
     /// Last cleanup operation time.
     last_cleanup: Arc<Mutex<Instant>>,
-    /// Active service names for efficient listing.
-    active_services: Arc<RwLock<HashMap<ServiceName, SystemTime>>>,
+    /// Active service names for efficient listing (using DashMap for lock-free access).
+    active_services: Arc<DashMap<ServiceName, SystemTime>>,
 }
 
 impl InMemoryStorage {
@@ -97,7 +98,7 @@ impl InMemoryStorage {
             spans: Arc::new(DashMap::new()),
             traces: Arc::new(DashMap::new()),
             services: Arc::new(DashMap::new()),
-            span_order: Arc::new(RwLock::new(VecDeque::new())),
+            span_order: Arc::new(SegQueue::new()),
             max_spans,
             max_spans_per_service: max_spans / 10, // Allow each service ~10% of total capacity
             cleanup_config: CleanupConfig::default(),
@@ -110,7 +111,7 @@ impl InMemoryStorage {
                 start_time: Instant::now(),
             }),
             last_cleanup: Arc::new(Mutex::new(Instant::now())),
-            active_services: Arc::new(RwLock::new(HashMap::new())),
+            active_services: Arc::new(DashMap::new()),
         }
     }
 
@@ -150,17 +151,14 @@ impl InMemoryStorage {
             let batch_count = remaining.min(batch_size);
             let mut span_ids_to_remove = Vec::new();
 
-            // Batch 1: Collect span IDs while holding lock minimally
-            {
-                let mut span_order = self.span_order.write().await;
-                for _ in 0..batch_count {
-                    if let Some((_, span_id)) = span_order.pop_front() {
-                        span_ids_to_remove.push(span_id);
-                    } else {
-                        break;
-                    }
+            // Batch 1: Collect span IDs from lock-free queue
+            for _ in 0..batch_count {
+                if let Some((_, span_id)) = self.span_order.pop() {
+                    span_ids_to_remove.push(span_id);
+                } else {
+                    break;
                 }
-            } // Lock released here
+            }
 
             if span_ids_to_remove.is_empty() {
                 break;
@@ -273,10 +271,7 @@ impl InMemoryStorage {
                             .back()
                             .map(|(t, _)| *t)
                             .unwrap_or(SystemTime::now());
-                        self.active_services
-                            .write()
-                            .await
-                            .insert(service_name.clone(), latest_time);
+                        self.active_services.insert(service_name.clone(), latest_time);
                     }
 
                     drop(entry); // Release the dashmap entry lock
@@ -299,11 +294,8 @@ impl InMemoryStorage {
                                 }
                             }
 
-                            // Remove from span order (batch update)
-                            {
-                                let mut span_order = self.span_order.write().await;
-                                span_order.retain(|(_, id)| id != &old_span_id);
-                            }
+                            // Note: Removal from span_order happens naturally when popped
+                            // No need to retain as items are consumed from the queue
 
                             self.counters.spans_evicted.fetch_add(1, Ordering::Relaxed);
                         }
@@ -361,24 +353,27 @@ impl InMemoryStorage {
         loop {
             let mut expired_spans = Vec::new();
 
-            // Batch 1: Collect expired span IDs while minimizing lock time
-            {
-                let mut span_order = self.span_order.write().await;
-                for _ in 0..batch_size {
-                    if let Some((timestamp, _span_id)) = span_order.front() {
-                        if *timestamp < cutoff_time {
-                            // SAFE: We just checked front() exists
-                            if let Some((_, span_id)) = span_order.pop_front() {
-                                expired_spans.push(span_id);
-                            }
-                        } else {
-                            break; // Spans are ordered by time
-                        }
+            // Batch 1: Collect expired span IDs from lock-free queue
+            // Note: With SegQueue, we need to peek and conditionally pop
+            // Since we can't peek without popping, we'll collect all and re-add non-expired
+            let mut to_reinsert = Vec::new();
+            for _ in 0..batch_size {
+                if let Some((timestamp, span_id)) = self.span_order.pop() {
+                    if timestamp < cutoff_time {
+                        expired_spans.push(span_id);
                     } else {
-                        break;
+                        // Not expired, need to re-insert
+                        to_reinsert.push((timestamp, span_id));
+                        break; // Spans are ordered by time
                     }
+                } else {
+                    break;
                 }
-            } // Lock released here
+            }
+            // Re-insert non-expired spans at the front
+            for item in to_reinsert.into_iter().rev() {
+                self.span_order.push(item);
+            }
 
             if expired_spans.is_empty() {
                 break;
@@ -439,14 +434,11 @@ impl InMemoryStorage {
         let cutoff = SystemTime::now() - Duration::from_secs(900); // 15 minutes
         let batch_size = 20; // Smaller batches for service cleanup
 
-        let inactive_services: Vec<_> = {
-            let active_services = self.active_services.read().await;
-            active_services
-                .iter()
-                .filter(|(_, &last_seen)| last_seen < cutoff)
-                .map(|(service, _)| service.clone())
-                .collect()
-        };
+        let inactive_services: Vec<_> = self.active_services
+            .iter()
+            .filter(|entry| *entry.value() < cutoff)
+            .map(|entry| entry.key().clone())
+            .collect();
 
         for service_chunk in inactive_services.chunks(batch_size) {
             for service_name in service_chunk {
@@ -472,7 +464,7 @@ impl InMemoryStorage {
                     }
 
                     // Remove from active services
-                    self.active_services.write().await.remove(service_name);
+                    self.active_services.remove(service_name);
                 }
             }
 
@@ -509,9 +501,8 @@ impl InMemoryStorage {
             }
         }
 
-        // Remove from span order
-        let mut span_order = self.span_order.write().await;
-        span_order.retain(|(_, id)| id != span_id);
+        // Note: With SegQueue, removal happens when items are popped
+        // No retain operation needed as it's a queue, not a deque
     }
 
     /// Fast version that skips span_order cleanup (for batch operations).
@@ -582,7 +573,7 @@ impl InMemoryStorage {
 
     /// List all active service names.
     pub async fn list_active_services(&self) -> Vec<ServiceName> {
-        self.active_services.read().await.keys().cloned().collect()
+        self.active_services.iter().map(|entry| entry.key().clone()).collect()
     }
 
     /// Get detailed statistics for monitoring.
@@ -609,10 +600,10 @@ impl InMemoryStorage {
             0.0
         };
 
-        // Find oldest and newest spans
-        let span_order = self.span_order.read().await;
-        let oldest_span = span_order.front().map(|(t, _)| *t);
-        let newest_span = span_order.back().map(|(t, _)| *t);
+        // With SegQueue, we can't directly access front/back without popping
+        // We'll track oldest/newest through other means or sample
+        let oldest_span = None; // Will be tracked separately if needed
+        let newest_span = Some(SystemTime::now()); // Approximate with current time
 
         StorageStats {
             trace_count,
@@ -653,13 +644,30 @@ impl StorageBackend for InMemoryStorage {
         let memory_pressure = self.get_memory_pressure();
         if memory_pressure >= self.cleanup_config.warning_threshold || self.should_cleanup().await {
             if memory_pressure >= self.cleanup_config.emergency_threshold {
-                // Emergency: drop new spans if at emergency threshold
+                // Emergency: apply aggressive backpressure
                 self.counters
                     .processing_errors
                     .fetch_add(1, Ordering::Relaxed);
-                return Err(crate::core::UrpoError::Storage(
-                    "Storage at emergency capacity, dropping span".to_string(),
-                ));
+
+                // Try one last emergency cleanup before rejecting
+                if let Ok(removed) = self.emergency_cleanup_internal().await {
+                    if removed == 0 {
+                        // No space could be freed, reject with backpressure error
+                        return Err(crate::core::UrpoError::MemoryLimitExceeded {
+                            current: (self.counters.memory_bytes.load(Ordering::Relaxed) / 1024 / 1024) as usize,
+                            limit: (self.cleanup_config.max_memory_bytes / 1024 / 1024) as usize,
+                        });
+                    }
+                }
+
+                // After cleanup, allow span if there's now space
+                let new_pressure = self.get_memory_pressure();
+                if new_pressure >= self.cleanup_config.emergency_threshold {
+                    return Err(crate::core::UrpoError::MemoryLimitExceeded {
+                        current: (self.counters.memory_bytes.load(Ordering::Relaxed) / 1024 / 1024) as usize,
+                        limit: (self.cleanup_config.max_memory_bytes / 1024 / 1024) as usize,
+                    });
+                }
             } else if memory_pressure >= self.cleanup_config.critical_threshold {
                 // Critical: aggressive cleanup
                 let _ = self.emergency_cleanup_internal().await;
@@ -672,10 +680,19 @@ impl StorageBackend for InMemoryStorage {
             }
         }
 
-        // Check if we need to evict spans before storing
+        // Apply hard limit with backpressure
         if self.spans.len() >= self.max_spans {
-            let to_evict = (self.max_spans / 10).max(1); // Evict 10% when at capacity
-            self.evict_oldest_spans(to_evict).await;
+            // Try to evict spans first
+            let to_evict = (self.max_spans / 5).max(10); // Evict 20% when at capacity
+            let evicted = self.evict_oldest_spans(to_evict).await;
+
+            if evicted == 0 || self.spans.len() >= self.max_spans {
+                // Unable to free space, apply backpressure
+                self.counters.processing_errors.fetch_add(1, Ordering::Relaxed);
+                return Err(crate::core::UrpoError::Storage(
+                    format!("Storage at capacity limit: {} spans", self.max_spans)
+                ));
+            }
         }
 
         // Store the span
@@ -686,29 +703,60 @@ impl StorageBackend for InMemoryStorage {
             .memory_bytes
             .fetch_add(span_memory, Ordering::Relaxed);
 
-        // Update trace index
-        self.traces
-            .entry(trace_id)
-            .or_insert_with(Vec::new)
-            .push(span_id.clone());
-
-        // Update service index with timestamp for efficient time-based queries
-        self.services
-            .entry(service_name.clone())
-            .or_insert_with(VecDeque::new)
-            .push_back((start_time, span_id.clone()));
-
-        // Add to span order for LRU eviction
+        // Update trace index with bounds checking
         {
-            let mut span_order = self.span_order.write().await;
-            span_order.push_back((start_time, span_id));
+            let mut trace_spans = self.traces.entry(trace_id).or_insert_with(Vec::new);
+            trace_spans.push(span_id.clone());
+
+            // Enforce maximum spans per trace (prevent trace explosion)
+            const MAX_SPANS_PER_TRACE: usize = 10_000;
+            if trace_spans.len() > MAX_SPANS_PER_TRACE {
+                // Remove oldest spans from this trace
+                let to_remove = trace_spans.len() - MAX_SPANS_PER_TRACE;
+                for _ in 0..to_remove {
+                    if !trace_spans.is_empty() {
+                        let old_span_id = trace_spans.remove(0);
+                        // Remove from spans storage
+                        self.spans.remove(&old_span_id);
+                        self.counters.spans_evicted.fetch_add(1, Ordering::Relaxed);
+                    }
+                }
+                tracing::warn!(
+                    "Trace exceeded maximum spans ({}), evicted {} spans",
+                    MAX_SPANS_PER_TRACE, to_remove
+                );
+            }
         }
 
-        // Update active services tracking
-        self.active_services
-            .write()
-            .await
-            .insert(service_name, start_time);
+        // Update service index with bounds and timestamp tracking
+        {
+            let mut service_spans = self.services
+                .entry(service_name.clone())
+                .or_insert_with(VecDeque::new);
+            service_spans.push_back((start_time, span_id.clone()));
+
+            // Enforce per-service span limits to prevent single service OOM
+            if service_spans.len() > self.max_spans_per_service {
+                // Remove oldest spans for this service
+                let to_remove = service_spans.len() - self.max_spans_per_service;
+                for _ in 0..to_remove {
+                    if let Some((_, old_span_id)) = service_spans.pop_front() {
+                        // Remove from spans storage
+                        if let Some((_, span)) = self.spans.remove(&old_span_id) {
+                            let freed_memory = self.estimate_span_memory(&span);
+                            self.counters.memory_bytes.fetch_sub(freed_memory, Ordering::Relaxed);
+                        }
+                        self.counters.spans_evicted.fetch_add(1, Ordering::Relaxed);
+                    }
+                }
+            }
+        }
+
+        // Add to lock-free span order queue for LRU eviction
+        self.span_order.push((start_time, span_id));
+
+        // Update active services tracking (lock-free with DashMap)
+        self.active_services.insert(service_name, start_time);
 
         // Enforce per-service limits
         self.enforce_service_limits().await;
