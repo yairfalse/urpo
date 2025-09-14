@@ -1,5 +1,5 @@
 // SPAN DETAILS VIEW - SEE EVERYTHING ABOUT A SPAN
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, memo } from 'react';
 import { invoke } from '@tauri-apps/api/tauri';
 
 interface SpanDetails {
@@ -30,19 +30,19 @@ interface SpanDetailsViewProps {
   onNavigateToSpan?: (spanId: string) => void;
 }
 
-const SpanDetailsView: React.FC<SpanDetailsViewProps> = ({
+const SpanDetailsViewImpl = ({
   traceId,
   spanId,
   onClose,
   onNavigateToSpan
-}) => {
+}: SpanDetailsViewProps) => {
   const [selectedSpan, setSelectedSpan] = useState<SpanDetails | null>(null);
   const [spans, setSpans] = useState<SpanDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'tree' | 'timeline' | 'raw'>('tree');
 
   // Load trace spans
-  React.useEffect(() => {
+  useEffect(() => {
     const loadSpans = async () => {
       setLoading(true);
       try {
@@ -343,4 +343,5 @@ const SpanDetailsView: React.FC<SpanDetailsViewProps> = ({
   );
 };
 
-export default SpanDetailsView;
+export const SpanDetailsView = memo(SpanDetailsViewImpl);
+SpanDetailsView.displayName = 'SpanDetailsView';

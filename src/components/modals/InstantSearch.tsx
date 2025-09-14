@@ -1,5 +1,5 @@
 // INSTANT SEARCH - FASTER THAN YOUR BRAIN CAN PROCESS
-import React, { useState, useCallback, useEffect, useMemo, memo } from 'react';
+import { useState, useCallback, useEffect, useMemo, memo } from 'react';
 import { invoke } from '@tauri-apps/api/tauri';
 import { TraceInfo } from '../../types';
 
@@ -24,7 +24,7 @@ function useDebounce<T>(value: T, delay: number): T {
   return debouncedValue;
 }
 
-const InstantSearch = memo(({ onTraceSelect }: SearchProps) => {
+const InstantSearchImpl = ({ onTraceSelect }: SearchProps) => {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<TraceInfo[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -140,7 +140,7 @@ const InstantSearch = memo(({ onTraceSelect }: SearchProps) => {
             </svg>
             {isSearching && (
               <div className="absolute right-3 top-3">
-                <div className="animate-spin h-4 w-4 border-2 border-text-700 rounded-full border-t-transparent"></div>
+                <div className=" h-4 w-4 border-2 border-text-700 rounded-full border-t-transparent"></div>
               </div>
             )}
           </div>
@@ -149,7 +149,7 @@ const InstantSearch = memo(({ onTraceSelect }: SearchProps) => {
           <div className="flex gap-2">
             <button
               onClick={() => setFilters(f => ({ ...f, errorOnly: !f.errorOnly }))}
-              className={`px-3 py-1 rounded-md text-sm font-medium transition-colors
+              className={`px-3 py-1 rounded-md text-sm font-medium 
                 ${filters.errorOnly 
                   ? 'bg-red-600 text-white' 
                   : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
@@ -158,7 +158,7 @@ const InstantSearch = memo(({ onTraceSelect }: SearchProps) => {
             </button>
             <button
               onClick={() => setFilters(f => ({ ...f, last15Min: !f.last15Min, lastHour: false }))}
-              className={`px-3 py-1 rounded-md text-sm font-medium transition-colors
+              className={`px-3 py-1 rounded-md text-sm font-medium 
                 ${filters.last15Min 
                   ? 'bg-text-900 text-white' 
                   : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
@@ -167,7 +167,7 @@ const InstantSearch = memo(({ onTraceSelect }: SearchProps) => {
             </button>
             <button
               onClick={() => setFilters(f => ({ ...f, lastHour: !f.lastHour, last15Min: false }))}
-              className={`px-3 py-1 rounded-md text-sm font-medium transition-colors
+              className={`px-3 py-1 rounded-md text-sm font-medium 
                 ${filters.lastHour 
                   ? 'bg-text-900 text-white' 
                   : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
@@ -193,7 +193,7 @@ const InstantSearch = memo(({ onTraceSelect }: SearchProps) => {
             key={trace.trace_id}
             onClick={() => onTraceSelect(trace)}
             onMouseEnter={() => setSelectedIndex(index)}
-            className={`p-3 border-b border-gray-900 cursor-pointer transition-all
+            className={`p-3 border-b border-gray-900 cursor-pointer 
               ${index === selectedIndex 
                 ? 'bg-surface-200 border-l-4 border-text-700' 
                 : 'hover:bg-gray-900'}`}
@@ -282,8 +282,7 @@ const InstantSearch = memo(({ onTraceSelect }: SearchProps) => {
       </div>
     </div>
   );
-});
+};
 
+export const InstantSearch = memo(InstantSearchImpl);
 InstantSearch.displayName = 'InstantSearch';
-
-export default InstantSearch;

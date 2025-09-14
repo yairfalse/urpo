@@ -1,7 +1,7 @@
 import { memo, useState, useCallback, useMemo } from 'react';
 import { TraceInfo, SpanData } from '../../types';
 import { isTauriAvailable, safeTauriInvoke } from '../../utils/tauri';
-import VirtualizedTraceView from '../charts/VirtualizedTraceView';
+import { VirtualizedTraceView } from '../charts/VirtualizedTraceView';
 
 interface Props {
   traces: TraceInfo[];
@@ -214,7 +214,7 @@ const TraceExplorer = memo(({ traces, onRefresh }: Props) => {
             <div className="flex items-center justify-center h-full">
               <div className="text-center space-y-4">
                 <div className="w-8 h-8 mx-auto">
-                  <div className="status-indicator info animate-pulse-subtle"></div>
+                  <div className="status-indicator info "></div>
                 </div>
                 <div>
                   <p className="text-text-700 font-medium">Loading spans...</p>
@@ -248,4 +248,4 @@ const TraceExplorer = memo(({ traces, onRefresh }: Props) => {
 
 TraceExplorer.displayName = 'TraceExplorer';
 
-export default TraceExplorer;
+export { TraceExplorer };

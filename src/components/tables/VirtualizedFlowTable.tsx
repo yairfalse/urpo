@@ -1,7 +1,7 @@
-import { useState, useMemo, memo } from 'react';
+import { useState, useMemo, memo, useRef, useCallback } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { 
   ArrowRight, 
-  Clock, 
   AlertTriangle, 
   CheckCircle,
   XCircle,
@@ -38,16 +38,23 @@ interface Flow {
   tags?: string[];
 }
 
-interface FlowTableProps {
+interface VirtualizedFlowTableProps {
   traces: TraceInfo[];
   onRefresh?: () => void;
 }
 
-const FlowTableImpl = ({ traces, onRefresh }: FlowTableProps) => {
+const ROW_HEIGHT = 64; // Height of each row in pixels
+const HEADER_HEIGHT = 40; // Height of header in pixels
+const OVERSCAN = 5; // Number of rows to render outside visible area
+
+const VirtualizedFlowTableImpl = ({ traces, onRefresh }: VirtualizedFlowTableProps) => {
   const [selectedFlow, setSelectedFlow] = useState<string | null>(null);
   const [filter, setFilter] = useState('');
   const [verdictFilter, setVerdictFilter] = useState<string>('all');
   const [protocolFilter, setProtocolFilter] = useState<string>('all');
+  
+  const parentRef = useRef<HTMLDivElement>(null);
+  const scrollingRef = useRef<HTMLDivElement>(null);
 
   // Convert traces to flows (Hubble-style)
   const flows: Flow[] = useMemo(() => {
@@ -91,59 +98,70 @@ const FlowTableImpl = ({ traces, onRefresh }: FlowTableProps) => {
     });
   }, [flows, filter, verdictFilter, protocolFilter]);
 
-  const getVerdictColor = (verdict: Flow['verdict']) => {
+  // Initialize virtualizer
+  const virtualizer = useVirtualizer({
+    count: filteredFlows.length,
+    getScrollElement: () => scrollingRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: OVERSCAN,
+    getItemKey: (index) => filteredFlows[index]?.id || index,
+  });
+
+  const virtualItems = virtualizer.getVirtualItems();
+
+  const getVerdictColor = useCallback((verdict: Flow['verdict']) => {
     switch (verdict) {
       case 'FORWARDED': return 'text-text-500';
       case 'DROPPED': return 'text-amber-400';
       case 'ERROR': return 'text-red-400';
       default: return 'text-text-500';
     }
-  };
+  }, []);
 
-  const getVerdictIcon = (verdict: Flow['verdict']) => {
+  const getVerdictIcon = useCallback((verdict: Flow['verdict']) => {
     switch (verdict) {
       case 'FORWARDED': return <CheckCircle className="w-4 h-4" />;
       case 'DROPPED': return <AlertTriangle className="w-4 h-4" />;
       case 'ERROR': return <XCircle className="w-4 h-4" />;
       default: return null;
     }
-  };
+  }, []);
 
-  const getLatencyTrend = (latency: number) => {
+  const getLatencyTrend = useCallback((latency: number) => {
     if (latency < 50) return <TrendingDown className="w-3 h-3 text-text-500" />;
     if (latency > 200) return <TrendingUp className="w-3 h-3 text-red-400" />;
     return <Minus className="w-3 h-3 text-text-500" />;
-  };
+  }, []);
 
-  const formatBytes = (bytes: number) => {
+  const formatBytes = useCallback((bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
+  }, []);
 
   return (
-    <div className="h-full flex flex-col bg-surface-50">
+    <div className="h-full flex flex-col bg-surface-50" ref={parentRef}>
       {/* Header */}
       <div className="clean-card border-b border-surface-300 p-4 rounded-none">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-text-700 rounded-full "></div>
-              <h2 className="text-lg font-semibold text-text-900">Trace Flows</h2>
+              <div className="w-2 h-2 bg-text-700 rounded-full"></div>
+              <h2 className="text-lg font-semibold text-text-900">Trace Flows (Virtualized)</h2>
             </div>
             <span className="text-xs text-text-500">
-              {filteredFlows.length} trace flows
+              {filteredFlows.length} of {flows.length} flows
             </span>
           </div>
 
           <div className="flex items-center gap-2">
             <button
               onClick={onRefresh}
-              className="p-2 text-text-500 hover:text-text-900 hover:bg-surface-200 rounded "
+              className="p-2 text-text-500 hover:text-text-900 hover:bg-surface-200 rounded"
             >
               <RefreshCw className="w-4 h-4" />
             </button>
-            <button className="p-2 text-text-500 hover:text-text-900 hover:bg-surface-200 rounded ">
+            <button className="p-2 text-text-500 hover:text-text-900 hover:bg-surface-200 rounded">
               <Download className="w-4 h-4" />
             </button>
           </div>
@@ -207,51 +225,76 @@ const FlowTableImpl = ({ traces, onRefresh }: FlowTableProps) => {
         </div>
       </div>
 
-      {/* Flow Table */}
-      <div className="flex-1 overflow-auto">
-        <table className="w-full">
-          <thead className="sticky top-0 bg-surface-100 border-b border-surface-300">
-            <tr className="text-xs text-text-500">
-              <th className="text-left p-3 font-medium">Time</th>
-              <th className="text-left p-3 font-medium">Source</th>
-              <th className="text-center p-3 font-medium">→</th>
-              <th className="text-left p-3 font-medium">Destination</th>
-              <th className="text-left p-3 font-medium">Protocol</th>
-              <th className="text-left p-3 font-medium">Path</th>
-              <th className="text-center p-3 font-medium">Status</th>
-              <th className="text-right p-3 font-medium">Latency</th>
-              <th className="text-right p-3 font-medium">Size</th>
-            </tr>
-          </thead>
-          <tbody>
-              {filteredFlows.map((flow) => (
-                <tr
-                  key={flow.id}
+      {/* Virtualized Table */}
+      <div className="flex-1 overflow-hidden">
+        {/* Table Header */}
+        <div className="sticky top-0 bg-surface-100 border-b border-surface-300 z-10">
+          <div className="flex text-xs text-text-500 font-medium" style={{ height: HEADER_HEIGHT }}>
+            <div className="flex-none w-32 p-3">Time</div>
+            <div className="flex-1 min-w-0 p-3">Source</div>
+            <div className="flex-none w-12 p-3 text-center">→</div>
+            <div className="flex-1 min-w-0 p-3">Destination</div>
+            <div className="flex-none w-28 p-3">Protocol</div>
+            <div className="flex-1 min-w-0 p-3">Path</div>
+            <div className="flex-none w-32 p-3 text-center">Status</div>
+            <div className="flex-none w-24 p-3 text-right">Latency</div>
+            <div className="flex-none w-24 p-3 text-right">Size</div>
+          </div>
+        </div>
+
+        {/* Virtualized Rows */}
+        <div
+          ref={scrollingRef}
+          className="overflow-auto"
+          style={{ height: `calc(100% - ${HEADER_HEIGHT}px)` }}
+        >
+          <div
+            style={{
+              height: `${virtualizer.getTotalSize()}px`,
+              width: '100%',
+              position: 'relative',
+            }}
+          >
+            {virtualItems.map((virtualRow) => {
+              const flow = filteredFlows[virtualRow.index];
+              if (!flow) return null;
+
+              return (
+                <div
+                  key={virtualRow.key}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: `${virtualRow.size}px`,
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
                   className={`
-                    border-b border-surface-300 hover:bg-surface-100 cursor-pointer 
+                    flex items-center border-b border-surface-300 hover:bg-surface-100 cursor-pointer
                     ${selectedFlow === flow.id ? 'bg-surface-200' : ''}
                   `}
                   onClick={() => setSelectedFlow(flow.id === selectedFlow ? null : flow.id)}
                 >
-                  <td className="p-3 text-xs text-text-500">
+                  <div className="flex-none w-32 p-3 text-xs text-text-500">
                     {format(new Date(flow.timestamp), 'HH:mm:ss.SSS')}
-                  </td>
-                  <td className="p-3">
+                  </div>
+                  <div className="flex-1 min-w-0 p-3">
                     <div className="text-xs">
-                      <div className="text-text-900 font-medium">{flow.source.service}</div>
-                      <div className="text-text-500">{flow.source.pod}</div>
+                      <div className="text-text-900 font-medium truncate">{flow.source.service}</div>
+                      <div className="text-text-500 truncate">{flow.source.pod}</div>
                     </div>
-                  </td>
-                  <td className="p-3 text-center">
+                  </div>
+                  <div className="flex-none w-12 p-3 text-center">
                     <ArrowRight className="w-4 h-4 text-text-500 inline" />
-                  </td>
-                  <td className="p-3">
+                  </div>
+                  <div className="flex-1 min-w-0 p-3">
                     <div className="text-xs">
-                      <div className="text-text-900 font-medium">{flow.destination.service}</div>
-                      <div className="text-text-500">{flow.destination.pod}</div>
+                      <div className="text-text-900 font-medium truncate">{flow.destination.service}</div>
+                      <div className="text-text-500 truncate">{flow.destination.pod}</div>
                     </div>
-                  </td>
-                  <td className="p-3">
+                  </div>
+                  <div className="flex-none w-28 p-3">
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-text-900">{flow.protocol}</span>
                       {flow.method && (
@@ -260,67 +303,79 @@ const FlowTableImpl = ({ traces, onRefresh }: FlowTableProps) => {
                         </span>
                       )}
                     </div>
-                  </td>
-                  <td className="p-3 text-xs text-text-500 font-mono">
+                  </div>
+                  <div className="flex-1 min-w-0 p-3 text-xs text-text-500 font-mono truncate">
                     {flow.path}
-                  </td>
-                  <td className="p-3">
+                  </div>
+                  <div className="flex-none w-32 p-3">
                     <div className={`flex items-center justify-center gap-1 ${getVerdictColor(flow.verdict)}`}>
                       {getVerdictIcon(flow.verdict)}
                       <span className="text-xs">{flow.verdict}</span>
                     </div>
-                  </td>
-                  <td className="p-3 text-right">
+                  </div>
+                  <div className="flex-none w-24 p-3 text-right">
                     <div className="flex items-center justify-end gap-1">
                       {getLatencyTrend(flow.latency)}
                       <span className="text-xs text-text-900">{flow.latency}ms</span>
                     </div>
-                  </td>
-                  <td className="p-3 text-right text-xs text-text-500">
+                  </div>
+                  <div className="flex-none w-24 p-3 text-right text-xs text-text-500">
                     {formatBytes(flow.bytes)}
-                  </td>
-                </tr>
-              ))}
-          </tbody>
-        </table>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Performance Stats */}
+      <div className="border-t border-surface-300 bg-surface-100 px-4 py-2">
+        <div className="flex items-center justify-between text-xs text-text-500">
+          <span>
+            Rendering {virtualItems.length} of {filteredFlows.length} rows (virtualized)
+          </span>
+          <span>
+            Scroll position: {Math.round((scrollingRef.current?.scrollTop || 0) / ROW_HEIGHT)} / {filteredFlows.length}
+          </span>
+        </div>
       </div>
 
       {/* Selected Flow Details */}
-        {selectedFlow && (
-          <div className="border-t border-surface-300 bg-surface-100 p-4"
-          >
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-medium text-text-900">Flow Details</h3>
-              <button
-                onClick={() => setSelectedFlow(null)}
-                className="text-text-500 hover:text-text-900"
-              >
-                ✕
-              </button>
+      {selectedFlow && (
+        <div className="border-t border-surface-300 bg-surface-100 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-medium text-text-900">Flow Details</h3>
+            <button
+              onClick={() => setSelectedFlow(null)}
+              className="text-text-500 hover:text-text-900"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="grid grid-cols-3 gap-4 text-xs">
+            <div>
+              <span className="text-text-500">Trace ID:</span>
+              <div className="font-mono text-text-700 mt-1">{selectedFlow}</div>
             </div>
-            <div className="grid grid-cols-3 gap-4 text-xs">
-              <div>
-                <span className="text-text-500">Trace ID:</span>
-                <div className="font-mono text-text-700 mt-1">{selectedFlow}</div>
+            <div>
+              <span className="text-text-500">Duration:</span>
+              <div className="text-text-900 mt-1">
+                {flows.find(f => f.id === selectedFlow)?.latency}ms
               </div>
-              <div>
-                <span className="text-text-500">Duration:</span>
-                <div className="text-text-900 mt-1">
-                  {flows.find(f => f.id === selectedFlow)?.latency}ms
-                </div>
-              </div>
-              <div>
-                <span className="text-text-500">Status:</span>
-                <div className="text-text-900 mt-1">
-                  {flows.find(f => f.id === selectedFlow)?.statusCode || 'N/A'}
-                </div>
+            </div>
+            <div>
+              <span className="text-text-500">Status:</span>
+              <div className="text-text-900 mt-1">
+                {flows.find(f => f.id === selectedFlow)?.statusCode || 'N/A'}
               </div>
             </div>
           </div>
-        )}
+        </div>
+      )}
     </div>
   );
 };
 
-export const FlowTable = memo(FlowTableImpl);
-FlowTable.displayName = 'FlowTable';
+export const VirtualizedFlowTable = memo(VirtualizedFlowTableImpl);
+VirtualizedFlowTable.displayName = 'VirtualizedFlowTable';
