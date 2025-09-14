@@ -21,6 +21,7 @@ pub mod types;
 pub mod backend;
 pub mod span_pool;
 pub mod buffered;
+pub mod health;
 
 // Re-export commonly used types
 pub use fake_spans::SpanGenerator;

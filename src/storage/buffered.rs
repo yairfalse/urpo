@@ -255,11 +255,8 @@ impl BufferedStorage {
         stats: &Arc<RwLock<BufferStats>>,
         config: &BufferConfig,
     ) {
-        if !buffer.should_flush() {
-            return; // Nothing to flush
-        }
-
-        // Drain batch from buffer
+        // Always drain available spans during background flush
+        // (don't wait for batch size threshold)
         let spans = buffer.drain_batch(config.batch_size);
         if spans.is_empty() {
             return;
@@ -367,7 +364,7 @@ impl BufferedStorage {
     }
 
     /// Update buffer configuration at runtime.
-    pub async fn set_buffer_config(&self, config: BufferConfig) -> Result<()> {
+    pub async fn set_buffer_config(&self, _config: BufferConfig) -> Result<()> {
         // Note: This would require recreating the buffer for size changes
         // For now, only update flush interval
         // TODO: Implement dynamic buffer resizing
@@ -542,7 +539,7 @@ impl Drop for BufferedStorage {
 mod tests {
     use super::*;
     use crate::storage::InMemoryStorage;
-    use tokio::time::timeout;
+    use crate::core::SpanBuilder;
 
     #[tokio::test]
     async fn test_ring_buffer_basic_operations() {
@@ -550,7 +547,7 @@ mod tests {
         let buffer = RingBuffer::new(config);
 
         // Test push
-        let span = Span::default();
+        let span = SpanBuilder::default().build_default();
         assert!(buffer.push(span).is_ok());
 
         // Test drain
@@ -570,13 +567,13 @@ mod tests {
         let buffer = RingBuffer::new(config);
 
         // Fill buffer
-        let span1 = Span::default();
-        let span2 = Span::default();
+        let span1 = SpanBuilder::default().build_default();
+        let span2 = SpanBuilder::default().build_default();
         assert!(buffer.push(span1).is_ok());
         assert!(buffer.push(span2).is_ok());
 
         // Third span should overflow
-        let span3 = Span::default();
+        let span3 = SpanBuilder::default().build_default();
         assert!(buffer.push(span3).is_err());
 
         let stats = buffer.stats();
@@ -595,13 +592,13 @@ mod tests {
         let storage = BufferedStorage::new(backend, config);
 
         // Store spans
-        let spans = vec![Span::default(), Span::default()];
+        let spans = vec![SpanBuilder::default().build_default(), SpanBuilder::default().build_default()];
         for span in spans {
             assert!(storage.store_span(span).await.is_ok());
         }
 
-        // Wait for background flush
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        // Wait for background flush (longer than flush interval)
+        tokio::time::sleep(Duration::from_millis(200)).await;
 
         // Verify spans were flushed to backend
         let stats = storage.get_buffer_stats().await;
@@ -622,7 +619,7 @@ mod tests {
         let storage = BufferedStorage::new(backend, config);
 
         // Store spans
-        let spans = vec![Span::default()];
+        let spans = vec![SpanBuilder::default().build_default()];
         for span in spans {
             assert!(storage.store_span(span).await.is_ok());
         }

@@ -2,7 +2,7 @@
 // No spaceship, just a Formula 1 car
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::fs::File;
 use std::io::BufWriter;
 use memmap2::MmapMut;
@@ -10,12 +10,14 @@ use parking_lot::RwLock;
 use ahash::AHashMap;
 use roaring::RoaringBitmap;
 use crossbeam_channel::{bounded, Sender, Receiver};
+#[cfg(feature = "rkyv")]
 use rkyv::{Archive, Deserialize, Serialize};
 use crate::core::{Result, Span};
 
 // Cache-line aligned span for MAXIMUM performance
 #[repr(C, align(64))]
-#[derive(Clone, Debug, Default, Archive, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default)]
+#[cfg_attr(feature = "rkyv", derive(Archive, Deserialize, Serialize))]
 pub struct CompactSpan {
     pub trace_id: u128,      // 16 bytes
     pub span_id: u64,        // 8 bytes
@@ -507,7 +509,9 @@ mod tests {
     
     #[test]
     fn test_ingestion_speed() {
-        let engine = StorageEngine::new(StorageMode::InMemory { max_traces: 1_000_000 }).unwrap();
+        // BULLETPROOF: Test should panic on engine creation failure
+        let engine = StorageEngine::new(StorageMode::InMemory { max_traces: 1_000_000 })
+            .expect("Test storage engine creation should succeed");
         
         let start = std::time::Instant::now();
         for i in 0..100_000 {

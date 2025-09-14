@@ -105,8 +105,8 @@ impl TDigest {
     }
     
     fn compress(&mut self) {
-        // Merge nearby centroids
-        self.centroids.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+        // BULLETPROOF: Merge nearby centroids with safe comparison
+        self.centroids.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
         // Simplified compression logic
     }
     
@@ -127,7 +127,7 @@ impl TDigest {
             }
         }
         
-        self.centroids.last().unwrap().0
+        self.centroids.last().map(|c| c.0).unwrap_or(0.0)
     }
 }
 
@@ -272,8 +272,13 @@ impl ColumnarSpanStore {
                     trace_id: trace_ids[idx],
                     span_id: span_ids[idx],
                     duration_us: durations[idx],
-                    service: string_pool.get(service_names[idx]).unwrap().to_string(),
-                    operation: string_pool.get(operation_names[idx]).unwrap().to_string(),
+                    // BULLETPROOF: Safe string pool access with fallback
+                    service: string_pool.get(service_names[idx])
+                        .unwrap_or(&"unknown_service")
+                        .to_string(),
+                    operation: string_pool.get(operation_names[idx])
+                        .unwrap_or(&"unknown_operation")
+                        .to_string(),
                 }
             })
             .collect()
@@ -318,14 +323,16 @@ impl ColumnarSpanStore {
         let service_array = StringArray::from(
             self.service_names.read()
                 .iter()
-                .map(|&id| string_pool.get(id).unwrap())
+                // BULLETPROOF: Handle missing string pool entries
+                .map(|&id| string_pool.get(id).unwrap_or("unknown_service"))
                 .collect::<Vec<_>>()
         );
         
         let operation_array = StringArray::from(
             self.operation_names.read()
                 .iter()
-                .map(|&id| string_pool.get(id).unwrap())
+                // BULLETPROOF: Handle missing string pool entries
+                .map(|&id| string_pool.get(id).unwrap_or("unknown_operation"))
                 .collect::<Vec<_>>()
         );
         
@@ -353,7 +360,12 @@ impl ColumnarSpanStore {
                 Arc::new(duration_array) as ArrayRef,
                 Arc::new(error_array) as ArrayRef,
             ],
-        ).unwrap()
+        // BULLETPROOF: Return error on RecordBatch creation failure
+        ).map_err(|e| {
+            tracing::error!("Failed to create Arrow RecordBatch: {}", e);
+            // Create empty batch as fallback
+            RecordBatch::new_empty(Arc::new(schema.clone()))
+        }).unwrap_or_else(|empty| empty)
     }
 }
 

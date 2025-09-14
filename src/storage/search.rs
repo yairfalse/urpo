@@ -259,7 +259,9 @@ mod tests {
         
         // Index some test data
         let trace1 = 0x1234567890abcdef_u128;
-        let service = ServiceName::new("api-gateway".to_string()).unwrap();
+        // BULLETPROOF: Test should panic on invalid service name
+        let service = ServiceName::new("api-gateway".to_string())
+            .expect("Test service name should be valid");
         
         index.index_span(
             trace1,
@@ -287,7 +289,9 @@ mod tests {
         let index = SearchIndex::new();
         
         let error_trace = 0xdeadbeef_u128;
-        let service = ServiceName::new("database".to_string()).unwrap();
+        // BULLETPROOF: Test should panic on invalid service name
+        let service = ServiceName::new("database".to_string())
+            .expect("Test service name should be valid");
         
         index.index_span(
             error_trace,

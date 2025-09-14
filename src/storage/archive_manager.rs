@@ -6,12 +6,11 @@
 //! - Retention policy enforcement
 //! - Intelligent prefetching for queries
 
-use crate::core::{Result, UrpoError, Span, TraceId, ServiceName};
-use crate::storage::archive::{ArchiveReader, ArchiveWriter, PartitionGranularity, ArchiveStats};
-use chrono::{DateTime, Utc, Duration as ChronoDuration};
+use crate::core::{Result, UrpoError, Span, SpanId, TraceId, ServiceName};
+use crate::storage::archive::{ArchiveReader, ArchiveWriter, PartitionGranularity};
 use parking_lot::RwLock;
-use std::collections::{BTreeMap, VecDeque};
-use std::path::{Path, PathBuf};
+use std::collections::BTreeMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{SystemTime, Duration, UNIX_EPOCH};
 use tokio::sync::mpsc;
@@ -539,7 +538,7 @@ impl Drop for ArchiveManager {
 mod tests {
     use super::*;
     use tempfile::TempDir;
-    use crate::core::{SpanStatus, SpanId};
+    use crate::core::{SpanStatus, SpanKind};
 
     fn create_test_span(trace_id: &str, service: &str, start_offset_secs: u64) -> Span {
         Span {
@@ -550,6 +549,7 @@ mod tests {
             operation_name: "test_operation".to_string(),
             start_time: UNIX_EPOCH + Duration::from_secs(1640995200 + start_offset_secs),
             duration: Duration::from_millis(100),
+            kind: SpanKind::Internal,
             status: SpanStatus::Ok,
             attributes: Default::default(),
             tags: Default::default(),

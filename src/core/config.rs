@@ -648,6 +648,7 @@ mod tests {
     fn test_yaml_parsing() {
         let yaml = r#"
 server:
+  bind_address: "127.0.0.1"
   grpc_port: 5317
   http_port: 5318
 storage:

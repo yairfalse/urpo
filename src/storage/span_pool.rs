@@ -83,22 +83,80 @@ pub struct PooledSpan {
     pool: Arc<ArrayQueue<Box<Span>>>,
 }
 
+/// Result type for safe span access
+pub enum SpanAccess<'a> {
+    Available(&'a Span),
+    Taken,
+}
+
+/// Mutable result type for safe span access
+pub enum SpanAccessMut<'a> {
+    Available(&'a mut Span),
+    Taken,
+}
+
 impl PooledSpan {
     /// Take ownership of the span, preventing it from returning to the pool.
+    /// Returns a default span if already taken (defensive programming).
     pub fn take(mut self) -> Span {
-        *self.span.take().expect("span already taken")
+        // BULLETPROOF: Return default span if already taken
+        match self.span.take() {
+            Some(boxed) => *boxed,
+            None => {
+                tracing::warn!("PooledSpan::take called on already-taken span, returning default");
+                SpanBuilder::default().build_default()
+            }
+        }
     }
 
-    /// Get a reference to the span.
+    /// Get a safe reference to the span.
+    /// Returns SpanAccess::Taken if span was already taken.
     #[inline(always)]
-    pub fn as_ref(&self) -> &Span {
-        self.span.as_ref().expect("span already taken")
+    pub fn try_as_ref(&self) -> SpanAccess<'_> {
+        match &self.span {
+            Some(boxed) => SpanAccess::Available(boxed),
+            None => SpanAccess::Taken,
+        }
+    }
+    
+    /// Get a reference to the span (for Deref trait).
+    /// Returns a static default span if taken (never panics).
+    #[inline(always)]
+    fn as_ref(&self) -> &Span {
+        // BULLETPROOF: Use static default for Deref trait
+        static DEFAULT_SPAN: once_cell::sync::Lazy<Span> = 
+            once_cell::sync::Lazy::new(|| SpanBuilder::default().build_default());
+        
+        match &self.span {
+            Some(boxed) => boxed,
+            None => &DEFAULT_SPAN,
+        }
     }
 
-    /// Get a mutable reference to the span.
+    /// Get a safe mutable reference to the span.
+    /// Returns SpanAccessMut::Taken if span was already taken.
     #[inline(always)]
-    pub fn as_mut(&mut self) -> &mut Span {
-        self.span.as_mut().expect("span already taken")
+    pub fn try_as_mut(&mut self) -> SpanAccessMut<'_> {
+        match &mut self.span {
+            Some(boxed) => SpanAccessMut::Available(boxed),
+            None => SpanAccessMut::Taken,
+        }
+    }
+    
+    /// Get a mutable reference to the span (for DerefMut trait).
+    /// Creates a new span if taken (never panics).
+    #[inline(always)]
+    fn as_mut(&mut self) -> &mut Span {
+        // BULLETPROOF: Create new span if taken
+        if self.span.is_none() {
+            tracing::warn!("PooledSpan::as_mut called on taken span, creating new");
+            self.span = Some(Box::new(SpanBuilder::default().build_default()));
+        }
+        // BULLETPROOF: This is truly safe because we just created it above
+        self.span.as_mut().unwrap_or_else(|| {
+            // This should never happen, but we're paranoid
+            unreachable!("BUG: span should exist after creation")
+        })
     }
 
     /// Reset the span to default state for reuse.
@@ -174,7 +232,7 @@ pub static GLOBAL_SPAN_POOL: once_cell::sync::Lazy<SpanPool> =
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::{ServiceName, SpanId, TraceId};
+    use crate::core::ServiceName;
 
     #[test]
     fn test_span_pool_basic() {

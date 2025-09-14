@@ -353,7 +353,7 @@ pub mod api {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{core::SpanBuilder, storage::InMemoryStorage};
+    use crate::{core::{SpanBuilder, SpanId}, storage::InMemoryStorage};
     
     #[tokio::test]
     async fn test_service_map_builder() {
