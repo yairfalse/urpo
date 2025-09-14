@@ -27,33 +27,99 @@ use std::time::SystemTime;
 ///
 /// This structure is designed to fit in exactly 64 bytes (one cache line)
 /// for optimal memory access patterns and cache efficiency.
+/// Optimized cache-line aligned span structure (exactly 64 bytes)
+///
+/// Layout optimized for:
+/// 1. Cache line alignment (64 bytes = 1 cache line)
+/// 2. Hot fields grouped together (trace_id, span_id frequently accessed)
+/// 3. Padding eliminated through careful field ordering
+/// 4. Alignment for SIMD operations
 #[repr(C, align(64))]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct CompactSpan {
+    // ---- Cache Line 1 (64 bytes total) ----
+    // Hot fields (frequently accessed together) - 32 bytes
     /// Trace ID as 128-bit integer for fast comparison
-    pub trace_id: u128,
+    pub trace_id: u128,                    // 16 bytes, offset 0
     /// Span ID as 64-bit integer
-    pub span_id: u64,
+    pub span_id: u64,                      // 8 bytes, offset 16
     /// Parent span ID (0 if root span)
-    pub parent_span_id: u64,
+    pub parent_span_id: u64,               // 8 bytes, offset 24
+
+    // Timing data - 12 bytes
     /// Start time as nanoseconds since Unix epoch
-    pub start_time_ns: u64,
+    pub start_time_ns: u64,                // 8 bytes, offset 32
     /// Duration in nanoseconds (u32 allows up to 4.2 seconds)
-    pub duration_ns: u32,
+    pub duration_ns: u32,                  // 4 bytes, offset 40
+
+    // Interned strings - 8 bytes
     /// Service name index (into string interning table)
-    pub service_idx: u16,
+    pub service_idx: u32,                  // 4 bytes, offset 44
     /// Operation name index (into string interning table)
-    pub operation_idx: u16,
-    /// Span kind (0=internal, 1=server, 2=client, 3=producer, 4=consumer)
-    pub kind: u8,
-    /// Status code (0=unset, 1=ok, 2=error)
-    pub status: u8,
-    /// Flags for fast filtering (error=1, root=2, has_attributes=4)
-    pub flags: u8,
-    /// Reserved for future use / padding
-    pub reserved: u8,
+    pub operation_idx: u32,                // 4 bytes, offset 48
+
+    // Metadata packed together - 8 bytes
     /// Attributes bitmap index (for complex attribute queries)
-    pub attributes_bitmap_idx: u32,
+    pub attributes_bitmap_idx: u32,        // 4 bytes, offset 52
+    /// Packed metadata (kind, status, flags) in single u32 for atomic ops
+    pub metadata: u32,                     // 4 bytes, offset 56
+    // metadata layout:
+    // bits 0-2: kind (3 bits)
+    // bits 3-4: status (2 bits)
+    // bits 5-7: flags (3 bits)
+    // bits 8-31: reserved (24 bits)
+
+    // Padding to exactly 64 bytes
+    _padding: u32,                         // 4 bytes, offset 60
+}
+
+// Static assertion to ensure struct is exactly 64 bytes
+const _: () = assert!(std::mem::size_of::<CompactSpan>() == 64);
+
+impl CompactSpan {
+    /// Pack metadata fields into a single u32 for atomic operations
+    #[inline(always)]
+    const fn pack_metadata(kind: u8, status: u8, flags: u8) -> u32 {
+        ((kind as u32) & 0x7) |           // bits 0-2
+        (((status as u32) & 0x3) << 3) |  // bits 3-4
+        (((flags as u32) & 0x7) << 5)     // bits 5-7
+    }
+
+    /// Extract kind from packed metadata
+    #[inline(always)]
+    pub const fn kind(&self) -> u8 {
+        (self.metadata & 0x7) as u8
+    }
+
+    /// Extract status from packed metadata
+    #[inline(always)]
+    pub const fn status(&self) -> u8 {
+        ((self.metadata >> 3) & 0x3) as u8
+    }
+
+    /// Extract flags from packed metadata
+    #[inline(always)]
+    pub const fn flags(&self) -> u8 {
+        ((self.metadata >> 5) & 0x7) as u8
+    }
+
+    /// Check if span is an error (optimized for branch prediction)
+    #[inline(always)]
+    pub const fn is_error(&self) -> bool {
+        (self.metadata & (1 << 5)) != 0
+    }
+
+    /// Check if span is root (optimized for branch prediction)
+    #[inline(always)]
+    pub const fn is_root(&self) -> bool {
+        (self.metadata & (1 << 6)) != 0
+    }
+
+    /// Check if span has attributes
+    #[inline(always)]
+    pub const fn has_attributes(&self) -> bool {
+        (self.metadata & (1 << 7)) != 0
+    }
 }
 
 impl CompactSpan {
@@ -78,16 +144,33 @@ impl CompactSpan {
         let service_idx = string_intern.intern_service(&span.service_name);
         let operation_idx = string_intern.intern_operation(&span.operation_name);
 
+        let kind = match span.kind {
+            SpanKind::Internal => 0,
+            SpanKind::Server => 1,
+            SpanKind::Client => 2,
+            SpanKind::Producer => 3,
+            SpanKind::Consumer => 4,
+        };
+
+        let status = match span.status {
+            SpanStatus::Unknown => 0,
+            SpanStatus::Ok => 1,
+            SpanStatus::Error(_) => 2,
+            SpanStatus::Cancelled => 3,
+        };
+
         let mut flags = 0u8;
         if matches!(span.status, SpanStatus::Error(_)) {
-            flags |= 1; // Error flag
+            flags |= 1; // Error flag (bit 0)
         }
         if span.is_root() {
-            flags |= 2; // Root span flag
+            flags |= 2; // Root span flag (bit 1)
         }
         if !span.attributes.is_empty() {
-            flags |= 4; // Has attributes flag
+            flags |= 4; // Has attributes flag (bit 2)
         }
+
+        let metadata = Self::pack_metadata(kind, status, flags);
 
         Self {
             trace_id,
@@ -95,24 +178,11 @@ impl CompactSpan {
             parent_span_id,
             start_time_ns,
             duration_ns,
-            service_idx,
-            operation_idx,
-            kind: match span.kind {
-                SpanKind::Internal => 0,
-                SpanKind::Server => 1,
-                SpanKind::Client => 2,
-                SpanKind::Producer => 3,
-                SpanKind::Consumer => 4,
-            },
-            status: match span.status {
-                SpanStatus::Unknown => 0,
-                SpanStatus::Ok => 1,
-                SpanStatus::Error(_) => 2,
-                SpanStatus::Cancelled => 3,
-            },
-            flags,
-            reserved: 0,
+            service_idx: service_idx as u32,
+            operation_idx: operation_idx as u32,
             attributes_bitmap_idx: 0, // TODO: implement attribute indexing
+            metadata,
+            _padding: 0,
         }
     }
 
@@ -137,24 +207,6 @@ impl CompactSpan {
             // Take last 16 characters if too long
             u64::from_str_radix(&span_id[span_id.len() - 16..], 16).unwrap_or(0)
         }
-    }
-
-    /// Check if this span has an error status.
-    #[inline(always)]
-    pub fn is_error(&self) -> bool {
-        (self.flags & 1) != 0
-    }
-
-    /// Check if this is a root span.
-    #[inline(always)]
-    pub fn is_root(&self) -> bool {
-        (self.flags & 2) != 0
-    }
-
-    /// Check if this span has attributes.
-    #[inline(always)]
-    pub fn has_attributes(&self) -> bool {
-        (self.flags & 4) != 0
     }
 
     /// Get end time in nanoseconds.
@@ -308,11 +360,9 @@ impl HotTraceRing {
                 duration_ns: 0,
                 service_idx: 0,
                 operation_idx: 0,
-                kind: 0,
-                status: 0,
-                flags: 0,
-                reserved: 0,
                 attributes_bitmap_idx: 0,
+                metadata: 0,
+                _padding: 0,
             },
         );
 
@@ -419,7 +469,7 @@ impl BitmapIndices {
         {
             let mut service_spans = self.service_spans.write();
             service_spans
-                .entry(span.service_idx)
+                .entry(span.service_idx as u16)
                 .or_insert_with(RoaringBitmap::new)
                 .insert(span_idx);
         }
@@ -553,7 +603,7 @@ impl UltraFastStorage {
         let mut results = Vec::with_capacity(span_indices.len() as usize);
         for span_idx in span_indices.iter() {
             if let Some(span) = self.hot_ring.get(span_idx as usize) {
-                if span.service_idx == service_idx {
+                if span.service_idx as u16 == service_idx {
                     results.push(span.clone());
                 }
             }
@@ -614,7 +664,6 @@ use std::sync::atomic::AtomicU16;
 mod tests {
     use super::*;
     use crate::core::types::*;
-    use std::time::SystemTime;
 
     #[test]
     fn test_compact_span_size() {
@@ -641,18 +690,16 @@ mod tests {
             trace_id: 123,
             span_id: 456,
             parent_span_id: 0,
-            start_time_ns: 1000000000,
-            duration_ns: 1000000,
+            start_time_ns: 1_000_000_000,
+            duration_ns: 1_000_000,
             service_idx: 0,
             operation_idx: 0,
-            kind: 0,
-            status: 0,
-            flags: 0,
-            reserved: 0,
             attributes_bitmap_idx: 0,
+            metadata: 0,
+            _padding: 0,
         };
 
-        assert!(ring.try_push(span.clone()));
+        assert!(ring.try_push(span));
         assert_eq!(ring.span_count(), 1);
         assert_eq!(ring.get(0).unwrap().trace_id, 123);
     }
@@ -664,15 +711,13 @@ mod tests {
             trace_id: 123,
             span_id: 456,
             parent_span_id: 0,
-            start_time_ns: 1000000000,
-            duration_ns: 1000000,
+            start_time_ns: 1_000_000_000,
+            duration_ns: 1_000_000,
             service_idx: 1,
             operation_idx: 0,
-            kind: 0,
-            status: 2, // Error
-            flags: 1,  // Error flag
-            reserved: 0,
             attributes_bitmap_idx: 0,
+            metadata: CompactSpan::pack_metadata(0, 2, 1), // kind=0, status=2 (Error), flags=1 (error flag)
+            _padding: 0,
         };
 
         indices.add_span(0, &span);
