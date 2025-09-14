@@ -12,21 +12,20 @@
 //! - Warm tier: <1μs access time
 //! - Cold tier: <10ms access time
 
-use crate::core::{Result, ServiceName, Span, SpanKind, SpanStatus, TraceId, UrpoError};
+use crate::core::{Result, ServiceName, Span, UrpoError};
 use crate::storage::ultra_fast::{BitmapIndices, CompactSpan, HotTraceRing, StringIntern};
-use chrono::{DateTime, Utc};
-use crossbeam_channel::{unbounded, Receiver, Sender};
+use crossbeam_channel::{bounded, Receiver, Sender};
 use lz4_flex::{compress_prepend_size, decompress_size_prepended};
 use memmap2::{MmapMut, MmapOptions};
 use parking_lot::{Mutex, RwLock};
 use roaring::RoaringBitmap;
 use rustc_hash::FxHashMap;
 use std::fs::{create_dir_all, File, OpenOptions};
-use std::io::{BufReader, BufWriter, Read, Write};
+use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, SystemTime};
 
 /// Configuration for the tiered storage engine.
 #[derive(Debug, Clone)]
@@ -324,7 +323,7 @@ impl ColdStorage {
 
                 // Additional filtering if needed
                 if let Some(idx) = service_idx {
-                    if span.service_idx != idx {
+                    if span.service_idx as u16 != idx {
                         continue;
                     }
                 }
@@ -382,12 +381,10 @@ impl TieredStorageEngine {
     pub fn new(config: TieredConfig) -> Result<Self> {
         let hot_tier = Arc::new(HotTraceRing::new(config.hot_capacity));
         let warm_tier = Arc::new(WarmStorage::new(&config.storage_dir, config.warm_capacity)?);
-        let cold_tier = Arc::new(ColdStorage::new(
-            &config.storage_dir,
-            config.compression_level,
-        )?);
+        let cold_tier = Arc::new(ColdStorage::new(&config.storage_dir, config.compression_level)?);
 
-        let (migration_tx, migration_rx) = unbounded();
+        // Use bounded channel for migration backpressure (max 1000 pending migrations)
+        let (migration_tx, migration_rx) = bounded(1000);
 
         let engine = Self {
             config,
@@ -477,7 +474,7 @@ impl TieredStorageEngine {
             let warm_spans = self.warm_tier.read_range(0, limit - results.len())?;
             for span in warm_spans {
                 if let Some(idx) = service_idx {
-                    if span.service_idx == idx {
+                    if span.service_idx as u16 == idx {
                         results.push(span);
                     }
                 } else {
@@ -531,7 +528,7 @@ impl TieredStorageEngine {
         let cold_tier = self.cold_tier.clone();
         let migration_rx = self.migration_rx.clone();
         let stats = self.stats.clone();
-        let config = self.config.clone();
+        let _config = self.config.clone();
 
         std::thread::spawn(move || {
             let rx = migration_rx.lock();
@@ -547,7 +544,7 @@ impl TieredStorageEngine {
                                 .fetch_sub(spans.len() as u64, Ordering::Relaxed);
                             stats.migrations_performed.fetch_add(1, Ordering::Relaxed);
                         }
-                    }
+                    },
                     MigrationTask::WarmToCold(spans) => {
                         if let Ok(()) = cold_tier.archive_batch(&spans) {
                             stats
@@ -558,11 +555,11 @@ impl TieredStorageEngine {
                                 .fetch_sub(spans.len() as u64, Ordering::Relaxed);
                             stats.migrations_performed.fetch_add(1, Ordering::Relaxed);
                         }
-                    }
+                    },
                     MigrationTask::Compact => {
                         // Compaction logic here
                         stats.compactions_performed.fetch_add(1, Ordering::Relaxed);
-                    }
+                    },
                 }
             }
         });
