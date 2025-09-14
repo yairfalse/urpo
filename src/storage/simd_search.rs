@@ -98,7 +98,7 @@ fn find_trace_id_scalar(needle: u128, haystack: &[u128]) -> Option<usize> {
 /// Uses SIMD instructions to search for pattern occurrences in text.
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2")]
-pub unsafe fn find_pattern_simd(pattern: &[u8], text: &[u8]) -> Vec<usize> {
+unsafe fn find_pattern_simd_internal(pattern: &[u8], text: &[u8]) -> Vec<usize> {
     if !is_x86_feature_detected!("avx2") {
         return find_pattern_scalar(pattern, text);
     }
@@ -153,6 +153,23 @@ pub unsafe fn find_pattern_simd(pattern: &[u8], text: &[u8]) -> Vec<usize> {
     matches
 }
 
+/// Public API for pattern matching with SIMD acceleration
+#[inline]
+pub fn find_pattern_simd(pattern: &[u8], text: &[u8]) -> Vec<usize> {
+    #[cfg(target_arch = "x86_64")]
+    {
+        if is_x86_feature_detected!("avx2") {
+            unsafe { find_pattern_simd_internal(pattern, text) }
+        } else {
+            find_pattern_scalar(pattern, text)
+        }
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    {
+        find_pattern_scalar(pattern, text)
+    }
+}
+
 /// Scalar fallback for pattern matching
 #[inline]
 fn find_pattern_scalar(pattern: &[u8], text: &[u8]) -> Vec<usize> {
@@ -178,7 +195,7 @@ fn find_pattern_scalar(pattern: &[u8], text: &[u8]) -> Vec<usize> {
 /// Computes relevance scores for multiple items in parallel.
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2")]
-pub unsafe fn compute_scores_simd(lengths: &[u32], weights: &[f32]) -> Vec<f32> {
+unsafe fn compute_scores_simd_internal(lengths: &[u32], weights: &[f32]) -> Vec<f32> {
     if !is_x86_feature_detected!("avx2") {
         return compute_scores_scalar(lengths, weights);
     }
