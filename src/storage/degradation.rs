@@ -614,7 +614,9 @@ mod tests {
     #[tokio::test]
     async fn test_adaptive_sampler() {
         let sampler = AdaptiveSampler::new();
-        let service = ServiceName::new("test".to_string()).unwrap();
+        // BULLETPROOF: Test should panic on invalid service name
+        let service = ServiceName::new("test".to_string())
+            .expect("Test service name should be valid");
         
         // Test 100% sampling
         sampler.set_sampling_rate(1.0).await;

@@ -358,7 +358,7 @@ impl UptimeTracker {
         }
     }
     
-    fn record_restart(&mut self, reason: String) {
+    fn record_restart(&mut self, _reason: String) {
         self.restarts += 1;
         // In a real implementation, would track downtime
     }
