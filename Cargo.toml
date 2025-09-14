@@ -16,6 +16,7 @@ categories = ["command-line-utilities", "development-tools::debugging"]
 [dependencies]
 # Core async runtime
 tokio = { version = "1.40", features = ["rt-multi-thread", "net", "sync", "time", "macros", "signal", "fs"] }
+futures = "0.3"  # Futures utilities for streams
 
 # OTEL and GRPC
 tonic = { version = "0.12", features = ["transport"] }
@@ -70,6 +71,8 @@ parking_lot = "0.12"  # Faster locks than std
 ahash = "0.8"  # Faster hashing - MUCH faster than default
 rkyv = { version = "0.7", features = ["validation", "archive_le"], optional = true }  # Zero-copy serialization
 lz4 = "1.28"  # Fast compression for cold storage
+lz4_flex = "0.11"  # Fast LZ4 compression/decompression
+bincode = "1.3"  # Binary serialization
 rocksdb = { version = "0.22", optional = true }  # Optional persistent storage
 crossbeam-channel = "0.5"  # Lock-free channels for trace ingestion
 crossbeam = "0.8"  # Full crossbeam suite including ArrayQueue
@@ -101,10 +104,11 @@ tonic-build = "0.12"
 default = []
 persistent = ["rocksdb"]
 rkyv = ["dep:rkyv"]
+clipboard = []  # Clipboard functionality for TUI
 
 [lib]
 name = "urpo_lib"
-crate-type = ["lib", "cdylib"]
+crate-type = ["lib"]
 
 [[bin]]
 name = "urpo"

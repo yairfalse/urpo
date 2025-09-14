@@ -163,12 +163,15 @@ impl DiagnosticsCollector {
     /// Get a user-friendly error summary
     pub async fn get_summary(&self) -> String {
         let stats = self.get_stats().await;
-        
+
         let mut summary = String::new();
         summary.push_str("Error Summary:\n");
-        summary.push_str(&format!("  Total errors: {}\n", self.total_errors.load(Ordering::Relaxed)));
+        summary.push_str(&format!(
+            "  Total errors: {}\n",
+            self.total_errors.load(Ordering::Relaxed)
+        ));
         summary.push_str(&format!("  Error rate: {:.2}/sec\n", stats.error_rate));
-        
+
         if !stats.by_category.is_empty() {
             summary.push_str("\nErrors by category:\n");
             let mut categories: Vec<_> = stats.by_category.iter().collect();
@@ -177,7 +180,7 @@ impl DiagnosticsCollector {
                 summary.push_str(&format!("  {}: {}\n", category, count));
             }
         }
-        
+
         if !stats.recent_errors.is_empty() {
             summary.push_str("\nRecent errors:\n");
             for error in stats.recent_errors.iter().rev().take(3) {
@@ -188,7 +191,7 @@ impl DiagnosticsCollector {
                 ));
             }
         }
-        
+
         summary
     }
 }
@@ -196,10 +199,10 @@ impl DiagnosticsCollector {
 /// Format an error for user display with helpful context
 pub fn format_user_error(error: &UrpoError) -> String {
     let mut output = String::new();
-    
+
     // Main error message
     output.push_str(&format!("Error: {}\n", error));
-    
+
     // Add category-specific help
     output.push_str("\n");
     match error.category() {
@@ -245,12 +248,12 @@ pub fn format_user_error(error: &UrpoError) -> String {
             output.push_str("  • Report issues at https://github.com/user/urpo\n");
         }
     }
-    
+
     // Add recovery hint if applicable
     if error.is_recoverable() {
         output.push_str("\nThis error may be temporary. Urpo will automatically retry.\n");
     }
-    
+
     output
 }
 
@@ -263,7 +266,7 @@ pub struct HealthChecker {
 pub trait HealthCheck: Send + Sync {
     /// Perform the health check
     async fn check(&self) -> HealthStatus;
-    
+
     /// Get the check name
     fn name(&self) -> &str;
 }
@@ -278,9 +281,7 @@ pub struct HealthStatus {
 impl HealthChecker {
     /// Create a new health checker
     pub fn new() -> Self {
-        Self {
-            checks: Vec::new(),
-        }
+        Self { checks: Vec::new() }
     }
 
     /// Add a health check
@@ -291,13 +292,13 @@ impl HealthChecker {
     /// Run all health checks
     pub async fn check_all(&self) -> Vec<(String, HealthStatus)> {
         let mut results = Vec::new();
-        
+
         for check in &self.checks {
             let name = check.name().to_string();
             let status = check.check().await;
             results.push((name, status));
         }
-        
+
         results
     }
 
@@ -332,7 +333,7 @@ impl PortCheck {
 impl HealthCheck for PortCheck {
     async fn check(&self) -> HealthStatus {
         use tokio::net::TcpListener;
-        
+
         match TcpListener::bind(("127.0.0.1", self.port)).await {
             Ok(_) => HealthStatus {
                 healthy: true,
@@ -346,7 +347,7 @@ impl HealthCheck for PortCheck {
             },
         }
     }
-    
+
     fn name(&self) -> &str {
         &self.name
     }
@@ -359,20 +360,20 @@ mod tests {
     #[tokio::test]
     async fn test_diagnostics_collector() {
         let collector = DiagnosticsCollector::new(10);
-        
+
         // Record some errors
-        collector.record_error(
-            &UrpoError::network("test error"),
-            Some("test_operation".to_string()),
-            false,
-        ).await;
-        
-        collector.record_error(
-            &UrpoError::config("config error"),
-            None,
-            true,
-        ).await;
-        
+        collector
+            .record_error(
+                &UrpoError::network("test error"),
+                Some("test_operation".to_string()),
+                false,
+            )
+            .await;
+
+        collector
+            .record_error(&UrpoError::config("config error"), None, true)
+            .await;
+
         // Check stats
         let stats = collector.get_stats().await;
         assert_eq!(stats.by_category.get("network"), Some(&1));
@@ -384,7 +385,7 @@ mod tests {
     fn test_format_user_error() {
         let error = UrpoError::config("Invalid port number");
         let formatted = format_user_error(&error);
-        
+
         assert!(formatted.contains("Configuration issue"));
         assert!(formatted.contains("check-config"));
     }
@@ -392,13 +393,13 @@ mod tests {
     #[tokio::test]
     async fn test_health_checker() {
         let mut checker = HealthChecker::new();
-        
+
         // Add a port check for an available port
         checker.add_check(Box::new(PortCheck::new("test_port", 0)));
-        
+
         let results = checker.check_all().await;
         assert_eq!(results.len(), 1);
-        
+
         // Port 0 should bind to any available port
         assert!(results[0].1.healthy);
     }

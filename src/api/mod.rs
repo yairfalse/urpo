@@ -96,10 +96,7 @@ struct SearchQuery {
 }
 
 /// Start the API server with UnifiedStorage (recommended).
-pub async fn start_server_with_storage(
-    storage: &UnifiedStorage,
-    config: ApiConfig,
-) -> Result<()> {
+pub async fn start_server_with_storage(storage: &UnifiedStorage, config: ApiConfig) -> Result<()> {
     start_server(storage.as_backend(), config).await
 }
 
@@ -125,30 +122,32 @@ pub async fn start_server(
 
     // Add CORS if enabled
     if config.enable_cors {
-        app = app.layer(
-            ServiceBuilder::new()
-                .layer(CorsLayer::permissive())
-        );
+        app = app.layer(ServiceBuilder::new().layer(CorsLayer::permissive()));
     }
 
     // Start server
     let addr = format!("0.0.0.0:{}", config.port);
     tracing::info!("Starting API server on http://{}", addr);
-    
-    let listener = TcpListener::bind(&addr).await
-        .map_err(|e| UrpoError::Io(std::io::Error::new(std::io::ErrorKind::AddrInUse, format!("Failed to bind to {}: {}", addr, e))))?;
-    
-    axum::serve(listener, app)
-        .await
-        .map_err(|e| UrpoError::Io(std::io::Error::new(std::io::ErrorKind::Other, format!("API server error: {}", e))))?;
+
+    let listener = TcpListener::bind(&addr).await.map_err(|e| {
+        UrpoError::Io(std::io::Error::new(
+            std::io::ErrorKind::AddrInUse,
+            format!("Failed to bind to {}: {}", addr, e),
+        ))
+    })?;
+
+    axum::serve(listener, app).await.map_err(|e| {
+        UrpoError::Io(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("API server error: {}", e),
+        ))
+    })?;
 
     Ok(())
 }
 
 /// GET /health - System health and statistics
-async fn health_handler(
-    State(state): State<ApiState>,
-) -> impl IntoResponse {
+async fn health_handler(State(state): State<ApiState>) -> impl IntoResponse {
     // Get storage statistics
     let stats = match state.storage.read().await.get_stats().await {
         Ok(s) => s,
@@ -159,7 +158,8 @@ async fn health_handler(
                     error: "Storage unavailable".to_string(),
                     code: 503,
                 }),
-            ).into_response();
+            )
+                .into_response();
         }
     };
 
@@ -182,19 +182,18 @@ async fn list_traces_handler(
     // Convert time from seconds to nanoseconds
     let start_time = params.start_time.map(|t| t * 1_000_000_000);
     let end_time = params.end_time.map(|t| t * 1_000_000_000);
-    
+
     // Apply limit with max cap
-    let limit = params.limit
-        .unwrap_or(100)
-        .min(state.config.max_results);
+    let limit = params.limit.unwrap_or(100).min(state.config.max_results);
 
     // List traces
-    let traces = match state.storage.read().await.list_traces(
-        params.service.as_deref(),
-        start_time,
-        end_time,
-        limit,
-    ).await {
+    let traces = match state
+        .storage
+        .read()
+        .await
+        .list_traces(params.service.as_deref(), start_time, end_time, limit)
+        .await
+    {
         Ok(t) => t,
         Err(e) => {
             return (
@@ -203,7 +202,8 @@ async fn list_traces_handler(
                     error: format!("Failed to list traces: {}", e),
                     code: 500,
                 }),
-            ).into_response();
+            )
+                .into_response();
         }
     };
 
@@ -225,7 +225,8 @@ async fn list_traces_handler(
                         error: format!("Invalid format: {}", e),
                         code: 400,
                     }),
-                ).into_response();
+                )
+                    .into_response();
             }
         };
 
@@ -249,7 +250,8 @@ async fn list_traces_handler(
                     error: format!("Export failed: {}", e),
                     code: 500,
                 }),
-            ).into_response(),
+            )
+                .into_response(),
         }
     } else {
         // Return JSON by default
@@ -272,7 +274,8 @@ async fn get_trace_handler(
                     error: "Invalid trace ID format".to_string(),
                     code: 400,
                 }),
-            ).into_response();
+            )
+                .into_response();
         }
     };
 
@@ -287,7 +290,8 @@ async fn get_trace_handler(
                         error: format!("Trace not found: {}", trace_id.as_str()),
                         code: 404,
                     }),
-                ).into_response();
+                )
+                    .into_response();
             } else {
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
@@ -295,7 +299,8 @@ async fn get_trace_handler(
                         error: format!("Failed to get trace: {}", e),
                         code: 500,
                     }),
-                ).into_response();
+                )
+                    .into_response();
             }
         }
     };
@@ -304,9 +309,7 @@ async fn get_trace_handler(
 }
 
 /// GET /api/services - List all services with basic metrics
-async fn list_services_handler(
-    State(state): State<ApiState>,
-) -> impl IntoResponse {
+async fn list_services_handler(State(state): State<ApiState>) -> impl IntoResponse {
     // Get service metrics
     let services = match state.storage.read().await.get_service_metrics_map().await {
         Ok(s) => s,
@@ -317,32 +320,32 @@ async fn list_services_handler(
                     error: format!("Failed to get services: {}", e),
                     code: 500,
                 }),
-            ).into_response();
+            )
+                .into_response();
         }
     };
 
     // Convert to simple service list with metrics
-    let service_list: Vec<ServiceInfo> = services.into_iter().map(|(name, metrics)| {
-        ServiceInfo {
+    let service_list: Vec<ServiceInfo> = services
+        .into_iter()
+        .map(|(name, metrics)| ServiceInfo {
             name: name.as_str().to_string(),
             trace_count: metrics.span_count as usize,
             error_count: metrics.error_count as usize,
             latency_p50: metrics.latency_p50.as_micros() as u64,
             latency_p95: metrics.latency_p95.as_micros() as u64,
             latency_p99: metrics.latency_p99.as_micros() as u64,
-        }
-    }).collect();
+        })
+        .collect();
 
     Json(service_list).into_response()
 }
 
 /// GET /api/service-map - Get current service dependency map
-async fn get_service_map_handler(
-    State(state): State<ApiState>,
-) -> impl IntoResponse {
+async fn get_service_map_handler(State(state): State<ApiState>) -> impl IntoResponse {
     let storage_guard = state.storage.read().await;
     let mut builder = ServiceMapBuilder::new(&*storage_guard);
-    
+
     match builder.build_from_recent_traces(1000, 3600).await {
         Ok(map) => Json(map).into_response(),
         Err(e) => {
@@ -353,7 +356,8 @@ async fn get_service_map_handler(
                     error: format!("Failed to build service map: {}", e),
                     code: 500,
                 }),
-            ).into_response()
+            )
+                .into_response()
         }
     }
 }
@@ -371,20 +375,25 @@ async fn search_handler(
                 error: "Query parameter 'q' is required".to_string(),
                 code: 400,
             }),
-        ).into_response();
+        )
+            .into_response();
     }
 
-    let limit = params.limit
-        .unwrap_or(100)
-        .min(state.config.max_results);
+    let limit = params.limit.unwrap_or(100).min(state.config.max_results);
 
     // Perform search
-    let results = match state.storage.read().await.search_spans(
-        &params.q,
-        params.service.as_deref(),
-        params.attribute_key.as_deref(),
-        limit,
-    ).await {
+    let results = match state
+        .storage
+        .read()
+        .await
+        .search_spans(
+            &params.q,
+            params.service.as_deref(),
+            params.attribute_key.as_deref(),
+            limit,
+        )
+        .await
+    {
         Ok(r) => r,
         Err(e) => {
             return (
@@ -393,7 +402,8 @@ async fn search_handler(
                     error: format!("Search failed: {}", e),
                     code: 500,
                 }),
-            ).into_response();
+            )
+                .into_response();
         }
     };
 
@@ -402,7 +412,8 @@ async fn search_handler(
         query: params.q,
         count: results.len(),
         spans: results,
-    }).into_response()
+    })
+    .into_response()
 }
 
 /// Service information with metrics.
@@ -439,8 +450,14 @@ mod tests {
     #[test]
     fn test_export_format_parsing() {
         assert_eq!("json".parse::<ExportFormat>().unwrap(), ExportFormat::Json);
-        assert_eq!("jaeger".parse::<ExportFormat>().unwrap(), ExportFormat::Jaeger);
-        assert_eq!("otel".parse::<ExportFormat>().unwrap(), ExportFormat::OpenTelemetry);
+        assert_eq!(
+            "jaeger".parse::<ExportFormat>().unwrap(),
+            ExportFormat::Jaeger
+        );
+        assert_eq!(
+            "otel".parse::<ExportFormat>().unwrap(),
+            ExportFormat::OpenTelemetry
+        );
         assert_eq!("csv".parse::<ExportFormat>().unwrap(), ExportFormat::Csv);
         assert!("invalid".parse::<ExportFormat>().is_err());
     }

@@ -10,7 +10,7 @@ use crossbeam::queue::ArrayQueue;
 use std::sync::Arc;
 
 /// High-performance span pool for zero-allocation span processing.
-/// 
+///
 /// Uses a lock-free ArrayQueue for concurrent access without contention.
 pub struct SpanPool {
     /// Lock-free queue of available spans
@@ -26,14 +26,14 @@ impl SpanPool {
     /// Pre-allocates all spans to avoid allocations during operation.
     pub fn new(capacity: usize) -> Self {
         let pool = Arc::new(ArrayQueue::new(capacity));
-        
+
         // Pre-allocate spans to warm up the pool
         let warm_up_count = capacity.min(100); // Warm up with initial spans
         for _ in 0..warm_up_count {
             let span = Box::new(SpanBuilder::default().build_default());
             let _ = pool.push(span); // Ignore if pool is full
         }
-        
+
         Self { pool, capacity }
     }
 
@@ -48,7 +48,7 @@ impl SpanPool {
             // Pool miss - allocate new span
             Box::new(SpanBuilder::default().build_default())
         });
-        
+
         PooledSpan {
             span: Some(span),
             pool: Arc::clone(&self.pool),
@@ -58,7 +58,10 @@ impl SpanPool {
     /// Pre-warm the pool with spans to avoid cold start allocations.
     pub fn warm_up(&self, count: usize) {
         for _ in 0..count {
-            if let Ok(()) = self.pool.push(Box::new(SpanBuilder::default().build_default())) {
+            if let Ok(()) = self
+                .pool
+                .push(Box::new(SpanBuilder::default().build_default()))
+            {
                 // Successfully added to pool
             } else {
                 // Pool is full
@@ -118,15 +121,15 @@ impl PooledSpan {
             None => SpanAccess::Taken,
         }
     }
-    
+
     /// Get a reference to the span (for Deref trait).
     /// Returns a static default span if taken (never panics).
     #[inline(always)]
     fn as_ref(&self) -> &Span {
         // BULLETPROOF: Use static default for Deref trait
-        static DEFAULT_SPAN: once_cell::sync::Lazy<Span> = 
+        static DEFAULT_SPAN: once_cell::sync::Lazy<Span> =
             once_cell::sync::Lazy::new(|| SpanBuilder::default().build_default());
-        
+
         match &self.span {
             Some(boxed) => boxed,
             None => &DEFAULT_SPAN,
@@ -142,7 +145,7 @@ impl PooledSpan {
             None => SpanAccessMut::Taken,
         }
     }
-    
+
     /// Get a mutable reference to the span (for DerefMut trait).
     /// Creates a new span if taken (never panics).
     #[inline(always)]
@@ -175,7 +178,7 @@ impl Drop for PooledSpan {
         if let Some(mut span) = self.span.take() {
             // Reset span before returning to pool
             *span = SpanBuilder::default().build_default();
-            
+
             // Try to return to pool, ignore if full
             let _ = self.pool.push(span);
         }
@@ -210,24 +213,23 @@ pub struct PoolStats {
 }
 
 /// Global span pool for the application.
-/// 
+///
 /// Sized based on expected concurrent span processing needs.
-pub static GLOBAL_SPAN_POOL: once_cell::sync::Lazy<SpanPool> = 
-    once_cell::sync::Lazy::new(|| {
-        // Size based on expected load: 10K concurrent spans
-        let pool_size = std::env::var("URPO_SPAN_POOL_SIZE")
-            .ok()
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(10_000);
-        
-        let pool = SpanPool::new(pool_size);
-        
-        // Pre-warm with 10% of capacity
-        pool.warm_up(pool_size / 10);
-        
-        tracing::info!("Initialized global span pool with capacity {}", pool_size);
-        pool
-    });
+pub static GLOBAL_SPAN_POOL: once_cell::sync::Lazy<SpanPool> = once_cell::sync::Lazy::new(|| {
+    // Size based on expected load: 10K concurrent spans
+    let pool_size = std::env::var("URPO_SPAN_POOL_SIZE")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(10_000);
+
+    let pool = SpanPool::new(pool_size);
+
+    // Pre-warm with 10% of capacity
+    pool.warm_up(pool_size / 10);
+
+    tracing::info!("Initialized global span pool with capacity {}", pool_size);
+    pool
+});
 
 #[cfg(test)]
 mod tests {
@@ -237,18 +239,18 @@ mod tests {
     #[test]
     fn test_span_pool_basic() {
         let pool = SpanPool::new(10);
-        
+
         // Get span from pool
         let mut span1 = pool.get();
         span1.service_name = ServiceName::new("test".to_string()).expect("valid name");
-        
+
         // Stats should show one span in use
         let stats = pool.stats();
         assert!(stats.utilization > 0.0);
-        
+
         // Drop span to return to pool
         drop(span1);
-        
+
         // Get another span - should reuse the previous one
         let span2 = pool.get();
         // Should be reset to default
@@ -258,10 +260,10 @@ mod tests {
     #[test]
     fn test_span_pool_concurrent() {
         use std::thread;
-        
+
         let pool = Arc::new(SpanPool::new(100));
         let mut handles = vec![];
-        
+
         for i in 0..10 {
             let pool = Arc::clone(&pool);
             let handle = thread::spawn(move || {
@@ -273,11 +275,11 @@ mod tests {
             });
             handles.push(handle);
         }
-        
+
         for handle in handles {
             handle.join().expect("thread panicked");
         }
-        
+
         // Pool should still be functional
         let span = pool.get();
         assert_eq!(span.operation_name, String::new()); // Reset to default
@@ -286,10 +288,10 @@ mod tests {
     #[test]
     fn test_span_take_ownership() {
         let pool = SpanPool::new(10);
-        
+
         let pooled = pool.get();
         let owned_span = pooled.take();
-        
+
         // Span should not return to pool
         assert_eq!(owned_span.service_name, ServiceName::default());
     }

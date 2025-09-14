@@ -93,7 +93,7 @@ impl<'a> ServiceMapBuilder<'a> {
             services: HashSet::new(),
         }
     }
-    
+
     /// Build service map from recent traces.
     pub async fn build_from_recent_traces(
         &mut self,
@@ -102,7 +102,7 @@ impl<'a> ServiceMapBuilder<'a> {
     ) -> Result<ServiceMap> {
         // Get recent traces
         let traces = self.storage.list_traces(None, None, None, limit).await?;
-        
+
         if traces.is_empty() {
             return Ok(ServiceMap {
                 nodes: Vec::new(),
@@ -112,35 +112,36 @@ impl<'a> ServiceMapBuilder<'a> {
                 time_window_seconds,
             });
         }
-        
+
         // Analyze each trace
         for trace_info in &traces {
             self.analyze_trace(&trace_info.trace_id).await?;
         }
-        
+
         // Build the final map
         Ok(self.build_map(traces.len() as u64, time_window_seconds))
     }
-    
+
     /// Analyze a single trace to extract dependencies.
     async fn analyze_trace(&mut self, trace_id: &TraceId) -> Result<()> {
         let spans = self.storage.get_trace_spans(trace_id).await?;
-        
+
         if spans.is_empty() {
             return Ok(());
         }
-        
+
         // Build span lookup map
         let mut span_map: HashMap<String, &Span> = HashMap::new();
         for span in &spans {
             span_map.insert(span.span_id.as_str().to_string(), span);
             self.services.insert(span.service_name.clone());
         }
-        
+
         // Process each span to find service calls
         for span in &spans {
             // Update service metrics
-            let metrics = self.service_metrics
+            let metrics = self
+                .service_metrics
                 .entry(span.service_name.clone())
                 .or_insert((0, 0, 0));
             metrics.0 += 1; // request count
@@ -148,7 +149,7 @@ impl<'a> ServiceMapBuilder<'a> {
                 metrics.1 += 1; // error count
             }
             metrics.2 += span.duration.as_micros() as u64; // total latency
-            
+
             // Find parent span to detect service-to-service calls
             if let Some(parent_id) = &span.parent_span_id {
                 if let Some(parent_span) = span_map.get(parent_id.as_str()) {
@@ -165,10 +166,10 @@ impl<'a> ServiceMapBuilder<'a> {
                 }
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Record a service-to-service call.
     fn record_edge(
         &mut self,
@@ -178,10 +179,11 @@ impl<'a> ServiceMapBuilder<'a> {
         latency_us: u64,
         is_error: bool,
     ) {
-        let edge = self.edges
+        let edge = self
+            .edges
             .entry((from, to))
             .or_insert_with(EdgeBuilder::default);
-        
+
         edge.call_count += 1;
         if is_error {
             edge.error_count += 1;
@@ -189,44 +191,42 @@ impl<'a> ServiceMapBuilder<'a> {
         edge.latencies.push(latency_us);
         edge.operations.insert(operation.to_string());
     }
-    
+
     /// Build the final service map.
     fn build_map(&self, trace_count: u64, time_window_seconds: u64) -> ServiceMap {
         // Identify root and leaf services
         let mut has_incoming: HashSet<ServiceName> = HashSet::new();
         let mut has_outgoing: HashSet<ServiceName> = HashSet::new();
-        
+
         for (from, to) in self.edges.keys() {
             has_outgoing.insert(from.clone());
             has_incoming.insert(to.clone());
         }
-        
+
         // Build nodes
         let mut nodes = Vec::new();
         for service in &self.services {
             let metrics = self.service_metrics.get(service);
-            let (request_count, error_count, total_latency) = metrics
-                .cloned()
-                .unwrap_or((0, 0, 0));
-            
+            let (request_count, error_count, total_latency) = metrics.cloned().unwrap_or((0, 0, 0));
+
             let error_rate = if request_count > 0 {
                 error_count as f64 / request_count as f64
             } else {
                 0.0
             };
-            
+
             let avg_latency_us = if request_count > 0 {
                 total_latency / request_count
             } else {
                 0
             };
-            
+
             let is_root = !has_incoming.contains(service);
             let is_leaf = !has_outgoing.contains(service);
-            
+
             // Calculate tier (distance from root)
             let tier = self.calculate_tier(service, &has_incoming);
-            
+
             nodes.push(ServiceNode {
                 name: service.clone(),
                 request_count,
@@ -237,7 +237,7 @@ impl<'a> ServiceMapBuilder<'a> {
                 tier,
             });
         }
-        
+
         // Build edges
         let mut edges = Vec::new();
         for ((from, to), builder) in &self.edges {
@@ -246,7 +246,7 @@ impl<'a> ServiceMapBuilder<'a> {
             } else {
                 0
             };
-            
+
             let p99_latency_us = if !builder.latencies.is_empty() {
                 let mut sorted = builder.latencies.clone();
                 sorted.sort_unstable();
@@ -255,7 +255,7 @@ impl<'a> ServiceMapBuilder<'a> {
             } else {
                 0
             };
-            
+
             edges.push(ServiceEdge {
                 from: from.clone(),
                 to: to.clone(),
@@ -266,13 +266,14 @@ impl<'a> ServiceMapBuilder<'a> {
                 operations: builder.operations.clone(),
             });
         }
-        
+
         // Sort nodes by tier, then by name
         nodes.sort_by(|a, b| {
-            a.tier.cmp(&b.tier)
+            a.tier
+                .cmp(&b.tier)
                 .then(a.name.as_str().cmp(b.name.as_str()))
         });
-        
+
         ServiceMap {
             nodes,
             edges,
@@ -281,32 +282,32 @@ impl<'a> ServiceMapBuilder<'a> {
             time_window_seconds,
         }
     }
-    
+
     /// Calculate service tier (depth from root).
     fn calculate_tier(&self, service: &ServiceName, has_incoming: &HashSet<ServiceName>) -> u32 {
         if !has_incoming.contains(service) {
             return 0; // Root service
         }
-        
+
         // Simple BFS to find distance from any root
         // In production, we'd cache this calculation
         let mut visited = HashSet::new();
         let mut current_tier = 0;
         let mut current_level = HashSet::new();
-        
+
         // Start with all root services
         for s in &self.services {
             if !has_incoming.contains(s) {
                 current_level.insert(s.clone());
             }
         }
-        
+
         while !current_level.is_empty() && !current_level.contains(service) {
             let mut next_level = HashSet::new();
-            
+
             for current in &current_level {
                 visited.insert(current.clone());
-                
+
                 // Find all services this one calls
                 for ((from, to), _) in &self.edges {
                     if from == current && !visited.contains(to) {
@@ -314,11 +315,11 @@ impl<'a> ServiceMapBuilder<'a> {
                     }
                 }
             }
-            
+
             current_level = next_level;
             current_tier += 1;
         }
-        
+
         current_tier
     }
 }
@@ -327,14 +328,14 @@ impl<'a> ServiceMapBuilder<'a> {
 pub mod api {
     use super::*;
     use axum::{extract::State, response::IntoResponse, Json};
-    
+
     /// GET /api/service-map - Get current service dependency map
     pub async fn get_service_map(
         State(storage): State<Arc<RwLock<dyn StorageBackend>>>,
     ) -> impl IntoResponse {
         let storage_guard = storage.read().await;
         let mut builder = ServiceMapBuilder::new(&*storage_guard);
-        
+
         match builder.build_from_recent_traces(1000, 3600).await {
             Ok(map) => Json(map).into_response(),
             Err(e) => {
@@ -344,7 +345,8 @@ pub mod api {
                     Json(serde_json::json!({
                         "error": format!("Failed to build service map: {}", e)
                     })),
-                ).into_response()
+                )
+                    .into_response()
             }
         }
     }
@@ -353,16 +355,19 @@ pub mod api {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{core::{SpanBuilder, SpanId}, storage::InMemoryStorage};
-    
+    use crate::{
+        core::{SpanBuilder, SpanId},
+        storage::InMemoryStorage,
+    };
+
     #[tokio::test]
     async fn test_service_map_builder() {
         let storage = InMemoryStorage::new(10000);
-        
+
         // Create test spans with service dependencies
         // frontend -> backend -> database
         let trace_id = TraceId::new("test-trace-123".to_string()).unwrap();
-        
+
         let frontend_span = SpanBuilder::default()
             .trace_id(trace_id.clone())
             .span_id(SpanId::new("span-1".to_string()).unwrap())
@@ -370,7 +375,7 @@ mod tests {
             .operation_name("GET /api".to_string())
             .build()
             .unwrap();
-        
+
         let backend_span = SpanBuilder::default()
             .trace_id(trace_id.clone())
             .span_id(SpanId::new("span-2".to_string()).unwrap())
@@ -379,7 +384,7 @@ mod tests {
             .operation_name("process_request".to_string())
             .build()
             .unwrap();
-        
+
         let db_span = SpanBuilder::default()
             .trace_id(trace_id.clone())
             .span_id(SpanId::new("span-3".to_string()).unwrap())
@@ -388,28 +393,36 @@ mod tests {
             .operation_name("query".to_string())
             .build()
             .unwrap();
-        
+
         // Store spans
         storage.store_span(frontend_span).await.unwrap();
         storage.store_span(backend_span).await.unwrap();
         storage.store_span(db_span).await.unwrap();
-        
+
         // Build service map
         let mut builder = ServiceMapBuilder::new(&storage);
         let map = builder.build_from_recent_traces(10, 3600).await.unwrap();
-        
+
         // Verify nodes
         assert_eq!(map.nodes.len(), 3);
-        assert!(map.nodes.iter().any(|n| n.name.as_str() == "frontend" && n.is_root));
-        assert!(map.nodes.iter().any(|n| n.name.as_str() == "database" && n.is_leaf));
-        
+        assert!(map
+            .nodes
+            .iter()
+            .any(|n| n.name.as_str() == "frontend" && n.is_root));
+        assert!(map
+            .nodes
+            .iter()
+            .any(|n| n.name.as_str() == "database" && n.is_leaf));
+
         // Verify edges
         assert_eq!(map.edges.len(), 2);
-        assert!(map.edges.iter().any(|e| 
-            e.from.as_str() == "frontend" && e.to.as_str() == "backend"
-        ));
-        assert!(map.edges.iter().any(|e| 
-            e.from.as_str() == "backend" && e.to.as_str() == "database"
-        ));
+        assert!(map
+            .edges
+            .iter()
+            .any(|e| e.from.as_str() == "frontend" && e.to.as_str() == "backend"));
+        assert!(map
+            .edges
+            .iter()
+            .any(|e| e.from.as_str() == "backend" && e.to.as_str() == "database"));
     }
 }

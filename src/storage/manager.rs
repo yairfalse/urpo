@@ -1,14 +1,14 @@
 //! Storage manager for coordinating storage operations.
 
-use super::{
-    StorageBackend, StorageStats, StorageHealth, TraceInfo, InMemoryStorage,
-    archive, archive_manager,
-};
 use super::engine::{StorageEngine, StorageMode, StorageStats as EngineStorageStats};
+use super::{
+    archive, archive_manager, InMemoryStorage, StorageBackend, StorageHealth, StorageStats,
+    TraceInfo,
+};
 use crate::core::{Config, Result, ServiceMetrics, ServiceName, Span, TraceId};
 use std::collections::HashSet;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
 
 /// Storage manager for coordinating storage operations.
@@ -26,22 +26,22 @@ impl StorageManager {
     /// Create a new storage manager with in-memory backend.
     pub fn new_in_memory(max_spans: usize) -> Self {
         let backend = Arc::new(InMemoryStorage::new(max_spans));
-        Self { 
+        Self {
             backend,
             persistent_engine: None,
             archive_manager: None,
             start_time: Instant::now(),
         }
     }
-    
+
     /// Create a new storage manager with persistent backend.
     pub fn new_persistent(config: &Config) -> Result<Self> {
         let backend = Arc::new(InMemoryStorage::with_config(config));
-        
+
         // Create persistent storage engine
         let storage_mode = if config.storage.persistent {
             StorageMode::Persistent {
-                hot_size: config.storage.max_spans / 10,  // 10% in hot ring
+                hot_size: config.storage.max_spans / 10, // 10% in hot ring
                 warm_path: config.storage.data_dir.join("warm"),
                 cold_path: config.storage.data_dir.join("cold"),
             }
@@ -50,9 +50,9 @@ impl StorageManager {
                 max_traces: config.storage.max_spans / 100, // Avg 100 spans per trace
             }
         };
-        
+
         let engine = StorageEngine::new(storage_mode)?;
-        
+
         // Create archive manager if archival is enabled
         let archive_manager = if config.storage.enable_archival {
             let archive_config = archive_manager::ArchiveConfig {
@@ -62,7 +62,7 @@ impl StorageManager {
                 retention_period: Duration::from_secs(90 * 24 * 3600), // 90 days
                 ..Default::default()
             };
-            
+
             let mut manager = archive_manager::ArchiveManager::new(archive_config)?;
             manager.start()?;
             Some(Arc::new(RwLock::new(manager)))
@@ -82,18 +82,18 @@ impl StorageManager {
     pub fn backend(&self) -> Arc<dyn StorageBackend> {
         self.backend.clone()
     }
-    
+
     /// Store a span.
     pub async fn store_span(&self, span: Span) -> Result<()> {
         // Store in main backend
         self.backend.store_span(span.clone()).await?;
-        
+
         // Also store in persistent engine if enabled
         if let Some(engine) = &self.persistent_engine {
             let engine = engine.read().await;
             engine.ingest_span(span)?;
         }
-        
+
         Ok(())
     }
 
@@ -108,16 +108,16 @@ impl StorageManager {
         if removed > 0 {
             tracing::debug!("Cleaned up {} old spans", removed);
         }
-        
+
         // Also trigger tier migration in persistent engine
         if let Some(engine) = &self.persistent_engine {
             let mut engine = engine.write().await;
             engine.migrate_tiers()?;
         }
-        
+
         Ok(())
     }
-    
+
     /// Query traces from persistent storage.
     pub async fn query_persistent_traces(
         &self,
@@ -131,11 +131,15 @@ impl StorageManager {
             let traces = engine.query_traces(
                 service.map(|s| s.as_str()),
                 // BULLETPROOF: Handle time conversion failures gracefully
-                start_time.and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_nanos() as u64),
-                end_time.and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_nanos() as u64),
+                start_time
+                    .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+                    .map(|d| d.as_nanos() as u64),
+                end_time
+                    .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+                    .map(|d| d.as_nanos() as u64),
                 limit,
             )?;
-            
+
             // Convert to TraceInfo
             let mut trace_infos = Vec::new();
             for trace_id in traces {
@@ -147,29 +151,32 @@ impl StorageManager {
                 };
                 if let Ok(spans) = self.backend.get_trace_spans(&trace_id_obj).await {
                     if !spans.is_empty() {
-                        let root_span = spans.iter()
+                        let root_span = spans
+                            .iter()
                             .find(|s| s.parent_span_id.is_none())
                             .or_else(|| spans.first())
                             // BULLETPROOF: Use first span as fallback
-                            .unwrap_or_else(|| spans.first().expect("Spans vector should not be empty"));
-                        
+                            .unwrap_or_else(|| {
+                                spans.first().expect("Spans vector should not be empty")
+                            });
+
                         // BULLETPROOF: Handle empty spans gracefully
                         let Some(min_start) = spans.iter().map(|s| s.start_time).min() else {
                             continue;
                         };
-                        let max_end = spans.iter()
+                        let max_end = spans
+                            .iter()
                             .map(|s| s.start_time + s.duration)
                             .max()
                             // BULLETPROOF: Use min_start as fallback
                             .unwrap_or(min_start);
                         let duration = max_end.duration_since(min_start).unwrap_or(Duration::ZERO);
-                        
-                        let services: HashSet<_> = spans.iter()
-                            .map(|s| s.service_name.clone())
-                            .collect();
-                        
+
+                        let services: HashSet<_> =
+                            spans.iter().map(|s| s.service_name.clone()).collect();
+
                         let has_error = spans.iter().any(|s| s.status.is_error());
-                        
+
                         trace_infos.push(TraceInfo {
                             trace_id: trace_id_obj.clone(),
                             root_service: root_span.service_name.clone(),
@@ -183,25 +190,25 @@ impl StorageManager {
                     }
                 }
             }
-            
+
             Ok(trace_infos)
         } else {
             // Fallback to in-memory backend
             self.backend.list_recent_traces(limit, service).await
         }
     }
-    
+
     /// Get storage statistics including persistent storage.
     pub async fn get_full_stats(&self) -> Result<(StorageStats, Option<EngineStorageStats>)> {
         let backend_stats = self.get_stats().await?;
-        
+
         let engine_stats = if let Some(engine) = &self.persistent_engine {
             let engine = engine.read().await;
             Some(engine.get_stats())
         } else {
             None
         };
-        
+
         Ok((backend_stats, engine_stats))
     }
 
@@ -215,7 +222,7 @@ impl StorageManager {
             let span_count = self.backend.get_span_count().await?;
             let avg_span_size = 1024; // bytes per span
             let memory_bytes = span_count * avg_span_size;
-            
+
             Ok(StorageStats {
                 trace_count: 0,
                 span_count,

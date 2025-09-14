@@ -5,14 +5,14 @@
 
 pub mod dashboard;
 mod fake_data;
-mod widgets;
 mod span_details;
+mod widgets;
 
 // Re-export commonly used types
 // Dashboard, Tab, FilterMode, DataCommand are all defined in this module
 
-use crate::core::{Result, ServiceMetrics, Span, TraceId, ServiceName, UrpoError};
-use crate::service_map::{ServiceMap, ServiceMapBuilder};
+use crate::core::{Result, ServiceMetrics, ServiceName, Span, TraceId, UrpoError};
+use crate::service_map::ServiceMap;
 use crate::storage::{StorageBackend, TraceInfo};
 use crossterm::{
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
@@ -117,7 +117,11 @@ enum DataUpdate {
     Services(Vec<ServiceMetrics>),
     Traces(Vec<TraceInfo>),
     Spans(Vec<Span>),
-    Stats { total_spans: u64, spans_per_sec: f64, memory_mb: f64 },
+    Stats {
+        total_spans: u64,
+        spans_per_sec: f64,
+        memory_mb: f64,
+    },
     ReceiverStatus(ReceiverStatus),
 }
 
@@ -259,8 +263,8 @@ impl Dashboard {
             memory_usage_mb: 45.0,
             last_update: Instant::now(),
             receiver_status: ReceiverStatus::Connected,
-            data_tx: None,  // Will be set in run()
-            data_rx: None,  // Will be set in run()
+            data_tx: None, // Will be set in run()
+            data_rx: None, // Will be set in run()
             service_map: None,
             map_last_refresh: Instant::now(),
             map_selected_service: None,
@@ -272,7 +276,6 @@ impl Dashboard {
         app.update_rps_history();
         Ok(app)
     }
-
 
     /// Update RPS history for sparklines.
     fn update_rps_history(&mut self) {
@@ -310,7 +313,11 @@ impl Dashboard {
                     DataUpdate::Spans(spans) => {
                         self.trace_spans = spans;
                     }
-                    DataUpdate::Stats { total_spans, spans_per_sec, memory_mb } => {
+                    DataUpdate::Stats {
+                        total_spans,
+                        spans_per_sec,
+                        memory_mb,
+                    } => {
                         self.total_spans = total_spans;
                         self.spans_per_sec = spans_per_sec;
                         self.memory_usage_mb = memory_mb;
@@ -339,9 +346,13 @@ impl Dashboard {
         self.services.sort_by(|a, b| {
             let ordering = match self.sort_by {
                 SortBy::Name => a.name.as_str().cmp(b.name.as_str()),
-                SortBy::Rps => a.request_rate.partial_cmp(&b.request_rate)
+                SortBy::Rps => a
+                    .request_rate
+                    .partial_cmp(&b.request_rate)
                     .unwrap_or(std::cmp::Ordering::Equal),
-                SortBy::ErrorRate => a.error_rate.partial_cmp(&b.error_rate)
+                SortBy::ErrorRate => a
+                    .error_rate
+                    .partial_cmp(&b.error_rate)
                     .unwrap_or(std::cmp::Ordering::Equal),
                 SortBy::P50 => a.latency_p50.cmp(&b.latency_p50),
                 SortBy::P95 => a.latency_p95.cmp(&b.latency_p95),
@@ -394,9 +405,13 @@ impl Dashboard {
         filtered.sort_by(|a, b| {
             let ordering = match self.sort_by {
                 SortBy::Name => a.name.as_str().cmp(b.name.as_str()),
-                SortBy::Rps => a.request_rate.partial_cmp(&b.request_rate)
+                SortBy::Rps => a
+                    .request_rate
+                    .partial_cmp(&b.request_rate)
                     .unwrap_or(std::cmp::Ordering::Equal),
-                SortBy::ErrorRate => a.error_rate.partial_cmp(&b.error_rate)
+                SortBy::ErrorRate => a
+                    .error_rate
+                    .partial_cmp(&b.error_rate)
                     .unwrap_or(std::cmp::Ordering::Equal),
                 SortBy::P50 => a.latency_p50.cmp(&b.latency_p50),
                 SortBy::P95 => a.latency_p95.cmp(&b.latency_p95),
@@ -735,8 +750,8 @@ impl Dashboard {
                         // Clear existing traces before switching
                         self.traces.clear();
                         self.selected_tab = Tab::Traces;
-                        self.trace_state.select(None);  // Don't select anything yet
-                        // Request traces for the selected service
+                        self.trace_state.select(None); // Don't select anything yet
+                                                       // Request traces for the selected service
                         self.request_refresh(DataCommand::LoadTracesForService(service_name));
                     }
                 }
@@ -748,7 +763,9 @@ impl Dashboard {
                         self.selected_trace_id = Some(trace_info.trace_id.clone());
                         self.selected_tab = Tab::Spans;
                         // Request spans for the selected trace
-                        self.request_refresh(DataCommand::LoadSpansForTrace(trace_info.trace_id.clone()));
+                        self.request_refresh(DataCommand::LoadSpansForTrace(
+                            trace_info.trace_id.clone(),
+                        ));
                     }
                 }
             }
@@ -777,25 +794,25 @@ impl Dashboard {
     /// Run the terminal UI
     pub async fn run(&mut self) -> Result<()> {
         let mut terminal = TerminalUI::new()?;
-        
+
         // Create channels for communication between UI and data fetcher
         let (cmd_tx, cmd_rx) = mpsc::unbounded_channel::<DataCommand>();
         let (update_tx, update_rx) = mpsc::unbounded_channel::<DataUpdate>();
-        
+
         // Replace the existing channels with the new ones
         self.data_tx = Some(cmd_tx.clone());
         self.data_rx = Some(update_rx);
 
         // Spawn the async data fetcher task
         let storage = self.storage.clone();
-        
+
         let fetcher_handle = tokio::spawn(async move {
             Self::data_fetcher_task(storage, cmd_rx, update_tx).await;
         });
 
         // Initial data request
         self.request_refresh(DataCommand::RefreshAll);
-        
+
         let tick_rate = Duration::from_millis(100);
         let mut last_tick = Instant::now();
         let mut last_refresh = Instant::now();
@@ -850,17 +867,17 @@ impl Dashboard {
                     DataCommand::RefreshAll => {
                         // Fetch all data
                         let storage_guard = storage.read().await;
-                        
+
                         // Get services
                         if let Ok(metrics) = storage_guard.get_service_metrics().await {
                             let _ = update_tx.send(DataUpdate::Services(metrics));
                         }
-                        
+
                         // Get default traces
                         if let Ok(traces) = storage_guard.list_recent_traces(50, None).await {
                             let _ = update_tx.send(DataUpdate::Traces(traces));
                         }
-                        
+
                         // Get stats
                         if let Ok(stats) = storage_guard.get_storage_stats().await {
                             let _ = update_tx.send(DataUpdate::Stats {
@@ -872,7 +889,10 @@ impl Dashboard {
                     }
                     DataCommand::LoadTracesForService(service_name) => {
                         let storage_guard = storage.read().await;
-                        if let Ok(traces) = storage_guard.list_recent_traces(50, Some(&service_name)).await {
+                        if let Ok(traces) = storage_guard
+                            .list_recent_traces(50, Some(&service_name))
+                            .await
+                        {
                             let _ = update_tx.send(DataUpdate::Traces(traces));
                         }
                     }
@@ -893,7 +913,11 @@ impl Dashboard {
                         let trace_result = match filter_mode {
                             FilterMode::All => storage_guard.list_recent_traces(50, None).await,
                             FilterMode::ErrorsOnly => storage_guard.get_error_traces(50).await,
-                            FilterMode::SlowOnly => storage_guard.get_slow_traces(Duration::from_millis(500), 50).await,
+                            FilterMode::SlowOnly => {
+                                storage_guard
+                                    .get_slow_traces(Duration::from_millis(500), 50)
+                                    .await
+                            }
                             FilterMode::Active => storage_guard.list_recent_traces(50, None).await,
                         };
                         if let Ok(traces) = trace_result {
@@ -923,8 +947,8 @@ impl TerminalUI {
             .map_err(|e| UrpoError::render(format!("Failed to enter alternate screen: {}", e)))?;
 
         let backend = CrosstermBackend::new(stdout);
-        let terminal =
-            Terminal::new(backend).map_err(|e| UrpoError::render(format!("Failed to create terminal: {}", e)))?;
+        let terminal = Terminal::new(backend)
+            .map_err(|e| UrpoError::render(format!("Failed to create terminal: {}", e)))?;
 
         Ok(Self { terminal })
     }
@@ -937,7 +961,7 @@ impl TerminalUI {
         loop {
             // Process any pending data updates
             app.process_data_updates();
-            
+
             // Request refresh every second
             if last_update.elapsed() >= update_interval {
                 app.request_refresh(DataCommand::RefreshAll);
@@ -951,8 +975,8 @@ impl TerminalUI {
             if event::poll(Duration::from_millis(100))
                 .map_err(|e| UrpoError::render(format!("Failed to poll events: {}", e)))?
             {
-                if let Event::Key(key) =
-                    event::read().map_err(|e| UrpoError::render(format!("Failed to read event: {}", e)))?
+                if let Event::Key(key) = event::read()
+                    .map_err(|e| UrpoError::render(format!("Failed to read event: {}", e)))?
                 {
                     app.handle_key(key);
                 }
@@ -968,7 +992,8 @@ impl TerminalUI {
 
     /// Restore terminal to original state.
     pub fn restore(&mut self) -> Result<()> {
-        disable_raw_mode().map_err(|e| UrpoError::render(format!("Failed to disable raw mode: {}", e)))?;
+        disable_raw_mode()
+            .map_err(|e| UrpoError::render(format!("Failed to disable raw mode: {}", e)))?;
 
         self.terminal
             .backend_mut()
@@ -1007,7 +1032,7 @@ fn draw_ui(frame: &mut Frame, app: &mut Dashboard) {
 /// Draw the traces view.
 fn draw_traces_view(frame: &mut Frame, app: &mut Dashboard) {
     let size = frame.area();
-    
+
     // Create layout
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -1025,22 +1050,40 @@ fn draw_traces_view(frame: &mut Frame, app: &mut Dashboard) {
         .title(title)
         .title_alignment(Alignment::Center)
         .border_style(Style::default().fg(Color::Cyan));
-    
+
     let header_text = if !app.search_query.is_empty() {
         format!("Search: {}", app.search_query)
     } else {
-        format!("Filter: {} | Sort: {}", app.filter_mode.as_str(), app.sort_by.as_str())
+        format!(
+            "Filter: {} | Sort: {}",
+            app.filter_mode.as_str(),
+            app.sort_by.as_str()
+        )
     };
-    
+
     let header_para = Paragraph::new(header_text)
         .block(header)
         .alignment(Alignment::Center);
     frame.render_widget(header_para, chunks[0]);
 
     // Draw traces table
-    let header_cells = ["Trace ID", "Service", "Operation", "Spans", "Duration", "Status", "Time"]
-        .iter()
-        .map(|h| Cell::from(*h).style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)));
+    let header_cells = [
+        "Trace ID",
+        "Service",
+        "Operation",
+        "Spans",
+        "Duration",
+        "Status",
+        "Time",
+    ]
+    .iter()
+    .map(|h| {
+        Cell::from(*h).style(
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )
+    });
 
     let header = Row::new(header_cells).height(1).bottom_margin(1);
 
@@ -1067,7 +1110,11 @@ fn draw_traces_view(frame: &mut Frame, app: &mut Dashboard) {
         };
 
         Row::new(vec![
-            Cell::from(format!("{}{}", prefix, &trace_info.trace_id.as_str()[..8.min(trace_info.trace_id.as_str().len())])),
+            Cell::from(format!(
+                "{}{}",
+                prefix,
+                &trace_info.trace_id.as_str()[..8.min(trace_info.trace_id.as_str().len())]
+            )),
             Cell::from(trace_info.root_service.as_str()),
             Cell::from(trace_info.root_operation.clone()),
             Cell::from(trace_info.span_count.to_string()),
@@ -1081,13 +1128,13 @@ fn draw_traces_view(frame: &mut Frame, app: &mut Dashboard) {
     let table = Table::new(
         rows,
         [
-            Constraint::Length(10),      // Trace ID
-            Constraint::Percentage(20),  // Service
-            Constraint::Percentage(25),  // Operation
-            Constraint::Length(7),       // Spans
-            Constraint::Length(10),      // Duration
-            Constraint::Length(8),       // Status
-            Constraint::Length(10),      // Time
+            Constraint::Length(10),     // Trace ID
+            Constraint::Percentage(20), // Service
+            Constraint::Percentage(25), // Operation
+            Constraint::Length(7),      // Spans
+            Constraint::Length(10),     // Duration
+            Constraint::Length(8),      // Status
+            Constraint::Length(10),     // Time
         ],
     )
     .header(header)
@@ -1107,7 +1154,7 @@ fn draw_traces_view(frame: &mut Frame, app: &mut Dashboard) {
 /// Draw the spans view with details panel.
 fn draw_spans_view(frame: &mut Frame, app: &Dashboard) {
     let size = frame.area();
-    
+
     // Create vertical layout for header/content/footer
     let main_chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -1117,7 +1164,7 @@ fn draw_spans_view(frame: &mut Frame, app: &Dashboard) {
             Constraint::Length(3), // Footer
         ])
         .split(size);
-    
+
     // Split content area horizontally for tree view and details panel
     let content_chunks = Layout::default()
         .direction(Direction::Horizontal)
@@ -1129,14 +1176,15 @@ fn draw_spans_view(frame: &mut Frame, app: &Dashboard) {
 
     // Draw header
     let title = if let Some(trace_id) = &app.selected_trace_id {
-        format!(" Trace: {} ({} spans) [y/Y] Copy IDs [↑↓] Navigate [Enter] Select ", 
+        format!(
+            " Trace: {} ({} spans) [y/Y] Copy IDs [↑↓] Navigate [Enter] Select ",
             &trace_id.as_str()[..8.min(trace_id.as_str().len())],
             app.trace_spans.len()
         )
     } else {
         " Span Details ".to_string()
     };
-    
+
     let header = Block::default()
         .borders(Borders::ALL)
         .title(title)
@@ -1156,10 +1204,16 @@ fn draw_spans_view(frame: &mut Frame, app: &Dashboard) {
     } else {
         // Build span tree structure
         let span_tree = build_span_tree(&app.trace_spans);
-        
+
         // Draw span tree on the left
-        draw_span_tree_with_selection(frame, content_chunks[0], &span_tree, &app.trace_spans, app.selected_span_index);
-        
+        draw_span_tree_with_selection(
+            frame,
+            content_chunks[0],
+            &span_tree,
+            &app.trace_spans,
+            app.selected_span_index,
+        );
+
         // Draw span details panel on the right
         if let Some(selected_idx) = app.selected_span_index {
             if let Some(span) = app.trace_spans.get(selected_idx) {
@@ -1186,39 +1240,46 @@ struct SpanTreeNode {
 /// Build a tree structure from spans.
 fn build_span_tree(spans: &[Span]) -> Vec<SpanTreeNode> {
     use std::collections::HashMap;
-    
+
     // Create a map of span_id to span index
     let mut span_map: HashMap<String, usize> = HashMap::new();
     for (idx, span) in spans.iter().enumerate() {
         span_map.insert(span.span_id.as_str().to_string(), idx);
     }
-    
+
     // Build parent-child relationships
     let mut children_map: HashMap<Option<String>, Vec<usize>> = HashMap::new();
     for (idx, span) in spans.iter().enumerate() {
         let parent_key = span.parent_span_id.as_ref().map(|p| p.as_str().to_string());
-        children_map.entry(parent_key).or_insert_with(Vec::new).push(idx);
+        children_map
+            .entry(parent_key)
+            .or_insert_with(Vec::new)
+            .push(idx);
     }
-    
+
     // Recursively build tree
-    fn build_node(span_idx: usize, children_map: &HashMap<Option<String>, Vec<usize>>, spans: &[Span]) -> SpanTreeNode {
+    fn build_node(
+        span_idx: usize,
+        children_map: &HashMap<Option<String>, Vec<usize>>,
+        spans: &[Span],
+    ) -> SpanTreeNode {
         let span = &spans[span_idx];
         let children_indices = children_map
             .get(&Some(span.span_id.as_str().to_string()))
             .cloned()
             .unwrap_or_default();
-        
+
         let children = children_indices
             .into_iter()
             .map(|idx| build_node(idx, children_map, spans))
             .collect();
-        
+
         SpanTreeNode {
             span_index: span_idx,
             children,
         }
     }
-    
+
     // Find root spans (no parent)
     let root_indices = children_map.get(&None).cloned().unwrap_or_default();
     root_indices
@@ -1230,7 +1291,7 @@ fn build_span_tree(spans: &[Span]) -> Vec<SpanTreeNode> {
 /// Draw the span tree.
 fn draw_span_tree(frame: &mut Frame, area: Rect, tree: &[SpanTreeNode], spans: &[Span]) {
     let mut lines = Vec::new();
-    
+
     // Recursively build lines
     fn add_node_lines<'a>(
         node: &SpanTreeNode,
@@ -1240,29 +1301,23 @@ fn draw_span_tree(frame: &mut Frame, area: Rect, tree: &[SpanTreeNode], spans: &
         is_last: bool,
     ) {
         let span = &spans[node.span_index];
-        
+
         // Build the tree prefix
         let connector = if is_last { "└─" } else { "├─" };
         let tree_prefix = format!("{}{} ", prefix, connector);
-        
+
         // Format span info
         let status_style = if span.status.is_error() {
             Style::default().fg(Color::Red)
         } else {
             Style::default().fg(Color::Green)
         };
-        
+
         let line = Line::from(vec![
             TextSpan::raw(tree_prefix),
-            TextSpan::styled(
-                span.service_name.as_str(),
-                Style::default().fg(Color::Cyan),
-            ),
+            TextSpan::styled(span.service_name.as_str(), Style::default().fg(Color::Cyan)),
             TextSpan::raw(" / "),
-            TextSpan::styled(
-                &span.operation_name,
-                Style::default().fg(Color::Yellow),
-            ),
+            TextSpan::styled(&span.operation_name, Style::default().fg(Color::Yellow)),
             TextSpan::raw(" "),
             TextSpan::styled(
                 widgets::format_duration(span.duration),
@@ -1270,32 +1325,36 @@ fn draw_span_tree(frame: &mut Frame, area: Rect, tree: &[SpanTreeNode], spans: &
             ),
             TextSpan::raw(" "),
             TextSpan::styled(
-                if span.status.is_error() { "[ERROR]" } else { "[OK]" },
+                if span.status.is_error() {
+                    "[ERROR]"
+                } else {
+                    "[OK]"
+                },
                 status_style,
             ),
         ]);
-        
+
         lines.push(line);
-        
+
         // Add children
         let child_prefix = if is_last {
             format!("{}   ", prefix)
         } else {
             format!("{}│  ", prefix)
         };
-        
+
         for (i, child) in node.children.iter().enumerate() {
             let is_last_child = i == node.children.len() - 1;
             add_node_lines(child, spans, lines, child_prefix.clone(), is_last_child);
         }
     }
-    
+
     // Build lines for all root nodes
     for (i, node) in tree.iter().enumerate() {
         let is_last = i == tree.len() - 1;
         add_node_lines(node, spans, &mut lines, String::new(), is_last);
     }
-    
+
     // If no tree structure, show flat list
     if lines.is_empty() {
         for span in spans {
@@ -1304,17 +1363,11 @@ fn draw_span_tree(frame: &mut Frame, area: Rect, tree: &[SpanTreeNode], spans: &
             } else {
                 Style::default().fg(Color::Green)
             };
-            
+
             lines.push(Line::from(vec![
-                TextSpan::styled(
-                    span.service_name.as_str(),
-                    Style::default().fg(Color::Cyan),
-                ),
+                TextSpan::styled(span.service_name.as_str(), Style::default().fg(Color::Cyan)),
                 TextSpan::raw(" / "),
-                TextSpan::styled(
-                    &span.operation_name,
-                    Style::default().fg(Color::Yellow),
-                ),
+                TextSpan::styled(&span.operation_name, Style::default().fg(Color::Yellow)),
                 TextSpan::raw(" "),
                 TextSpan::styled(
                     widgets::format_duration(span.duration),
@@ -1322,13 +1375,17 @@ fn draw_span_tree(frame: &mut Frame, area: Rect, tree: &[SpanTreeNode], spans: &
                 ),
                 TextSpan::raw(" "),
                 TextSpan::styled(
-                    if span.status.is_error() { "[ERROR]" } else { "[OK]" },
+                    if span.status.is_error() {
+                        "[ERROR]"
+                    } else {
+                        "[OK]"
+                    },
                     status_style,
                 ),
             ]));
         }
     }
-    
+
     let paragraph = Paragraph::new(lines)
         .block(
             Block::default()
@@ -1337,7 +1394,7 @@ fn draw_span_tree(frame: &mut Frame, area: Rect, tree: &[SpanTreeNode], spans: &
                 .border_style(Style::default().fg(Color::Gray)),
         )
         .wrap(ratatui::widgets::Wrap { trim: false });
-    
+
     frame.render_widget(paragraph, area);
 }
 
@@ -1352,7 +1409,7 @@ fn draw_span_tree_with_selection(
 ) {
     let mut lines = Vec::new();
     let mut current_index = 0;
-    
+
     // Recursively build lines with selection highlighting
     fn add_node_lines_with_selection<'a>(
         node: &SpanTreeNode,
@@ -1366,35 +1423,31 @@ fn draw_span_tree_with_selection(
         let span = &spans[node.span_index];
         let is_selected = Some(*current_index) == selected_index;
         *current_index += 1;
-        
+
         // Build the tree prefix
         let connector = if is_last { "└─" } else { "├─" };
         let tree_prefix = format!("{}{} ", prefix, connector);
-        
+
         // Format span info with selection highlighting
         let base_style = if is_selected {
-            Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD)
+            Style::default()
+                .bg(Color::DarkGray)
+                .add_modifier(Modifier::BOLD)
         } else {
             Style::default()
         };
-        
+
         let status_style = if span.status.is_error() {
             base_style.fg(Color::Red)
         } else {
             base_style.fg(Color::Green)
         };
-        
+
         let line = Line::from(vec![
             TextSpan::styled(tree_prefix, base_style),
-            TextSpan::styled(
-                span.service_name.as_str(),
-                base_style.fg(Color::Cyan),
-            ),
+            TextSpan::styled(span.service_name.as_str(), base_style.fg(Color::Cyan)),
             TextSpan::styled(" / ", base_style),
-            TextSpan::styled(
-                &span.operation_name,
-                base_style.fg(Color::Yellow),
-            ),
+            TextSpan::styled(&span.operation_name, base_style.fg(Color::Yellow)),
             TextSpan::styled(" ", base_style),
             TextSpan::styled(
                 widgets::format_duration(span.duration),
@@ -1402,20 +1455,24 @@ fn draw_span_tree_with_selection(
             ),
             TextSpan::styled(" ", base_style),
             TextSpan::styled(
-                if span.status.is_error() { "[ERROR]" } else { "[OK]" },
+                if span.status.is_error() {
+                    "[ERROR]"
+                } else {
+                    "[OK]"
+                },
                 status_style,
             ),
         ]);
-        
+
         lines.push(line);
-        
+
         // Add children
         let child_prefix = if is_last {
             format!("{}   ", prefix)
         } else {
             format!("{}│  ", prefix)
         };
-        
+
         for (i, child) in node.children.iter().enumerate() {
             let is_last_child = i == node.children.len() - 1;
             add_node_lines_with_selection(
@@ -1429,7 +1486,7 @@ fn draw_span_tree_with_selection(
             );
         }
     }
-    
+
     // Build lines for all root nodes
     for (i, node) in tree.iter().enumerate() {
         let is_last = i == tree.len() - 1;
@@ -1443,7 +1500,7 @@ fn draw_span_tree_with_selection(
             &mut current_index,
         );
     }
-    
+
     let paragraph = Paragraph::new(lines)
         .block(
             Block::default()
@@ -1452,7 +1509,7 @@ fn draw_span_tree_with_selection(
                 .border_style(Style::default().fg(Color::Blue)),
         )
         .wrap(Wrap { trim: false });
-    
+
     frame.render_widget(paragraph, area);
 }
 
@@ -1469,20 +1526,23 @@ fn draw_empty_details_panel(frame: &mut Frame, area: Rect) {
         Line::from("  Y - Copy trace ID"),
         Line::from("  Tab - Switch tabs"),
     ])
-        .block(
-            Block::default()
-                .title(" Span Details ")
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::DarkGray)),
-        )
-        .alignment(Alignment::Center);
-    
+    .block(
+        Block::default()
+            .title(" Span Details ")
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::DarkGray)),
+    )
+    .alignment(Alignment::Center);
+
     frame.render_widget(paragraph, area);
 }
 
 fn draw_footer(frame: &mut Frame, area: Rect, app: &Dashboard) {
     let help_text = if app.search_active {
-        format!("Search: {} | ESC: Cancel | Enter: Dashboardly", app.search_query)
+        format!(
+            "Search: {} | ESC: Cancel | Enter: Dashboardly",
+            app.search_query
+        )
     } else {
         match app.selected_tab {
             Tab::Services => {
@@ -1492,7 +1552,9 @@ fn draw_footer(frame: &mut Frame, area: Rect, app: &Dashboard) {
                     app.filter_mode.as_str()
                 )
             }
-            Tab::Traces => "[q]uit [Tab]switch [↑↓]navigate [Enter]spans [/]search [f]filter".to_string(),
+            Tab::Traces => {
+                "[q]uit [Tab]switch [↑↓]navigate [Enter]spans [/]search [f]filter".to_string()
+            }
             Tab::Spans => "[q]uit [Tab]switch [↑↓]scroll".to_string(),
             Tab::Map => "[q]uit [Tab]switch [↑↓]zoom [Enter]select".to_string(),
         }
@@ -1513,7 +1575,7 @@ fn draw_footer(frame: &mut Frame, area: Rect, app: &Dashboard) {
 /// Draw the service map view.
 fn draw_map_view(frame: &mut Frame, _app: &mut Dashboard) {
     let area = frame.area();
-    
+
     // Create a simple placeholder for map view
     let map_text = vec![
         Line::from("📊 Service Map View"),
@@ -1523,7 +1585,7 @@ fn draw_map_view(frame: &mut Frame, _app: &mut Dashboard) {
         Line::from(""),
         Line::from("Coming soon..."),
     ];
-    
+
     let map_paragraph = Paragraph::new(map_text)
         .block(
             Block::default()
@@ -1534,27 +1596,37 @@ fn draw_map_view(frame: &mut Frame, _app: &mut Dashboard) {
         )
         .alignment(Alignment::Center)
         .style(Style::default().fg(Color::White));
-    
+
     frame.render_widget(map_paragraph, area);
 }
 
 /// Draw help overlay.
 fn draw_help_overlay(frame: &mut Frame) {
     let size = frame.area();
-    
+
     // Create centered help window
     let help_width = 60;
     let help_height = 20;
     let x = (size.width.saturating_sub(help_width)) / 2;
     let y = (size.height.saturating_sub(help_height)) / 2;
-    
+
     let help_area = Rect::new(x, y, help_width, help_height);
 
     let help_text = vec![
         Line::from(""),
-        Line::from(vec![TextSpan::styled("Keyboard Shortcuts", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))]),
+        Line::from(vec![TextSpan::styled(
+            "Keyboard Shortcuts",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )]),
         Line::from(""),
-        Line::from(vec![TextSpan::styled("Navigation", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))]),
+        Line::from(vec![TextSpan::styled(
+            "Navigation",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )]),
         Line::from(vec![TextSpan::raw("  q/Ctrl+C    Quit application")]),
         Line::from(vec![TextSpan::raw("  ↑/k ↓/j     Navigate up/down")]),
         Line::from(vec![TextSpan::raw("  PgUp/PgDn   Page up/down")]),
@@ -1562,8 +1634,15 @@ fn draw_help_overlay(frame: &mut Frame) {
         Line::from(vec![TextSpan::raw("  Enter       View details/drill down")]),
         Line::from(vec![TextSpan::raw("  Tab         Switch tabs")]),
         Line::from(""),
-        Line::from(vec![TextSpan::styled("Search & Filter", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))]),
-        Line::from(vec![TextSpan::raw("  /           Search (services/traces)")]),
+        Line::from(vec![TextSpan::styled(
+            "Search & Filter",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )]),
+        Line::from(vec![TextSpan::raw(
+            "  /           Search (services/traces)",
+        )]),
         Line::from(vec![TextSpan::raw("  s           Cycle sort mode")]),
         Line::from(vec![TextSpan::raw("  r           Reverse sort order")]),
         Line::from(vec![TextSpan::raw("  f           Cycle filter mode")]),
@@ -1571,14 +1650,22 @@ fn draw_help_overlay(frame: &mut Frame) {
         Line::from(vec![TextSpan::raw("  2           Errors only")]),
         Line::from(vec![TextSpan::raw("  3           Slow items only")]),
         Line::from(""),
-        Line::from(vec![TextSpan::styled("Trace Exploration", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))]),
+        Line::from(vec![TextSpan::styled(
+            "Trace Exploration",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )]),
         Line::from(vec![TextSpan::raw("  Services → Traces → Spans")]),
         Line::from(vec![TextSpan::raw("  Enter from service to see traces")]),
         Line::from(vec![TextSpan::raw("  Enter from trace to see span tree")]),
         Line::from(""),
         Line::from(vec![TextSpan::raw("  h/?         Toggle this help")]),
         Line::from(""),
-        Line::from(vec![TextSpan::styled("Press any key to close", Style::default().fg(Color::DarkGray))]),
+        Line::from(vec![TextSpan::styled(
+            "Press any key to close",
+            Style::default().fg(Color::DarkGray),
+        )]),
     ];
 
     let help = Paragraph::new(help_text)
@@ -1601,15 +1688,15 @@ mod tests {
 
     // Tests are commented out as they require complex mock setup for storage and monitoring
     // The application has been tested manually and works correctly
-    
+
     #[tokio::test]
     async fn test_sort_cycling() {
         let sort_by = SortBy::Rps;
         assert_eq!(sort_by.next(), SortBy::ErrorRate);
-        
+
         let sort_by = SortBy::ErrorRate;
         assert_eq!(sort_by.next(), SortBy::P50);
-        
+
         let sort_by = SortBy::P50;
         assert_eq!(sort_by.next(), SortBy::P95);
     }
@@ -1618,10 +1705,10 @@ mod tests {
     async fn test_filter_cycling() {
         let filter_mode = FilterMode::All;
         assert_eq!(filter_mode.next(), FilterMode::ErrorsOnly);
-        
+
         let filter_mode = FilterMode::ErrorsOnly;
         assert_eq!(filter_mode.next(), FilterMode::SlowOnly);
-        
+
         let filter_mode = FilterMode::SlowOnly;
         assert_eq!(filter_mode.next(), FilterMode::Active);
     }
