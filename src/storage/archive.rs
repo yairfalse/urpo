@@ -6,9 +6,9 @@
 //! - LZ4 compression with zero-copy deserialization
 //! - Roaring bitmaps for efficient trace ID storage
 
-use crate::core::{Result, UrpoError, Span, TraceId, ServiceName};
+use crate::core::{Result, UrpoError, Span, SpanId, SpanKind, TraceId, ServiceName};
 use ahash::{AHashMap, AHashSet};
-use chrono::{DateTime, Utc, TimeZone};
+use chrono::{DateTime, Utc};
 use lz4::EncoderBuilder;
 use parking_lot::RwLock;
 use roaring::RoaringBitmap;
@@ -49,13 +49,15 @@ impl PartitionGranularity {
     pub fn parse_partition_key(&self, key: &str) -> Result<SystemTime> {
         match self {
             Self::Hourly => {
-                let dt = Utc.datetime_from_str(&format!("{}_00_00_00", key), "%Y%m%d_%H_%M_%S")
-                    .map_err(|e| UrpoError::Storage(format!("Invalid hourly partition key {}: {}", key, e)))?;
+                let dt = chrono::NaiveDateTime::parse_from_str(&format!("{}_00_00_00", key), "%Y%m%d_%H_%M_%S")
+                    .map_err(|e| UrpoError::Storage(format!("Invalid hourly partition key {}: {}", key, e)))?
+                    .and_utc();
                 Ok(SystemTime::from(dt))
             }
             Self::Daily => {
-                let dt = Utc.datetime_from_str(&format!("{}_00_00_00", key), "%Y%m%d_%H_%M_%S")
-                    .map_err(|e| UrpoError::Storage(format!("Invalid daily partition key {}: {}", key, e)))?;
+                let dt = chrono::NaiveDateTime::parse_from_str(&format!("{}_00_00_00", key), "%Y%m%d_%H_%M_%S")
+                    .map_err(|e| UrpoError::Storage(format!("Invalid daily partition key {}: {}", key, e)))?
+                    .and_utc();
                 Ok(SystemTime::from(dt))
             }
             Self::Weekly => {
@@ -147,8 +149,11 @@ impl ArchiveIndex {
             return Ok(());
         }
 
-        // Calculate trace ID hash for bitmap storage
-        let trace_id_hash = self.hash_trace_id(&spans[0].trace_id);
+        // Calculate trace ID hash for bitmap storage  
+        // BULLETPROOF: Extra safety check (spans.is_empty() already checked above)
+        let trace_id_hash = self.hash_trace_id(&spans.first()
+            .ok_or_else(|| UrpoError::parse("Empty spans slice".to_string()))?
+            .trace_id);
         
         // Update time bounds
         let trace_start = spans.iter().map(|s| s.start_time).min().expect("spans not empty");
@@ -172,7 +177,9 @@ impl ArchiveIndex {
         
         // Check if trace has errors or is slow
         let has_error = spans.iter().any(|s| s.status.is_error());
-        let total_duration = trace_end.duration_since(trace_start).unwrap();
+        // BULLETPROOF: Handle time calculation safely
+        let total_duration = trace_end.duration_since(trace_start)
+            .unwrap_or_else(|_| std::time::Duration::from_millis(0));
         let is_slow = total_duration.as_millis() > 1000; // >1s is considered slow
         
         // Update error traces bitmap
@@ -634,7 +641,7 @@ pub struct ArchiveStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::{SpanStatus, SpanId};
+    use crate::core::{SpanStatus};
     use std::time::Duration;
     use tempfile::TempDir;
 
@@ -647,6 +654,7 @@ mod tests {
             operation_name: "test_operation".to_string(),
             start_time: UNIX_EPOCH + Duration::from_secs(1640995200 + start_offset_secs), // 2022-01-01 + offset
             duration: Duration::from_millis(100),
+            kind: SpanKind::Internal,
             status: SpanStatus::Ok,
             attributes: Default::default(),
             tags: Default::default(),

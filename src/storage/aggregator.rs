@@ -265,7 +265,12 @@ pub async fn calculate_windowed_metrics(
             // Batch process spans for efficiency
             let (span_count, error_count, mut latencies) = process_spans_batch(&spans);
             let request_rate = span_count as f64 / seconds as f64;
-            let error_rate = error_count as f64 / span_count as f64;
+            // BULLETPROOF: Prevent division by zero
+            let error_rate = if span_count > 0 {
+                error_count as f64 / span_count as f64
+            } else {
+                0.0
+            };
             
             // Calculate percentiles using efficient method
             let (p50, p95, p99) = if latencies.len() > 1000 {

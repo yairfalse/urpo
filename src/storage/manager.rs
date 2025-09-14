@@ -130,26 +130,38 @@ impl StorageManager {
             let engine = engine.read().await;
             let traces = engine.query_traces(
                 service.map(|s| s.as_str()),
-                start_time.map(|t| t.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64),
-                end_time.map(|t| t.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64),
+                // BULLETPROOF: Handle time conversion failures gracefully
+                start_time.and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_nanos() as u64),
+                end_time.and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_nanos() as u64),
                 limit,
             )?;
             
             // Convert to TraceInfo
             let mut trace_infos = Vec::new();
             for trace_id in traces {
-                if let Ok(spans) = self.backend.get_trace_spans(&TraceId::new(format!("{:032x}", trace_id)).unwrap()).await {
+                // BULLETPROOF: Handle TraceId creation failure
+                let trace_id_str = format!("{:032x}", trace_id);
+                let Ok(trace_id_obj) = TraceId::new(trace_id_str.clone()) else {
+                    tracing::warn!("Failed to create TraceId from: {}", trace_id_str);
+                    continue;
+                };
+                if let Ok(spans) = self.backend.get_trace_spans(&trace_id_obj).await {
                     if !spans.is_empty() {
                         let root_span = spans.iter()
                             .find(|s| s.parent_span_id.is_none())
                             .or_else(|| spans.first())
-                            .unwrap();
+                            // BULLETPROOF: Use first span as fallback
+                            .unwrap_or_else(|| spans.first().expect("Spans vector should not be empty"));
                         
-                        let min_start = spans.iter().map(|s| s.start_time).min().unwrap();
+                        // BULLETPROOF: Handle empty spans gracefully
+                        let Some(min_start) = spans.iter().map(|s| s.start_time).min() else {
+                            continue;
+                        };
                         let max_end = spans.iter()
                             .map(|s| s.start_time + s.duration)
                             .max()
-                            .unwrap();
+                            // BULLETPROOF: Use min_start as fallback
+                            .unwrap_or(min_start);
                         let duration = max_end.duration_since(min_start).unwrap_or(Duration::ZERO);
                         
                         let services: HashSet<_> = spans.iter()
@@ -159,7 +171,7 @@ impl StorageManager {
                         let has_error = spans.iter().any(|s| s.status.is_error());
                         
                         trace_infos.push(TraceInfo {
-                            trace_id: TraceId::new(format!("{:032x}", trace_id)).unwrap(),
+                            trace_id: trace_id_obj.clone(),
                             root_service: root_span.service_name.clone(),
                             root_operation: root_span.operation_name.clone(),
                             span_count: spans.len(),

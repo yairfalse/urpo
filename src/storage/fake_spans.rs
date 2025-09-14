@@ -328,7 +328,9 @@ mod tests {
     async fn test_generate_single_span() {
         let generator = SpanGenerator::new();
         let service = &generator.services[0];
-        let span = generator.generate_span(service).await.unwrap();
+        // BULLETPROOF: Test should panic on failure
+        let span = generator.generate_span(service).await
+            .expect("Test span generation should succeed");
         
         assert_eq!(span.service_name, service.name);
         assert!(!span.operation_name.is_empty());
@@ -338,7 +340,9 @@ mod tests {
     #[tokio::test]
     async fn test_generate_batch() {
         let generator = SpanGenerator::new();
-        let spans = generator.generate_batch(100).await.unwrap();
+        // BULLETPROOF: Test should panic on failure  
+        let spans = generator.generate_batch(100).await
+            .expect("Test batch generation should succeed");
         
         assert_eq!(spans.len(), 100);
         
@@ -353,7 +357,9 @@ mod tests {
     #[tokio::test]
     async fn test_error_rate() {
         let generator = SpanGenerator::new();
-        let spans = generator.generate_batch(1000).await.unwrap();
+        // BULLETPROOF: Test should panic on failure
+        let spans = generator.generate_batch(1000).await
+            .expect("Test batch generation should succeed");
         
         // Find payment service spans (highest error rate)
         let payment_spans: Vec<_> = spans.iter()
@@ -380,7 +386,9 @@ mod tests {
         
         let mut latencies = Vec::new();
         for _ in 0..1000 {
-            let span = generator.generate_span(service).await.unwrap();
+            // BULLETPROOF: Test should panic on failure
+        let span = generator.generate_span(service).await
+            .expect("Test span generation should succeed");
             latencies.push(span.duration.as_millis() as u64);
         }
         
