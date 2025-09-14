@@ -11,6 +11,9 @@ pub mod string_pool;
 pub mod types;
 
 #[cfg(test)]
+mod integration_test;
+
+#[cfg(test)]
 mod tests {
     use super::types::*;
 

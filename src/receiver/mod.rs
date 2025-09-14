@@ -1,9 +1,10 @@
 //! OpenTelemetry receiver implementation.
 //!
 //! This module implements GRPC and HTTP receivers for OpenTelemetry
-//! trace data following the OTLP specification.
+//! trace and metrics data following the OTLP specification.
 
 pub mod http;
+pub mod metrics;
 
 use crate::core::{Result, ServiceName, Span as UrpoSpan, SpanId, SpanStatus, TraceId, UrpoError};
 use crate::storage::UnifiedStorage;
