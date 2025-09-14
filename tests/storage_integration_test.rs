@@ -152,20 +152,13 @@ async fn test_service_health_status() {
         // Verify the health determination makes sense
         match metric.name.as_str() {
             "api-gateway" | "user-service" | "inventory-service" => {
-                assert!(
-                    metric.error_rate < 0.02,
-                    "{} should be healthy",
-                    metric.name.as_str()
-                );
-            }
+                assert!(metric.error_rate < 0.02, "{} should be healthy", metric.name.as_str());
+            },
             "payment-service" => {
                 // Payment service has higher error rate by design
-                assert!(
-                    metric.error_rate > 0.01,
-                    "payment-service should have some errors"
-                );
-            }
-            _ => {}
+                assert!(metric.error_rate > 0.01, "payment-service should have some errors");
+            },
+            _ => {},
         }
     }
 }

@@ -10,10 +10,12 @@ use urpo_lib::ui::{Dashboard, Tab};
 #[tokio::test(flavor = "multi_thread")]
 async fn test_ui_dashboard_creation() {
     // Create storage
-    let storage = Arc::new(RwLock::new(InMemoryStorage::new()));
+    let storage = Arc::new(RwLock::new(InMemoryStorage::new(10000)));
 
     // Create health monitor
-    let health_monitor = Arc::new(ServiceHealthMonitor::new(Duration::from_secs(60), 10));
+    let health_monitor = Arc::new(ServiceHealthMonitor::new(Arc::new(
+        urpo_lib::storage::PerformanceManager::new(),
+    )));
 
     // Create dashboard
     let dashboard = Dashboard::new(storage.clone(), health_monitor).unwrap();
@@ -33,10 +35,12 @@ async fn test_dashboard_tab_navigation() {
     use urpo_lib::ui::FilterMode;
 
     // Create storage
-    let storage = Arc::new(RwLock::new(InMemoryStorage::new()));
+    let storage = Arc::new(RwLock::new(InMemoryStorage::new(10000)));
 
     // Create health monitor
-    let health_monitor = Arc::new(ServiceHealthMonitor::new(Duration::from_secs(60), 10));
+    let health_monitor = Arc::new(ServiceHealthMonitor::new(Arc::new(
+        urpo_lib::storage::PerformanceManager::new(),
+    )));
 
     // Create dashboard
     let mut dashboard = Dashboard::new(storage.clone(), health_monitor).unwrap();
@@ -64,10 +68,12 @@ async fn test_concurrent_data_updates() {
     use std::time::Instant;
 
     // Create storage
-    let storage = Arc::new(RwLock::new(InMemoryStorage::new()));
+    let storage = Arc::new(RwLock::new(InMemoryStorage::new(10000)));
 
     // Create health monitor
-    let health_monitor = Arc::new(ServiceHealthMonitor::new(Duration::from_secs(60), 10));
+    let health_monitor = Arc::new(ServiceHealthMonitor::new(Arc::new(
+        urpo_lib::storage::PerformanceManager::new(),
+    )));
 
     // Create dashboard
     let mut dashboard = Dashboard::new(storage.clone(), health_monitor).unwrap();

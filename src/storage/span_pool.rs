@@ -108,7 +108,7 @@ impl PooledSpan {
             None => {
                 tracing::warn!("PooledSpan::take called on already-taken span, returning default");
                 SpanBuilder::default().build_default()
-            }
+            },
         }
     }
 

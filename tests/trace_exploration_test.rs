@@ -65,26 +65,17 @@ async fn test_list_recent_traces() {
     assert_eq!(first_trace.span_count, 4, "Each trace should have 4 spans");
     assert_eq!(first_trace.root_service.as_str(), "api-gateway");
     assert_eq!(first_trace.root_operation, "POST /api/order");
-    assert!(
-        first_trace.services.len() >= 3,
-        "Should have multiple services"
-    );
+    assert!(first_trace.services.len() >= 3, "Should have multiple services");
 
     // Test filtering by service
     let api_traces = storage
-        .list_recent_traces(
-            10,
-            Some(&ServiceName::new("api-gateway".to_string()).unwrap()),
-        )
+        .list_recent_traces(10, Some(&ServiceName::new("api-gateway".to_string()).unwrap()))
         .await
         .unwrap();
     assert_eq!(api_traces.len(), 5, "All traces have api-gateway service");
 
     let service_1_traces = storage
-        .list_recent_traces(
-            10,
-            Some(&ServiceName::new("service-1".to_string()).unwrap()),
-        )
+        .list_recent_traces(10, Some(&ServiceName::new("service-1".to_string()).unwrap()))
         .await
         .unwrap();
     assert_eq!(service_1_traces.len(), 5, "All traces have service-1");
@@ -172,12 +163,7 @@ async fn test_search_traces() {
     let storage = InMemoryStorage::new(1000);
 
     // Create traces with different operations and attributes
-    let operations = [
-        "GET /users",
-        "POST /orders",
-        "GET /products",
-        "DELETE /sessions",
-    ];
+    let operations = ["GET /users", "POST /orders", "GET /products", "DELETE /sessions"];
 
     for (i, &op) in operations.iter().enumerate() {
         let trace_id = TraceId::new(format!("trace_{:04}", i)).unwrap();
@@ -208,11 +194,7 @@ async fn test_search_traces() {
 
     // Search by operation name
     let user_traces = storage.search_traces("users", 10).await.unwrap();
-    assert_eq!(
-        user_traces.len(),
-        1,
-        "Should find 1 trace with 'users' in operation"
-    );
+    assert_eq!(user_traces.len(), 1, "Should find 1 trace with 'users' in operation");
 
     // Search by attribute value
     let order_traces = storage.search_traces("ORD-789", 10).await.unwrap();
@@ -220,11 +202,7 @@ async fn test_search_traces() {
 
     // Search by tag
     let priority_traces = storage.search_traces("high", 10).await.unwrap();
-    assert_eq!(
-        priority_traces.len(),
-        1,
-        "Should find 1 trace with high priority tag"
-    );
+    assert_eq!(priority_traces.len(), 1, "Should find 1 trace with high priority tag");
 
     // Search with no matches
     let no_matches = storage.search_traces("nonexistent", 10).await.unwrap();
@@ -304,22 +282,14 @@ async fn test_span_hierarchy() {
         .iter()
         .filter(|s| s.parent_span_id.as_ref().map(|p| p.as_str()) == Some("root"))
         .collect();
-    assert_eq!(
-        child_spans.len(),
-        2,
-        "Should have 2 direct children of root"
-    );
+    assert_eq!(child_spans.len(), 2, "Should have 2 direct children of root");
 
     for child in &child_spans {
         let grandchildren: Vec<_> = spans
             .iter()
             .filter(|s| s.parent_span_id.as_ref() == Some(&child.span_id))
             .collect();
-        assert_eq!(
-            grandchildren.len(),
-            2,
-            "Each child should have 2 grandchildren"
-        );
+        assert_eq!(grandchildren.len(), 2, "Each child should have 2 grandchildren");
     }
 }
 
@@ -340,9 +310,7 @@ async fn test_trace_aggregation_and_statistics() {
                 .service_name(ServiceName::new(format!("service-{}", span_num % 3)).unwrap())
                 .operation_name(format!("op-{}", span_num))
                 .start_time(base_time + Duration::from_millis(span_num as u64 * 10))
-                .duration(Duration::from_millis(
-                    (trace_num + 1) as u64 * 50 + span_num as u64 * 10,
-                ))
+                .duration(Duration::from_millis((trace_num + 1) as u64 * 50 + span_num as u64 * 10))
                 .status(if trace_num == 3 && span_num == 2 {
                     SpanStatus::Error("Simulated error".to_string())
                 } else {
@@ -363,26 +331,15 @@ async fn test_trace_aggregation_and_statistics() {
 
     // Test service filtering
     let service_0_traces = storage
-        .list_recent_traces(
-            100,
-            Some(&ServiceName::new("service-0".to_string()).unwrap()),
-        )
+        .list_recent_traces(100, Some(&ServiceName::new("service-0".to_string()).unwrap()))
         .await
         .unwrap();
-    assert_eq!(
-        service_0_traces.len(),
-        10,
-        "All traces should have service-0"
-    );
+    assert_eq!(service_0_traces.len(), 10, "All traces should have service-0");
 
     // Test trace statistics
     for trace in &all_traces {
         assert_eq!(trace.span_count, 5, "Each trace should have 5 spans");
-        assert_eq!(
-            trace.services.len(),
-            3,
-            "Each trace should touch 3 services"
-        );
+        assert_eq!(trace.services.len(), 3, "Each trace should touch 3 services");
     }
 
     // Test error trace filtering
@@ -409,7 +366,7 @@ async fn test_trace_aggregation_and_statistics() {
 
 #[tokio::test]
 async fn test_memory_pressure_and_cleanup() {
-    use urpo_lib::storage::CleanupConfig;
+    use urpo_lib::storage::memory::CleanupConfig;
 
     // Create storage with small capacity to trigger cleanup
     let small_storage = InMemoryStorage::with_cleanup_config(
@@ -444,11 +401,7 @@ async fn test_memory_pressure_and_cleanup() {
 
     // Verify storage respects max capacity
     let span_count = small_storage.get_span_count().await.unwrap();
-    assert!(
-        span_count <= 50,
-        "Storage should not exceed max capacity: {} > 50",
-        span_count
-    );
+    assert!(span_count <= 50, "Storage should not exceed max capacity: {} > 50", span_count);
 
     // Test memory pressure calculation
     let memory_pressure = small_storage.get_memory_pressure();
@@ -461,17 +414,11 @@ async fn test_memory_pressure_and_cleanup() {
     // Test cleanup enforcement
     let evicted = small_storage.enforce_limits().await.unwrap();
     let final_count = small_storage.get_span_count().await.unwrap();
-    assert!(
-        final_count <= 50,
-        "After cleanup, storage should be within limits"
-    );
+    assert!(final_count <= 50, "After cleanup, storage should be within limits");
 
     // Test that oldest spans were evicted (newer spans remain)
     let recent_traces = small_storage.list_recent_traces(10, None).await.unwrap();
-    assert!(
-        !recent_traces.is_empty(),
-        "Should have recent traces after cleanup"
-    );
+    assert!(!recent_traces.is_empty(), "Should have recent traces after cleanup");
 
     // Verify newer traces are retained
     for trace in recent_traces {
@@ -481,20 +428,13 @@ async fn test_memory_pressure_and_cleanup() {
             .strip_prefix("trace_")
             .and_then(|s| s.parse().ok())
             .unwrap_or(0);
-        assert!(
-            trace_num >= 50,
-            "Should retain newer traces (num >= 50): {}",
-            trace_num
-        );
+        assert!(trace_num >= 50, "Should retain newer traces (num >= 50): {}", trace_num);
     }
 
     // Test emergency cleanup
     let emergency_evicted = small_storage.emergency_cleanup().await.unwrap();
     let after_emergency = small_storage.get_span_count().await.unwrap();
-    assert!(
-        after_emergency < 50,
-        "Emergency cleanup should remove significant spans"
-    );
+    assert!(after_emergency < 50, "Emergency cleanup should remove significant spans");
 }
 
 #[tokio::test]
@@ -564,47 +504,20 @@ async fn test_service_metrics_calculation() {
         .expect("Should have database metrics");
 
     // Verify request rates
-    assert!(
-        auth_metrics.request_rate > 0.0,
-        "Auth service should have requests"
-    );
-    assert!(
-        api_metrics.request_rate > 0.0,
-        "API gateway should have requests"
-    );
-    assert!(
-        db_metrics.request_rate > 0.0,
-        "Database should have requests"
-    );
+    assert!(auth_metrics.request_rate > 0.0, "Auth service should have requests");
+    assert!(api_metrics.request_rate > 0.0, "API gateway should have requests");
+    assert!(db_metrics.request_rate > 0.0, "Database should have requests");
 
     // Verify error rates
-    assert!(
-        auth_metrics.error_rate > 0.0,
-        "Auth service should have some errors"
-    );
-    assert_eq!(
-        api_metrics.error_rate, 0.0,
-        "API gateway error rate should be 0%"
-    );
-    assert!(
-        db_metrics.error_rate > 0.0,
-        "Database should have some errors"
-    );
+    assert!(auth_metrics.error_rate > 0.0, "Auth service should have some errors");
+    assert_eq!(api_metrics.error_rate, 0.0, "API gateway error rate should be 0%");
+    assert!(db_metrics.error_rate > 0.0, "Database should have some errors");
 
     // Verify latency statistics exist and are reasonable
     for metrics in &[auth_metrics, api_metrics, db_metrics] {
-        assert!(
-            metrics.latency_p50 > Duration::from_millis(0),
-            "P50 latency should be positive"
-        );
-        assert!(
-            metrics.latency_p95 >= metrics.latency_p50,
-            "P95 should be >= P50"
-        );
-        assert!(
-            metrics.latency_p99 >= metrics.latency_p95,
-            "P99 should be >= P95"
-        );
+        assert!(metrics.latency_p50 > Duration::from_millis(0), "P50 latency should be positive");
+        assert!(metrics.latency_p95 >= metrics.latency_p50, "P95 should be >= P50");
+        assert!(metrics.latency_p99 >= metrics.latency_p95, "P99 should be >= P95");
     }
 }
 
@@ -703,10 +616,7 @@ async fn test_concurrent_access_and_thread_safety() {
     );
 
     // Verify readers had successful reads
-    assert!(
-        total_reads > 0,
-        "Readers should have successful reads during concurrent access"
-    );
+    assert!(total_reads > 0, "Readers should have successful reads during concurrent access");
 
     // Verify service metrics are consistent
     let metrics = storage.get_service_metrics().await.unwrap();
@@ -715,10 +625,7 @@ async fn test_concurrent_access_and_thread_safety() {
     // Verify all services have metrics
     assert_eq!(metrics.len(), 3, "Should have metrics for all 3 services");
     for metric in &metrics {
-        assert!(
-            metric.request_rate > 0.0,
-            "All services should have request rates"
-        );
+        assert!(metric.request_rate > 0.0, "All services should have request rates");
     }
 
     // Test concurrent trace queries
@@ -746,18 +653,9 @@ async fn test_concurrent_access_and_thread_safety() {
     // All queries should return the same results
     let first_result = query_results[0];
     for result in &query_results[1..] {
-        assert_eq!(
-            result.0, first_result.0,
-            "Error trace counts should be consistent"
-        );
-        assert_eq!(
-            result.1, first_result.1,
-            "Slow trace counts should be consistent"
-        );
-        assert_eq!(
-            result.2, first_result.2,
-            "Search results should be consistent"
-        );
+        assert_eq!(result.0, first_result.0, "Error trace counts should be consistent");
+        assert_eq!(result.1, first_result.1, "Slow trace counts should be consistent");
+        assert_eq!(result.2, first_result.2, "Search results should be consistent");
     }
 }
 
@@ -779,10 +677,7 @@ async fn test_span_attributes_and_tags_filtering() {
         ),
         (
             "notification-service",
-            vec![
-                ("notification.type", "email"),
-                ("notification.recipient", "admin"),
-            ],
+            vec![("notification.type", "email"), ("notification.recipient", "admin")],
             vec!["staging", "low-priority"],
         ),
         (
@@ -836,35 +731,20 @@ async fn test_span_attributes_and_tags_filtering() {
 
     // Test searching by attribute values
     let user_search = storage.search_traces("12345", 10).await.unwrap();
-    assert_eq!(
-        user_search.len(),
-        5,
-        "Should find all traces with user.id=12345"
-    );
+    assert_eq!(user_search.len(), 5, "Should find all traces with user.id=12345");
 
     let email_search = storage.search_traces("test@example.com", 10).await.unwrap();
-    assert_eq!(
-        email_search.len(),
-        5,
-        "Should find all traces with the email"
-    );
+    assert_eq!(email_search.len(), 5, "Should find all traces with the email");
 
     let payment_search = storage.search_traces("99.99", 10).await.unwrap();
     assert_eq!(payment_search.len(), 5, "Should find all payment traces");
 
     let currency_search = storage.search_traces("USD", 10).await.unwrap();
-    assert_eq!(
-        currency_search.len(),
-        5,
-        "Should find all USD payment traces"
-    );
+    assert_eq!(currency_search.len(), 5, "Should find all USD payment traces");
 
     // Test searching by tags
     let production_search = storage.search_traces("production", 100).await.unwrap();
-    assert!(
-        production_search.len() >= 15,
-        "Should find multiple production traces"
-    );
+    assert!(production_search.len() >= 15, "Should find multiple production traces");
 
     let staging_search = storage.search_traces("staging", 10).await.unwrap();
     assert_eq!(staging_search.len(), 5, "Should find staging traces");
@@ -880,43 +760,25 @@ async fn test_span_attributes_and_tags_filtering() {
         .search_traces("user-service_operation", 10)
         .await
         .unwrap();
-    assert_eq!(
-        user_op_search.len(),
-        5,
-        "Should find user service operations"
-    );
+    assert_eq!(user_op_search.len(), 5, "Should find user service operations");
 
     // Test searching by conditional attributes
     let request_search = storage.search_traces("req_", 100).await.unwrap();
-    assert!(
-        request_search.len() > 0,
-        "Should find traces with request IDs"
-    );
+    assert!(request_search.len() > 0, "Should find traces with request IDs");
 
     let slow_tag_search = storage.search_traces("slow", 100).await.unwrap();
-    assert!(
-        slow_tag_search.len() > 0,
-        "Should find traces tagged as slow"
-    );
+    assert!(slow_tag_search.len() > 0, "Should find traces tagged as slow");
 
     // Test that search is case-sensitive for exact matches
     let no_match_search = storage.search_traces("PRODUCTION", 10).await.unwrap();
-    assert_eq!(
-        no_match_search.len(),
-        0,
-        "Should not find uppercase when lowercase was stored"
-    );
+    assert_eq!(no_match_search.len(), 0, "Should not find uppercase when lowercase was stored");
 
     // Test searching for non-existent values
     let not_found = storage
         .search_traces("nonexistent_value", 10)
         .await
         .unwrap();
-    assert_eq!(
-        not_found.len(),
-        0,
-        "Should return empty for non-existent values"
-    );
+    assert_eq!(not_found.len(), 0, "Should return empty for non-existent values");
 
     // Verify span details include attributes and tags
     let trace_id = TraceId::new("trace_user-service_0".to_string()).unwrap();
@@ -932,14 +794,8 @@ async fn test_span_attributes_and_tags_filtering() {
         first_span.attributes.contains_key("user.email"),
         "Span should have user.email attribute"
     );
-    assert!(
-        first_span.tags.contains_key("production"),
-        "Span should have production tag"
-    );
-    assert!(
-        first_span.tags.contains_key("critical"),
-        "Span should have critical tag"
-    );
+    assert!(first_span.tags.contains_key("production"), "Span should have production tag");
+    assert!(first_span.tags.contains_key("critical"), "Span should have critical tag");
 }
 
 #[tokio::test]
@@ -1079,21 +935,13 @@ async fn test_trace_waterfall_visualization_data() {
     let gateway_children = children_map
         .get(&Some(SpanId::new("gateway_root".to_string()).unwrap()))
         .unwrap();
-    assert_eq!(
-        gateway_children.len(),
-        3,
-        "Gateway should have 3 child spans"
-    );
+    assert_eq!(gateway_children.len(), 3, "Gateway should have 3 child spans");
 
     // Verify user service children (should have db and cache)
     let user_children = children_map
         .get(&Some(SpanId::new("user_fetch".to_string()).unwrap()))
         .unwrap();
-    assert_eq!(
-        user_children.len(),
-        2,
-        "User service should have 2 child spans"
-    );
+    assert_eq!(user_children.len(), 2, "User service should have 2 child spans");
 
     // Calculate waterfall metrics
     let trace_start = spans.iter().map(|s| s.start_time).min().unwrap();
@@ -1124,10 +972,7 @@ async fn test_trace_waterfall_visualization_data() {
     let db_end = base_time + Duration::from_millis(30) + Duration::from_millis(120);
     let cache_start = base_time + Duration::from_millis(155);
 
-    assert!(
-        cache_start > db_end,
-        "Cache update should start after database query completes"
-    );
+    assert!(cache_start > db_end, "Cache update should start after database query completes");
 
     // Test trace info for waterfall header
     let trace_info = storage.list_recent_traces(1, None).await.unwrap();
@@ -1148,42 +993,22 @@ async fn test_edge_cases_and_error_conditions() {
 
     // Test 1: Empty storage queries
     let empty_traces = storage.list_recent_traces(10, None).await.unwrap();
-    assert_eq!(
-        empty_traces.len(),
-        0,
-        "Empty storage should return no traces"
-    );
+    assert_eq!(empty_traces.len(), 0, "Empty storage should return no traces");
 
     let empty_error_traces = storage.get_error_traces(10).await.unwrap();
-    assert_eq!(
-        empty_error_traces.len(),
-        0,
-        "Empty storage should return no error traces"
-    );
+    assert_eq!(empty_error_traces.len(), 0, "Empty storage should return no error traces");
 
     let empty_slow_traces = storage
         .get_slow_traces(Duration::from_millis(100), 10)
         .await
         .unwrap();
-    assert_eq!(
-        empty_slow_traces.len(),
-        0,
-        "Empty storage should return no slow traces"
-    );
+    assert_eq!(empty_slow_traces.len(), 0, "Empty storage should return no slow traces");
 
     let empty_search = storage.search_traces("anything", 10).await.unwrap();
-    assert_eq!(
-        empty_search.len(),
-        0,
-        "Empty storage search should return nothing"
-    );
+    assert_eq!(empty_search.len(), 0, "Empty storage search should return nothing");
 
     let empty_metrics = storage.get_service_metrics().await.unwrap();
-    assert_eq!(
-        empty_metrics.len(),
-        0,
-        "Empty storage should have no service metrics"
-    );
+    assert_eq!(empty_metrics.len(), 0, "Empty storage should have no service metrics");
 
     // Test 2: Trace with only root span (no children)
     let single_span_trace = TraceId::new("single_span_trace".to_string()).unwrap();
@@ -1248,11 +1073,7 @@ async fn test_edge_cases_and_error_conditions() {
     storage.store_span(long_span).await.unwrap();
 
     let long_trace_spans = storage.get_trace_spans(&long_trace).await.unwrap();
-    assert_eq!(
-        long_trace_spans.len(),
-        1,
-        "Should store span with long strings"
-    );
+    assert_eq!(long_trace_spans.len(), 1, "Should store span with long strings");
     assert!(
         long_trace_spans[0].operation_name.len() >= 1000,
         "Should preserve long operation name"
@@ -1274,11 +1095,7 @@ async fn test_edge_cases_and_error_conditions() {
     storage.store_span(zero_span).await.unwrap();
 
     let zero_duration_spans = storage.get_trace_spans(&zero_duration_trace).await.unwrap();
-    assert_eq!(
-        zero_duration_spans.len(),
-        1,
-        "Should store zero-duration span"
-    );
+    assert_eq!(zero_duration_spans.len(), 1, "Should store zero-duration span");
     assert_eq!(zero_duration_spans[0].duration, Duration::from_millis(0));
 
     // Test 6: Duplicate span IDs (should replace)
@@ -1312,11 +1129,7 @@ async fn test_edge_cases_and_error_conditions() {
     storage.store_span(second_span).await.unwrap();
 
     let duplicate_spans = storage.get_trace_spans(&duplicate_trace).await.unwrap();
-    assert_eq!(
-        duplicate_spans.len(),
-        1,
-        "Duplicate span ID should replace existing"
-    );
+    assert_eq!(duplicate_spans.len(), 1, "Duplicate span ID should replace existing");
     assert_eq!(
         duplicate_spans[0].service_name.as_str(),
         "second-service",
@@ -1330,18 +1143,11 @@ async fn test_edge_cases_and_error_conditions() {
     // Test 7: Non-existent trace/span queries
     let non_existent_trace = TraceId::new("non_existent".to_string()).unwrap();
     let non_existent_spans = storage.get_trace_spans(&non_existent_trace).await.unwrap();
-    assert_eq!(
-        non_existent_spans.len(),
-        0,
-        "Non-existent trace should return empty spans"
-    );
+    assert_eq!(non_existent_spans.len(), 0, "Non-existent trace should return empty spans");
 
     let non_existent_span_id = SpanId::new("non_existent_span".to_string()).unwrap();
     let non_existent_span = storage.get_span(&non_existent_span_id).await.unwrap();
-    assert!(
-        non_existent_span.is_none(),
-        "Non-existent span should return None"
-    );
+    assert!(non_existent_span.is_none(), "Non-existent span should return None");
 
     // Test 8: Service filter with non-existent service
     let non_existent_service = ServiceName::new("non-existent-service".to_string()).unwrap();
@@ -1349,11 +1155,7 @@ async fn test_edge_cases_and_error_conditions() {
         .list_recent_traces(10, Some(&non_existent_service))
         .await
         .unwrap();
-    assert_eq!(
-        filtered_traces.len(),
-        0,
-        "Non-existent service filter should return no traces"
-    );
+    assert_eq!(filtered_traces.len(), 0, "Non-existent service filter should return no traces");
 
     // Test 9: Extremely old spans (test time filtering)
     let old_trace = TraceId::new("old_trace".to_string()).unwrap();
@@ -1374,10 +1176,7 @@ async fn test_edge_cases_and_error_conditions() {
     // Get service spans from recent time (should not include old span)
     let recent_time = SystemTime::now() - Duration::from_secs(3600); // 1 hour ago
     let recent_service_spans = storage
-        .get_service_spans(
-            &ServiceName::new("old-service".to_string()).unwrap(),
-            recent_time,
-        )
+        .get_service_spans(&ServiceName::new("old-service".to_string()).unwrap(), recent_time)
         .await
         .unwrap();
     assert_eq!(
@@ -1396,10 +1195,7 @@ async fn test_edge_cases_and_error_conditions() {
         .start_time(SystemTime::now())
         .duration(Duration::from_millis(70))
         .status(SpanStatus::Ok)
-        .attribute(
-            "special.chars",
-            "value with \n newlines \t tabs and 🎉 emoji",
-        )
+        .attribute("special.chars", "value with \n newlines \t tabs and 🎉 emoji")
         .tag("env", "dev-test-🚀")
         .build()
         .unwrap();

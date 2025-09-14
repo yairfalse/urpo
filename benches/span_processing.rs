@@ -15,20 +15,8 @@ use urpo_lib::storage::{InMemoryStorage, StorageBackend};
 // Helper to generate test spans
 fn generate_test_spans(count: usize) -> Vec<Span> {
     let mut spans = Vec::with_capacity(count);
-    let services = [
-        "frontend",
-        "api-gateway",
-        "auth-service",
-        "database",
-        "cache",
-    ];
-    let operations = [
-        "GET /users",
-        "POST /login",
-        "SELECT *",
-        "SET key",
-        "auth.validate",
-    ];
+    let services = ["frontend", "api-gateway", "auth-service", "database", "cache"];
+    let operations = ["GET /users", "POST /login", "SELECT *", "SET key", "auth.validate"];
 
     for i in 0..count {
         let span = SpanBuilder::default()

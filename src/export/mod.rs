@@ -87,10 +87,7 @@ impl<'a> TraceExporter<'a> {
         let spans = self.storage.get_trace_spans(trace_id).await?;
 
         if spans.is_empty() {
-            return Err(UrpoError::TraceNotFound(format!(
-                "Trace {}",
-                trace_id.as_str()
-            )));
+            return Err(UrpoError::TraceNotFound(format!("Trace {}", trace_id.as_str())));
         }
 
         match format {
@@ -109,10 +106,7 @@ impl<'a> TraceExporter<'a> {
         options: &ExportOptions,
     ) -> Result<String> {
         if spans.is_empty() {
-            return Err(UrpoError::TraceNotFound(format!(
-                "Trace {}",
-                trace_id.as_str()
-            )));
+            return Err(UrpoError::TraceNotFound(format!("Trace {}", trace_id.as_str())));
         }
 
         match options.format {
@@ -156,24 +150,26 @@ impl<'a> TraceExporter<'a> {
         }
     }
 
+    /// Helper to serialize JSON with consistent error handling.
+    fn serialize_json<T: serde::Serialize + ?Sized>(data: &T) -> Result<String> {
+        serde_json::to_string_pretty(data).map_err(|e| UrpoError::SerializationError(e.to_string()))
+    }
+
     /// Export spans as native JSON.
     fn export_json(&self, spans: &[Span]) -> Result<String> {
-        serde_json::to_string_pretty(spans)
-            .map_err(|e| UrpoError::SerializationError(e.to_string()))
+        Self::serialize_json(spans)
     }
 
     /// Export spans as Jaeger-compatible JSON.
     fn export_jaeger(&self, spans: &[Span]) -> Result<String> {
         let jaeger_trace = convert_to_jaeger_format(spans);
-        serde_json::to_string_pretty(&jaeger_trace)
-            .map_err(|e| UrpoError::SerializationError(e.to_string()))
+        Self::serialize_json(&jaeger_trace)
     }
 
     /// Export spans as OpenTelemetry JSON.
     fn export_otel(&self, spans: &[Span]) -> Result<String> {
         let otel_trace = convert_to_otel_format(spans);
-        serde_json::to_string_pretty(&otel_trace)
-            .map_err(|e| UrpoError::SerializationError(e.to_string()))
+        Self::serialize_json(&otel_trace)
     }
 
     /// Export spans as CSV.
@@ -185,31 +181,36 @@ impl<'a> TraceExporter<'a> {
 
         // Data rows
         for span in spans {
-            csv_output.push_str(&format!(
-                "{},{},{},{},{},{},{},{},\"{}\"\n",
-                span.trace_id.as_str(),
-                span.span_id.as_str(),
-                span.parent_span_id
-                    .as_ref()
-                    .map(|p| p.as_str())
-                    .unwrap_or(""),
-                span.service_name.as_str(),
-                span.operation_name,
-                span.start_time
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_nanos(),
-                span.duration.as_nanos(),
-                if span.status.is_error() {
-                    "ERROR"
-                } else {
-                    "OK"
-                },
-                serde_json::to_string(&span.attributes).unwrap_or_default(),
-            ));
+            Self::append_csv_row(&mut csv_output, span);
         }
 
         Ok(csv_output)
+    }
+
+    /// Helper function to format a single CSV row.
+    fn append_csv_row(csv_output: &mut String, span: &Span) {
+        csv_output.push_str(&format!(
+            "{},{},{},{},{},{},{},{},\"{}\"\n",
+            span.trace_id.as_str(),
+            span.span_id.as_str(),
+            span.parent_span_id
+                .as_ref()
+                .map(|p| p.as_str())
+                .unwrap_or(""),
+            span.service_name.as_str(),
+            span.operation_name,
+            span.start_time
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos(),
+            span.duration.as_nanos(),
+            if span.status.is_error() {
+                "ERROR"
+            } else {
+                "OK"
+            },
+            serde_json::to_string(&span.attributes).unwrap_or_default(),
+        ));
     }
 
     /// Export multiple traces as JSON.
@@ -230,8 +231,7 @@ impl<'a> TraceExporter<'a> {
             }));
         }
 
-        serde_json::to_string_pretty(&all_traces)
-            .map_err(|e| UrpoError::SerializationError(e.to_string()))
+        Self::serialize_json(&all_traces)
     }
 
     /// Export multiple traces as Jaeger format.
@@ -243,8 +243,7 @@ impl<'a> TraceExporter<'a> {
             jaeger_traces.push(convert_to_jaeger_format(&spans));
         }
 
-        serde_json::to_string_pretty(&jaeger_traces)
-            .map_err(|e| UrpoError::SerializationError(e.to_string()))
+        Self::serialize_json(&jaeger_traces)
     }
 
     /// Export multiple traces as OpenTelemetry format.
@@ -270,28 +269,7 @@ impl<'a> TraceExporter<'a> {
         for trace_info in traces {
             let spans = self.storage.get_trace_spans(&trace_info.trace_id).await?;
             for span in spans {
-                csv_output.push_str(&format!(
-                    "{},{},{},{},{},{},{},{},\"{}\"\n",
-                    span.trace_id.as_str(),
-                    span.span_id.as_str(),
-                    span.parent_span_id
-                        .as_ref()
-                        .map(|p| p.as_str())
-                        .unwrap_or(""),
-                    span.service_name.as_str(),
-                    span.operation_name,
-                    span.start_time
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_nanos(),
-                    span.duration.as_nanos(),
-                    if span.status.is_error() {
-                        "ERROR"
-                    } else {
-                        "OK"
-                    },
-                    serde_json::to_string(&span.attributes).unwrap_or_default(),
-                ));
+                Self::append_csv_row(&mut csv_output, &span);
             }
         }
 
@@ -307,11 +285,11 @@ impl<'a> TraceExporter<'a> {
                 file.write_all(content.as_bytes())
                     .map_err(|e| UrpoError::Storage(format!("Failed to write file: {}", e)))?;
                 Ok(())
-            }
+            },
             None => {
                 print!("{}", content);
                 Ok(())
-            }
+            },
         }
     }
 }
@@ -399,11 +377,11 @@ fn convert_to_jaeger_format(spans: &[Span]) -> JaegerTrace {
 
         // Convert span
         let mut tags = vec![];
-        for (key, value) in &span.attributes {
+        for (key, value) in span.attributes.iter() {
             tags.push(JaegerTag {
-                key: key.clone(),
+                key: key.to_string(),
                 tag_type: "string".to_string(),
-                value: serde_json::Value::String(value.clone()),
+                value: serde_json::Value::String(value.to_string()),
             });
         }
 

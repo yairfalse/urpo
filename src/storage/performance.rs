@@ -222,7 +222,7 @@ impl PerformanceManager {
                 let mut stats = self.stats.lock().await;
                 stats.backpressure_events += 1;
                 Err(UrpoError::Timeout { timeout_ms: 100 })
-            }
+            },
         }
     }
 
@@ -309,11 +309,11 @@ impl AdaptiveBatcher {
                 } else {
                     None
                 }
-            }
+            },
             Err(_) => {
                 // Buffer is locked, defer to background flush
                 return Ok(None);
-            }
+            },
         };
 
         if let Some((batch, _size)) = batch_result {
@@ -541,7 +541,7 @@ pub struct CircuitBreaker {
 }
 
 #[derive(Debug, Clone, PartialEq, Copy)]
-enum CircuitState {
+pub enum CircuitState {
     Closed,   // Normal operation
     Open,     // Failing, rejecting requests
     HalfOpen, // Testing recovery
@@ -578,7 +578,7 @@ impl CircuitBreaker {
                     }
                 }
                 false
-            }
+            },
             CircuitState::HalfOpen => true, // Allow limited requests to test recovery
         }
     }
@@ -591,7 +591,7 @@ impl CircuitBreaker {
             CircuitState::Closed => {
                 // Reset failure counter on success
                 self.failures.store(0, Ordering::Relaxed);
-            }
+            },
             CircuitState::HalfOpen => {
                 let successes = self.successes.fetch_add(1, Ordering::Relaxed) + 1;
                 if successes >= self.success_threshold {
@@ -600,12 +600,12 @@ impl CircuitBreaker {
                     self.failures.store(0, Ordering::Relaxed);
                     self.successes.store(0, Ordering::Relaxed);
                 }
-            }
+            },
             CircuitState::Open => {
                 // Should not happen, but reset if it does
                 *self.state.write().await = CircuitState::Closed;
                 self.failures.store(0, Ordering::Relaxed);
-            }
+            },
         }
     }
 

@@ -356,11 +356,6 @@ impl UptimeTracker {
         }
     }
 
-    fn record_restart(&mut self, _reason: String) {
-        self.restarts += 1;
-        // In a real implementation, would track downtime
-    }
-
     fn get_metrics(&self) -> UptimeMetrics {
         let uptime = self.start_time.elapsed().unwrap_or(Duration::new(0, 0));
 

@@ -15,6 +15,7 @@ pub mod engine;
 pub mod fake_spans;
 pub mod performance;
 pub mod search;
+pub mod simd_search;
 // pub mod async_archive;
 // pub mod async_archive_reader;
 pub mod archive_integration;

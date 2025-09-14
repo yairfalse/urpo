@@ -166,10 +166,8 @@ impl DiagnosticsCollector {
 
         let mut summary = String::new();
         summary.push_str("Error Summary:\n");
-        summary.push_str(&format!(
-            "  Total errors: {}\n",
-            self.total_errors.load(Ordering::Relaxed)
-        ));
+        summary
+            .push_str(&format!("  Total errors: {}\n", self.total_errors.load(Ordering::Relaxed)));
         summary.push_str(&format!("  Error rate: {:.2}/sec\n", stats.error_rate));
 
         if !stats.by_category.is_empty() {
@@ -213,40 +211,40 @@ pub fn format_user_error(error: &UrpoError) -> String {
             output.push_str("  • Port numbers are valid (1-65535)\n");
             output.push_str("  • File paths exist and are accessible\n");
             output.push_str("\nRun 'urpo --check-config' to validate your configuration.\n");
-        }
+        },
         "network" => {
             output.push_str("Network issue detected. Please check:\n");
             output.push_str("  • The OTEL collectors are running\n");
             output.push_str("  • Firewall rules allow connections\n");
             output.push_str("  • Ports 4317 (GRPC) and 4318 (HTTP) are available\n");
             output.push_str("  • Network connectivity to remote services\n");
-        }
+        },
         "storage" => {
             output.push_str("Storage issue detected. Consider:\n");
             output.push_str("  • Increasing memory limits (--memory-limit)\n");
             output.push_str("  • Reducing span retention period\n");
             output.push_str("  • Enabling sampling to reduce data volume\n");
             output.push_str("  • Checking available system memory\n");
-        }
+        },
         "resource" => {
             output.push_str("Resource limit exceeded. Try:\n");
             output.push_str("  • Increasing memory allocation\n");
             output.push_str("  • Reducing concurrent connections\n");
             output.push_str("  • Enabling sampling (--sampling-rate 0.1)\n");
             output.push_str("  • Restarting to clear accumulated data\n");
-        }
+        },
         "validation" => {
             output.push_str("Validation error. Please ensure:\n");
             output.push_str("  • Sampling rates are between 0.0 and 1.0\n");
             output.push_str("  • Service names are valid\n");
             output.push_str("  • Span data follows OTEL specifications\n");
-        }
+        },
         _ => {
             output.push_str("For more information:\n");
             output.push_str("  • Check the logs with --debug flag\n");
             output.push_str("  • Verify your configuration\n");
             output.push_str("  • Report issues at https://github.com/user/urpo\n");
-        }
+        },
     }
 
     // Add recovery hint if applicable

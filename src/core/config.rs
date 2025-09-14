@@ -372,10 +372,7 @@ impl Config {
 
         match TcpListener::bind(("127.0.0.1", port)).await {
             Ok(_) => Ok(()),
-            Err(e) => Err(UrpoError::config(format!(
-                "Port {} is not available: {}",
-                port, e
-            ))),
+            Err(e) => Err(UrpoError::config(format!("Port {} is not available: {}", port, e))),
         }
     }
 
@@ -568,15 +565,15 @@ impl ConfigWatcher {
                                 }
 
                                 tracing::info!("Configuration reloaded successfully");
-                            }
+                            },
                             Err(e) => {
                                 tracing::error!("Failed to parse configuration: {}", e);
-                            }
+                            },
                         }
-                    }
+                    },
                     Err(e) => {
                         tracing::error!("Failed to read configuration file: {}", e);
-                    }
+                    },
                 }
             }
         }

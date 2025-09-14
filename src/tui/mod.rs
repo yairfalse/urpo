@@ -306,13 +306,13 @@ impl Dashboard {
                         self.apply_sort();
                         self.apply_filter();
                         self.receiver_status = ReceiverStatus::Connected;
-                    }
+                    },
                     DataUpdate::Traces(traces) => {
                         self.traces = traces;
-                    }
+                    },
                     DataUpdate::Spans(spans) => {
                         self.trace_spans = spans;
-                    }
+                    },
                     DataUpdate::Stats {
                         total_spans,
                         spans_per_sec,
@@ -321,10 +321,10 @@ impl Dashboard {
                         self.total_spans = total_spans;
                         self.spans_per_sec = spans_per_sec;
                         self.memory_usage_mb = memory_mb;
-                    }
+                    },
                     DataUpdate::ReceiverStatus(status) => {
                         self.receiver_status = status;
-                    }
+                    },
                 }
             }
         }
@@ -460,19 +460,19 @@ impl Dashboard {
                 KeyCode::Esc => {
                     self.search_active = false;
                     self.search_query.clear();
-                }
+                },
                 KeyCode::Enter => {
                     self.search_active = false;
                     // Dashboardly search filter
                     self.apply_filter();
-                }
+                },
                 KeyCode::Backspace => {
                     self.search_query.pop();
-                }
+                },
                 KeyCode::Char(c) => {
                     self.search_query.push(c);
-                }
-                _ => {}
+                },
+                _ => {},
             }
             return;
         }
@@ -481,50 +481,50 @@ impl Dashboard {
             KeyCode::Char('q') => self.should_quit = true,
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.should_quit = true;
-            }
+            },
             KeyCode::Tab => self.next_tab(),
             KeyCode::BackTab => self.previous_tab(),
             KeyCode::Char('/') => {
                 self.search_active = true;
                 self.search_query.clear();
-            }
+            },
             KeyCode::Char('t') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 // Ctrl+T - Search traces
                 if !self.search_query.is_empty() {
                     self.request_refresh(DataCommand::SearchTraces(self.search_query.clone()));
                 }
-            }
+            },
             KeyCode::Char('s') => {
                 self.sort_by = self.sort_by.next();
                 self.apply_sort();
-            }
+            },
             KeyCode::Char('r') => {
                 self.sort_desc = !self.sort_desc;
                 self.apply_sort();
-            }
+            },
             KeyCode::Char('f') => {
                 self.filter_mode = self.filter_mode.next();
                 self.apply_filter();
                 self.request_refresh(DataCommand::ApplyFilter(self.filter_mode));
-            }
+            },
             KeyCode::Char('h') | KeyCode::Char('?') => {
                 self.show_help = !self.show_help;
-            }
+            },
             KeyCode::Char('1') => {
                 self.filter_mode = FilterMode::All;
                 self.apply_filter();
                 self.request_refresh(DataCommand::ApplyFilter(self.filter_mode));
-            }
+            },
             KeyCode::Char('2') => {
                 self.filter_mode = FilterMode::ErrorsOnly;
                 self.apply_filter();
                 self.request_refresh(DataCommand::ApplyFilter(self.filter_mode));
-            }
+            },
             KeyCode::Char('3') => {
                 self.filter_mode = FilterMode::SlowOnly;
                 self.apply_filter();
                 self.request_refresh(DataCommand::ApplyFilter(self.filter_mode));
-            }
+            },
             KeyCode::Up | KeyCode::Char('k') => self.move_selection_up(),
             KeyCode::Down | KeyCode::Char('j') => self.move_selection_down(),
             KeyCode::PageUp => self.page_up(),
@@ -536,7 +536,7 @@ impl Dashboard {
                 if self.selected_tab == Tab::Services {
                     self.selected_tab = Tab::Traces;
                 }
-            }
+            },
             // Copy span ID (y key)
             KeyCode::Char('y') if self.selected_tab == Tab::Spans => {
                 if let Some(idx) = self.selected_span_index {
@@ -544,7 +544,7 @@ impl Dashboard {
                         let _ = span_details::copy_to_clipboard(span.span_id.as_str());
                     }
                 }
-            }
+            },
             // Copy trace ID (Y key)
             KeyCode::Char('Y') if self.selected_tab == Tab::Spans => {
                 if let Some(idx) = self.selected_span_index {
@@ -552,8 +552,8 @@ impl Dashboard {
                         let _ = span_details::copy_to_clipboard(span.trace_id.as_str());
                     }
                 }
-            }
-            _ => {}
+            },
+            _ => {},
         }
     }
 
@@ -585,13 +585,13 @@ impl Dashboard {
                 if selected > 0 {
                     self.service_state.select(Some(selected - 1));
                 }
-            }
+            },
             Tab::Traces => {
                 let selected = self.trace_state.selected().unwrap_or(0);
                 if selected > 0 {
                     self.trace_state.select(Some(selected - 1));
                 }
-            }
+            },
             Tab::Spans => {
                 if !self.trace_spans.is_empty() {
                     if self.selected_span_index.is_none() {
@@ -604,10 +604,10 @@ impl Dashboard {
                         }
                     }
                 }
-            }
+            },
             Tab::Map => {
                 // Map view navigation - no selection movement needed
-            }
+            },
         }
     }
 
@@ -620,14 +620,14 @@ impl Dashboard {
                 if selected < max.saturating_sub(1) {
                     self.service_state.select(Some(selected + 1));
                 }
-            }
+            },
             Tab::Traces => {
                 let max = self.traces.len();
                 let selected = self.trace_state.selected().unwrap_or(0);
                 if selected < max.saturating_sub(1) {
                     self.trace_state.select(Some(selected + 1));
                 }
-            }
+            },
             Tab::Spans => {
                 if !self.trace_spans.is_empty() {
                     let max = self.trace_spans.len();
@@ -640,10 +640,10 @@ impl Dashboard {
                         self.span_state.select(Some(0));
                     }
                 }
-            }
+            },
             Tab::Map => {
                 // Map view navigation - no selection movement needed
-            }
+            },
         }
     }
 
@@ -669,13 +669,13 @@ impl Dashboard {
                 let selected = self.service_state.selected().unwrap_or(0);
                 let new_selected = (selected + 10).min(max.saturating_sub(1));
                 self.service_state.select(Some(new_selected));
-            }
+            },
             Tab::Traces => {
                 let max = self.traces.len();
                 let selected = self.trace_state.selected().unwrap_or(0);
                 let new_selected = (selected + 10).min(max.saturating_sub(1));
                 self.trace_state.select(Some(new_selected));
-            }
+            },
             Tab::Spans => {
                 if !self.trace_spans.is_empty() {
                     let selected = self.selected_span_index.unwrap_or(0);
@@ -683,10 +683,10 @@ impl Dashboard {
                         self.selected_span_index = Some(selected - 1);
                     }
                 }
-            }
+            },
             Tab::Map => {
                 // Map view navigation - no selection movement needed
-            }
+            },
         }
     }
 
@@ -702,10 +702,10 @@ impl Dashboard {
                         self.selected_span_index = Some(selected - 1);
                     }
                 }
-            }
+            },
             Tab::Map => {
                 // Map view navigation - no selection movement needed
-            }
+            },
         }
     }
 
@@ -717,12 +717,12 @@ impl Dashboard {
                 if len > 0 {
                     self.service_state.select(Some(len - 1));
                 }
-            }
+            },
             Tab::Traces => {
                 if !self.traces.is_empty() {
                     self.trace_state.select(Some(self.traces.len() - 1));
                 }
-            }
+            },
             Tab::Spans => {
                 if !self.trace_spans.is_empty() {
                     let selected = self.selected_span_index.unwrap_or(0);
@@ -730,10 +730,10 @@ impl Dashboard {
                         self.selected_span_index = Some(selected - 1);
                     }
                 }
-            }
+            },
             Tab::Map => {
                 // Map view navigation - no selection movement needed
-            }
+            },
         }
     }
 
@@ -755,7 +755,7 @@ impl Dashboard {
                         self.request_refresh(DataCommand::LoadTracesForService(service_name));
                     }
                 }
-            }
+            },
             Tab::Traces => {
                 // Get selected trace and load its spans
                 if let Some(selected_idx) = self.trace_state.selected() {
@@ -768,13 +768,13 @@ impl Dashboard {
                         ));
                     }
                 }
-            }
+            },
             Tab::Spans => {
                 // Already in detail view - could expand/collapse span details
-            }
+            },
             Tab::Map => {
                 // Map view selection - could select services/connections
-            }
+            },
         }
     }
 
@@ -886,7 +886,7 @@ impl Dashboard {
                                 memory_mb: stats.memory_mb,
                             });
                         }
-                    }
+                    },
                     DataCommand::LoadTracesForService(service_name) => {
                         let storage_guard = storage.read().await;
                         if let Ok(traces) = storage_guard
@@ -895,19 +895,19 @@ impl Dashboard {
                         {
                             let _ = update_tx.send(DataUpdate::Traces(traces));
                         }
-                    }
+                    },
                     DataCommand::LoadSpansForTrace(trace_id) => {
                         let storage_guard = storage.read().await;
                         if let Ok(spans) = storage_guard.get_trace_spans(&trace_id).await {
                             let _ = update_tx.send(DataUpdate::Spans(spans));
                         }
-                    }
+                    },
                     DataCommand::SearchTraces(query) => {
                         let storage_guard = storage.read().await;
                         if let Ok(traces) = storage_guard.search_traces(&query, 50).await {
                             let _ = update_tx.send(DataUpdate::Traces(traces));
                         }
-                    }
+                    },
                     DataCommand::ApplyFilter(filter_mode) => {
                         let storage_guard = storage.read().await;
                         let trace_result = match filter_mode {
@@ -917,13 +917,13 @@ impl Dashboard {
                                 storage_guard
                                     .get_slow_traces(Duration::from_millis(500), 50)
                                     .await
-                            }
+                            },
                             FilterMode::Active => storage_guard.list_recent_traces(50, None).await,
                         };
                         if let Ok(traces) = trace_result {
                             let _ = update_tx.send(DataUpdate::Traces(traces));
                         }
-                    }
+                    },
                 }
             }
         }
@@ -1054,11 +1054,7 @@ fn draw_traces_view(frame: &mut Frame, app: &mut Dashboard) {
     let header_text = if !app.search_query.is_empty() {
         format!("Search: {}", app.search_query)
     } else {
-        format!(
-            "Filter: {} | Sort: {}",
-            app.filter_mode.as_str(),
-            app.sort_by.as_str()
-        )
+        format!("Filter: {} | Sort: {}", app.filter_mode.as_str(), app.sort_by.as_str())
     };
 
     let header_para = Paragraph::new(header_text)
@@ -1067,23 +1063,15 @@ fn draw_traces_view(frame: &mut Frame, app: &mut Dashboard) {
     frame.render_widget(header_para, chunks[0]);
 
     // Draw traces table
-    let header_cells = [
-        "Trace ID",
-        "Service",
-        "Operation",
-        "Spans",
-        "Duration",
-        "Status",
-        "Time",
-    ]
-    .iter()
-    .map(|h| {
-        Cell::from(*h).style(
-            Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD),
-        )
-    });
+    let header_cells = ["Trace ID", "Service", "Operation", "Spans", "Duration", "Status", "Time"]
+        .iter()
+        .map(|h| {
+            Cell::from(*h).style(
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            )
+        });
 
     let header = Row::new(header_cells).height(1).bottom_margin(1);
 
@@ -1539,10 +1527,7 @@ fn draw_empty_details_panel(frame: &mut Frame, area: Rect) {
 
 fn draw_footer(frame: &mut Frame, area: Rect, app: &Dashboard) {
     let help_text = if app.search_active {
-        format!(
-            "Search: {} | ESC: Cancel | Enter: Dashboardly",
-            app.search_query
-        )
+        format!("Search: {} | ESC: Cancel | Enter: Dashboardly", app.search_query)
     } else {
         match app.selected_tab {
             Tab::Services => {
@@ -1551,10 +1536,10 @@ fn draw_footer(frame: &mut Frame, area: Rect, app: &Dashboard) {
                     app.sort_by.as_str(),
                     app.filter_mode.as_str()
                 )
-            }
+            },
             Tab::Traces => {
                 "[q]uit [Tab]switch [↑↓]navigate [Enter]spans [/]search [f]filter".to_string()
-            }
+            },
             Tab::Spans => "[q]uit [Tab]switch [↑↓]scroll".to_string(),
             Tab::Map => "[q]uit [Tab]switch [↑↓]zoom [Enter]select".to_string(),
         }
@@ -1640,9 +1625,7 @@ fn draw_help_overlay(frame: &mut Frame) {
                 .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
         )]),
-        Line::from(vec![TextSpan::raw(
-            "  /           Search (services/traces)",
-        )]),
+        Line::from(vec![TextSpan::raw("  /           Search (services/traces)")]),
         Line::from(vec![TextSpan::raw("  s           Cycle sort mode")]),
         Line::from(vec![TextSpan::raw("  r           Reverse sort order")]),
         Line::from(vec![TextSpan::raw("  f           Cycle filter mode")]),

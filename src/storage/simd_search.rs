@@ -11,7 +11,7 @@ use std::arch::x86_64::*;
 /// parallel processing of multiple values simultaneously.
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2")]
-pub unsafe fn find_trace_id_simd(needle: u128, haystack: &[u128]) -> Option<usize> {
+unsafe fn find_trace_id_simd_internal(needle: u128, haystack: &[u128]) -> Option<usize> {
     if !is_x86_feature_detected!("avx2") {
         return find_trace_id_scalar(needle, haystack);
     }

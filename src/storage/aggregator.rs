@@ -88,10 +88,9 @@ pub async fn calculate_service_metrics(
                 };
 
                 // BLAZING FAST: Find min/max WITHOUT sorting or cloning
-                let (min_ms, max_ms) =
-                    latencies.iter().fold((u64::MAX, 0u64), |(min, max), &val| {
-                        (min.min(val), max.max(val))
-                    });
+                let (min_ms, max_ms) = latencies
+                    .iter()
+                    .fold((u64::MAX, 0u64), |(min, max), &val| (min.min(val), max.max(val)));
                 let min_duration = if latencies.is_empty() {
                     Duration::from_millis(0)
                 } else {
@@ -171,9 +170,9 @@ fn calculate_percentiles_histogram(latencies: &[u64]) -> (u64, u64, u64) {
     }
 
     // BLAZING FAST: Find min/max in single pass without panic
-    let (min_latency, max_latency) = latencies.iter().fold((u64::MAX, 0u64), |(min, max), &val| {
-        (min.min(val), max.max(val))
-    });
+    let (min_latency, max_latency) = latencies
+        .iter()
+        .fold((u64::MAX, 0u64), |(min, max), &val| (min.min(val), max.max(val)));
 
     if min_latency == max_latency {
         return (min_latency, min_latency, min_latency);

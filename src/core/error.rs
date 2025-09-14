@@ -120,11 +120,8 @@ impl UrpoError {
             Self::Timeout { .. } => true,
             Self::ChannelSend | Self::ChannelReceive => true,
             Self::Grpc(status) => {
-                matches!(
-                    status.code(),
-                    tonic::Code::Unavailable | tonic::Code::DeadlineExceeded
-                )
-            }
+                matches!(status.code(), tonic::Code::Unavailable | tonic::Code::DeadlineExceeded)
+            },
             _ => false,
         }
     }
@@ -142,7 +139,7 @@ impl UrpoError {
             Self::Io(_) => "io",
             Self::Serialization(_) | Self::SerializationError(_) | Self::Parse { .. } => {
                 "serialization"
-            }
+            },
             Self::Grpc(_) | Self::Network(_) => "network",
             Self::Join(_) => "async",
             Self::ChannelSend | Self::ChannelReceive => "channel",
@@ -177,10 +174,7 @@ mod tests {
             current: 2048,
             limit: 1024,
         };
-        assert_eq!(
-            err.to_string(),
-            "Memory limit exceeded: current 2048MB, limit 1024MB"
-        );
+        assert_eq!(err.to_string(), "Memory limit exceeded: current 2048MB, limit 1024MB");
         assert_eq!(err.category(), "resource");
     }
 }

@@ -147,16 +147,16 @@ impl StorageHealthMonitor {
             match new_status {
                 HealthStatus::Healthy => {
                     tracing::info!("Storage health recovered to HEALTHY");
-                }
+                },
                 HealthStatus::Degraded { reason } => {
                     tracing::warn!("Storage health DEGRADED: {}", reason);
-                }
+                },
                 HealthStatus::Critical { reason } => {
                     tracing::error!("Storage health CRITICAL: {}", reason);
-                }
+                },
                 HealthStatus::Failed { reason } => {
                     tracing::error!("Storage health FAILED: {}", reason);
-                }
+                },
             }
         }
 
@@ -181,12 +181,12 @@ impl StorageHealthMonitor {
                     self.reset_counters();
                     tracing::info!("Reset health counters after time window");
                 }
-            }
+            },
             HealthStatus::Critical { .. } => {
                 // Aggressive recovery: force reset
                 self.reset_counters();
                 tracing::warn!("Force reset health counters due to critical status");
-            }
+            },
             HealthStatus::Failed { .. } => {
                 // Last resort: full reset
                 self.reset_counters();
@@ -194,10 +194,10 @@ impl StorageHealthMonitor {
                     reason: "Recovering from failure",
                 };
                 tracing::error!("Attempting recovery from failed state");
-            }
+            },
             HealthStatus::Healthy => {
                 // Nothing to do
-            }
+            },
         }
     }
 
@@ -280,23 +280,23 @@ impl RecoveryCoordinator {
             RecoveryStrategy::LogAndContinue => {
                 tracing::info!("Recovery: Continuing with logging");
                 Ok(())
-            }
+            },
             RecoveryStrategy::ResetState => {
                 tracing::warn!("Recovery: Resetting internal state");
                 self.monitor.reset_counters();
                 Ok(())
-            }
+            },
             RecoveryStrategy::ReduceLoad => {
                 tracing::warn!("Recovery: Reducing load by dropping non-critical ops");
                 // In real implementation, would throttle operations
                 Ok(())
-            }
+            },
             RecoveryStrategy::FullRestart => {
                 tracing::error!("Recovery: Full restart required");
                 // In real implementation, would trigger full restart
                 self.monitor.reset_counters();
                 Ok(())
-            }
+            },
         }
     }
 
@@ -337,10 +337,7 @@ mod tests {
 
         // Should be degraded (5/105 ≈ 4.7% error rate)
         let status = monitor.check_health().await;
-        assert!(matches!(
-            status,
-            HealthStatus::Degraded { .. } | HealthStatus::Critical { .. }
-        ));
+        assert!(matches!(status, HealthStatus::Degraded { .. } | HealthStatus::Critical { .. }));
     }
 
     #[tokio::test]
