@@ -15,6 +15,8 @@ pub mod search;
 pub mod engine;
 pub mod archive;
 pub mod archive_manager;
+// pub mod async_archive;
+// pub mod async_archive_reader;
 pub mod memory;
 pub mod manager;
 pub mod types;
@@ -22,6 +24,7 @@ pub mod backend;
 pub mod span_pool;
 pub mod buffered;
 pub mod health;
+pub mod ultra_fast;
 
 // Re-export commonly used types
 pub use fake_spans::SpanGenerator;
@@ -32,6 +35,8 @@ pub use types::{TraceInfo, StorageStats, StorageHealth, CleanupConfig};
 pub use backend::StorageBackend;
 pub use span_pool::{SpanPool, PooledSpan, GLOBAL_SPAN_POOL};
 pub use buffered::{BufferedStorage, BufferConfig, BufferStats};
+// pub use async_archive::{AsyncArchiveWriter, FlushTask};
+// pub use async_archive_reader::{AsyncArchiveReader, MappedArchive, ArchiveStats};
 
 // UnifiedStorage is defined below
 
