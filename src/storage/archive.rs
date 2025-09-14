@@ -6,7 +6,7 @@
 //! - LZ4 compression with zero-copy deserialization
 //! - Roaring bitmaps for efficient trace ID storage
 
-use crate::core::{Result, UrpoError, Span, SpanId, SpanKind, TraceId, ServiceName};
+use crate::core::{Result, UrpoError, Span, TraceId, ServiceName};
 use ahash::{AHashMap, AHashSet};
 use chrono::{DateTime, Utc};
 use lz4::EncoderBuilder;
@@ -641,8 +641,8 @@ pub struct ArchiveStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::{SpanStatus};
-    use std::time::Duration;
+    use crate::core::{SpanStatus, TraceId, SpanId, SpanKind};
+    use std::time::{Duration, UNIX_EPOCH};
     use tempfile::TempDir;
 
     fn create_test_span(trace_id: &str, service: &str, start_offset_secs: u64) -> Span {
