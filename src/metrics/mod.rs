@@ -6,6 +6,7 @@
 //! - <1ms service health queries
 
 pub mod ring_buffer;
+pub mod storage;
 pub mod string_pool;
 pub mod types;
 
