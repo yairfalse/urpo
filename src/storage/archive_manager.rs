@@ -146,7 +146,7 @@ impl ArchiveManager {
         let (archival_tx, _archival_rx) = mpsc::unbounded_channel();
 
         let manager = Self {
-            config: config.clone(),
+            config,
             writer: Arc::new(RwLock::new(None)),
             readers: Arc::new(RwLock::new(BTreeMap::new())),
             bg_handle: None,

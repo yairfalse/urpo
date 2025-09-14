@@ -5,6 +5,7 @@
 
 pub mod dashboard;
 mod fake_data;
+pub mod service_health;
 mod span_details;
 mod widgets;
 
