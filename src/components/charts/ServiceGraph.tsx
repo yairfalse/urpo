@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo, memo } from 'react';
 import * as d3 from 'd3';
 import { Activity, AlertCircle, CheckCircle, Clock, Network } from 'lucide-react';
 import { ServiceMetrics, TraceInfo } from '../../types';
@@ -45,7 +45,7 @@ const getServiceIcon = (type: ServiceNode['type']): string => {
   }
 };
 
-export default function ServiceGraph({ services, traces }: ServiceGraphProps) {
+const ServiceGraphImpl = ({ services, traces }: ServiceGraphProps) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
@@ -98,18 +98,18 @@ export default function ServiceGraph({ services, traces }: ServiceGraphProps) {
 
   // PERFORMANCE: Stable drag handlers with proper typing
   const dragHandlers = useMemo(() => {
-    const dragstarted = (event: d3.D3DragEvent<SVGGElement, ServiceNode, unknown>, d: ServiceNode & d3.SimulationNodeDatum, simulation: d3.Simulation<ServiceNode, undefined>) => {
+    const dragstarted = (event: any, d: any, simulation: any) => {
       if (!event.active) simulation.alphaTarget(0.3).restart();
       d.fx = d.x;
       d.fy = d.y;
     };
 
-    const dragged = (event: d3.D3DragEvent<SVGGElement, ServiceNode, unknown>, d: ServiceNode & d3.SimulationNodeDatum) => {
+    const dragged = (event: any, d: any) => {
       d.fx = event.x;
       d.fy = event.y;
     };
 
-    const dragended = (event: d3.D3DragEvent<SVGGElement, ServiceNode, unknown>, d: ServiceNode & d3.SimulationNodeDatum, simulation: d3.Simulation<ServiceNode, undefined>) => {
+    const dragended = (event: any, d: any, simulation: any) => {
       if (!event.active) simulation.alphaTarget(0);
       d.fx = null;
       d.fy = null;
@@ -146,23 +146,23 @@ export default function ServiceGraph({ services, traces }: ServiceGraphProps) {
 
     // Create container with zoom
     const g = svg.append('g');
-    const zoom = d3.zoom()
+    const zoom = (d3 as any).zoom()
       .scaleExtent([0.5, 3])
-      .on('zoom', (event) => {
+      .on('zoom', (event: any) => {
         g.attr('transform', event.transform);
       });
 
-    svg.call(zoom as any);
+    svg.call(zoom);
 
     // Create optimized force simulation with proper types
-    const simulation = d3.forceSimulation<ServiceNode>(graphData.nodes)
-      .force('link', d3.forceLink<ServiceNode, ServiceLink>(graphData.links)
-        .id((d) => d.id)
+    const simulation = (d3 as any).forceSimulation(graphData.nodes)
+      .force('link', (d3 as any).forceLink(graphData.links)
+        .id((d: any) => d.id)
         .distance(150)
         .strength(0.5))
-      .force('charge', d3.forceManyBody<ServiceNode>().strength(-500))
-      .force('center', d3.forceCenter(width / 2, height / 2))
-      .force('collision', d3.forceCollide<ServiceNode>().radius(45));
+      .force('charge', (d3 as any).forceManyBody().strength(-500))
+      .force('center', (d3 as any).forceCenter(width / 2, height / 2))
+      .force('collision', (d3 as any).forceCollide().radius(45));
 
     // Arrow markers
     const defs = svg.append('defs');
@@ -203,13 +203,13 @@ export default function ServiceGraph({ services, traces }: ServiceGraphProps) {
       .data(graphData.nodes)
       .enter().append('g')
       .attr('cursor', 'pointer')
-      .on('click', (event, d) => setSelectedNode(d.id))
-      .on('mouseenter', (event, d) => setHoveredNode(d.id))
+      .on('click', (_event: any, d: any) => setSelectedNode(d.id))
+      .on('mouseenter', (_event: any, d: any) => setHoveredNode(d.id))
       .on('mouseleave', () => setHoveredNode(null))
-      .call(d3.drag()
-        .on('start', (event, d) => dragHandlers.dragstarted(event, d, simulation))
+      .call((d3 as any).drag()
+        .on('start', (event: any, d: any) => dragHandlers.dragstarted(event, d, simulation))
         .on('drag', dragHandlers.dragged)
-        .on('end', (event, d) => dragHandlers.dragended(event, d, simulation)) as any);
+        .on('end', (event: any, d: any) => dragHandlers.dragended(event, d, simulation)));
 
     // Node circles
     node.append('circle')
@@ -238,7 +238,7 @@ export default function ServiceGraph({ services, traces }: ServiceGraphProps) {
       .text(d => d.name);
 
     // Performance metrics (show on hover)
-    const hoverText = node.append('text')
+    node.append('text')
       .attr('x', 0)
       .attr('y', d => 50 + Math.min(20, d.requestRate / 100))
       .attr('text-anchor', 'middle')
@@ -250,12 +250,12 @@ export default function ServiceGraph({ services, traces }: ServiceGraphProps) {
     // Simulation tick handler with proper types
     simulation.on('tick', () => {
       link
-        .attr('x1', (d) => (d.source as ServiceNode & d3.SimulationNodeDatum).x || 0)
-        .attr('y1', (d) => (d.source as ServiceNode & d3.SimulationNodeDatum).y || 0)
-        .attr('x2', (d) => (d.target as ServiceNode & d3.SimulationNodeDatum).x || 0)
-        .attr('y2', (d) => (d.target as ServiceNode & d3.SimulationNodeDatum).y || 0);
+        .attr('x1', (d: any) => d.source.x || 0)
+        .attr('y1', (d: any) => d.source.y || 0)
+        .attr('x2', (d: any) => d.target.x || 0)
+        .attr('y2', (d: any) => d.target.y || 0);
 
-      node.attr('transform', (d) => `translate(${d.x || 0},${d.y || 0})`);
+      node.attr('transform', (d: any) => `translate(${d.x || 0},${d.y || 0})`);
     });
 
     // CRITICAL: Proper cleanup to prevent memory leaks
@@ -273,7 +273,7 @@ export default function ServiceGraph({ services, traces }: ServiceGraphProps) {
       .selectAll('.nodes text:last-child')
       .transition()
       .duration(150)
-      .attr('opacity', (d: ServiceNode) => hoveredNode === d.id ? 1 : 0);
+      .attr('opacity', (d: any) => hoveredNode === d.id ? 1 : 0);
   }, [hoveredNode]);
 
   // PERFORMANCE: Memoize selected service lookup
@@ -386,4 +386,7 @@ export default function ServiceGraph({ services, traces }: ServiceGraphProps) {
       </div>
     </div>
   );
-}
+};
+
+export const ServiceGraph = memo(ServiceGraphImpl);
+ServiceGraph.displayName = 'ServiceGraph';

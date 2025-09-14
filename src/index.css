@@ -17,12 +17,7 @@
   backface-visibility: hidden;
   perspective: 1000px;
   
-  /* Disable animations if user prefers reduced motion */
-  @media (prefers-reduced-motion: reduce) {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
+  /* No animations per user request */
 }
 
 /* CLEAN PROFESSIONAL AESTHETICS */
@@ -78,7 +73,7 @@
   ::-webkit-scrollbar-thumb {
     background: #D1D5DB;
     border-radius: 3px;
-    transition: background 0.2s ease;
+    /* No transitions */
   }
 
   ::-webkit-scrollbar-thumb:hover {
@@ -100,7 +95,7 @@
     box-shadow: 
       0 1px 3px 0 rgba(0, 0, 0, 0.1),
       0 1px 2px 0 rgba(0, 0, 0, 0.06);
-    transition: all 0.15s ease;
+    /* No transitions */
   }
 
   .clean-card:hover {
@@ -118,18 +113,18 @@
   /* Clean professional button */
   .clean-button {
     @apply relative px-4 py-2 bg-surface-50 border border-surface-300 rounded-md text-text-700;
-    transition: all 0.15s ease;
+    /* No transitions */
     
     &:hover {
       @apply bg-surface-100 border-surface-300 text-text-700;
-      transform: translateY(-1px);
+      /* No transform effects */
       box-shadow: 
         0 4px 6px -1px rgba(0, 0, 0, 0.1),
         0 2px 4px -1px rgba(0, 0, 0, 0.06);
     }
 
     &:active {
-      transform: translateY(0);
+      /* No transform effects */
     }
 
     &.active {
@@ -148,7 +143,7 @@
     color: var(--text-primary);
     font-family: 'JetBrains Mono', monospace;
     font-weight: 400;
-    transition: all 0.15s ease;
+    /* No transitions */
     
     &:focus {
       outline: none;
@@ -191,7 +186,7 @@
     }
 
     tbody tr {
-      transition: background 0.1s ease;
+      /* No transitions */
       
       &:hover {
         background: rgba(107, 114, 128, 0.05);
@@ -223,27 +218,11 @@
     }
   }
 
-  /* Micro-animations for instant feedback */
-  .micro-interaction {
-    transition: all 0.1s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-    
-    &:hover {
-      transform: scale(1.02);
-    }
-    
-    &:active {
-      transform: scale(0.98);
-    }
-  }
+  /* No micro-interactions - removed per user request */
 
-  /* Loading shimmer effect */
+  /* No shimmer effects - removed per user request */
   .clean-shimmer {
-    background: linear-gradient(90deg, 
-      rgba(107, 114, 128, 0.05) 25%, 
-      rgba(107, 114, 128, 0.1) 50%, 
-      rgba(107, 114, 128, 0.05) 75%);
-    background-size: 200% 100%;
-    animation: clean-shine 1.5s ease-in-out infinite;
+    background: rgba(107, 114, 128, 0.05);
   }
 }
 
@@ -260,10 +239,7 @@
     will-change: transform, opacity;
   }
 
-  /* Smooth interactions */
-  .smooth-60fps {
-    transition: all 16.67ms ease; /* 60fps = 16.67ms per frame */
-  }
+  /* No smooth transitions - removed per user request */
 
   /* Text selection override */
   .text-selectable {

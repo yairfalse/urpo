@@ -52,7 +52,7 @@ const ServiceHealthDashboard = memo(({ services }: Props) => {
 
   if (services.length === 0) {
     return (
-      <div className="clean-card p-8 text-center animate-scale-in">
+      <div className="clean-card p-8 text-center ">
         <div className="w-12 h-12 mx-auto mb-4 rounded-lg bg-surface-100 flex items-center justify-center">
           <Network className="w-6 h-6 text-text-500" />
         </div>
@@ -61,7 +61,7 @@ const ServiceHealthDashboard = memo(({ services }: Props) => {
           Waiting for OpenTelemetry spans
         </p>
         <div className="mt-4 h-1 bg-surface-200 rounded-full overflow-hidden">
-          <div className="h-full bg-text-700 animate-pulse-subtle w-2/3"></div>
+          <div className="h-full bg-text-700  w-2/3"></div>
         </div>
       </div>
     );
@@ -96,7 +96,7 @@ const ServiceHealthDashboard = memo(({ services }: Props) => {
           return (
             <div
               key={service.name}
-              className="clean-card p-4 micro-interaction animate-slide-up"
+              className="clean-card p-4 micro-interaction "
               style={{ animationDelay: `${index * 50}ms` }}
             >
               {/* Service Header with Professional Status */}
@@ -172,7 +172,7 @@ const ServiceHealthDashboard = memo(({ services }: Props) => {
                 {/* Professional Progress Bar */}
                 <div className="h-1 bg-surface-200 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-text-700 transition-all duration-300 ease-out"
+                    className="h-full bg-text-700   ease-out"
                     style={{
                       width: `${Math.min((service.active_spans / 100) * 100, 100)}%`,
                     }}
@@ -186,7 +186,7 @@ const ServiceHealthDashboard = memo(({ services }: Props) => {
       </div>
 
       {/* Professional Summary Stats */}
-      <div className="clean-card p-6 animate-slide-up" style={{ animationDelay: '300ms' }}>
+      <div className="clean-card p-6 " style={{ animationDelay: '300ms' }}>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-display font-bold text-text-900">System Overview</h3>
           <div className="status-indicator healthy"></div>
@@ -241,7 +241,7 @@ const ServiceHealthDashboard = memo(({ services }: Props) => {
         {/* Professional Performance Indicator */}
         <div className="mt-6 pt-4 border-t border-surface-300">
           <div className="flex items-center justify-center gap-2 text-xs font-mono">
-            <div className="status-indicator info animate-pulse-subtle"></div>
+            <div className="status-indicator info "></div>
             <span className="text-text-500">Real-time data • Sub-second updates</span>
           </div>
         </div>
@@ -252,4 +252,4 @@ const ServiceHealthDashboard = memo(({ services }: Props) => {
 
 ServiceHealthDashboard.displayName = 'ServiceHealthDashboard';
 
-export default ServiceHealthDashboard;
+export { ServiceHealthDashboard };

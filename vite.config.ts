@@ -23,7 +23,7 @@ export default defineConfig({
         // Optimize chunking for performance
         manualChunks: {
           vendor: ['react', 'react-dom'],
-          charts: ['recharts'],
+          d3: ['d3'],
         },
       },
     },

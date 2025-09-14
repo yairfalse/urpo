@@ -1,5 +1,5 @@
 // MINIMAP PRO - MAXIMUM INFORMATION DENSITY
-import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
+import { useRef, useEffect, useCallback, useState, useMemo, memo } from 'react';
 
 interface MiniMapProProps {
   traces: any[];
@@ -10,14 +10,13 @@ interface MiniMapProProps {
   height?: number;
 }
 
-const MiniMapPro: React.FC<MiniMapProProps> = ({
+const MiniMapProImpl = ({
   traces,
-  spans,
   currentView,
   onNavigate,
   width = 80,
   height = 600
-}) => {
+}: MiniMapProProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [hoveredSection, setHoveredSection] = useState<number>(-1);
   
@@ -335,4 +334,5 @@ const MiniMapPro: React.FC<MiniMapProProps> = ({
   );
 };
 
-export default MiniMapPro;
+export const MiniMapPro = memo(MiniMapProImpl);
+MiniMapPro.displayName = 'MiniMapPro';

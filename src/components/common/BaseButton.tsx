@@ -23,7 +23,7 @@ export const BaseButton = ({
   icon
 }: BaseButtonProps) => {
   const baseClasses = clsx(
-    'inline-flex items-center justify-center font-medium transition-all rounded-lg',
+    'inline-flex items-center justify-center font-medium  rounded-lg',
     {
       // Size variants
       'px-2 py-1 text-xs gap-1': size === 'sm',

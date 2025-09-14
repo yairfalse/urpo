@@ -100,7 +100,7 @@ const ServiceMap = memo(({ className = '' }: ServiceMapProps) => {
   if (loading) {
     return (
       <div className={`clean-card p-6 ${className}`}>
-        <div className="animate-pulse">
+        <div className="">
           <div className="h-4 bg-surface-200 rounded w-48 mb-4"></div>
           <div className="space-y-3">
             <div className="h-12 bg-surface-200 rounded"></div>
@@ -229,7 +229,7 @@ const TopologyView = memo(({
                   <button
                     key={node.name}
                     onClick={() => onSelectService(node.name)}
-                    className={`p-3 rounded-lg border-2 transition-all hover:scale-105 ${
+                    className={`p-3 rounded-lg border-2  hover:scale-105 ${
                       selectedService === node.name 
                         ? 'ring-2 ring-text-700' 
                         : ''
@@ -449,4 +449,4 @@ function generateMockServiceMap(): ServiceMapType {
   };
 }
 
-export default ServiceMap;
+export { ServiceMap };

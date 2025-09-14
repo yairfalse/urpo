@@ -21,7 +21,7 @@ export const BaseCard = ({
   const baseClasses = clsx(
     'bg-surface-50 border border-surface-300 rounded-lg',
     {
-      'hover:border-surface-400 hover:shadow-md transition-all cursor-pointer': hover || onClick,
+      'hover:border-surface-400 hover:shadow-md  cursor-pointer': hover || onClick,
       'p-6': !noPadding,
       'shadow-sm': variant === 'default',
       'shadow-md': variant === 'elevated',
