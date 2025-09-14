@@ -48,10 +48,7 @@ impl RetryPolicy for DefaultRetryPolicy {
 }
 
 /// Execute an operation with retry logic
-pub async fn retry_with_config<F, Fut, T>(
-    config: RetryConfig,
-    operation: F,
-) -> Result<T>
+pub async fn retry_with_config<F, Fut, T>(config: RetryConfig, operation: F) -> Result<T>
 where
     F: Fn() -> Fut,
     Fut: Future<Output = Result<T>>,
@@ -61,23 +58,18 @@ where
 
     loop {
         attempt += 1;
-        
+
         match operation().await {
             Ok(result) => return Ok(result),
             Err(error) => {
                 if !error.is_recoverable() || attempt >= config.max_attempts {
-                    tracing::error!(
-                        "Operation failed after {} attempts: {}",
-                        attempt, error
-                    );
+                    tracing::error!("Operation failed after {} attempts: {}", attempt, error);
                     return Err(error);
                 }
 
                 // Calculate next backoff duration
                 if attempt > 1 {
-                    backoff = Duration::from_secs_f64(
-                        backoff.as_secs_f64() * config.multiplier
-                    );
+                    backoff = Duration::from_secs_f64(backoff.as_secs_f64() * config.multiplier);
                     if backoff > config.max_backoff {
                         backoff = config.max_backoff;
                     }
@@ -93,7 +85,9 @@ where
 
                 tracing::warn!(
                     "Attempt {} failed: {}. Retrying in {:?}...",
-                    attempt, error, actual_backoff
+                    attempt,
+                    error,
+                    actual_backoff
                 );
 
                 sleep(actual_backoff).await;
@@ -184,7 +178,7 @@ impl CircuitBreaker {
         match operation().await {
             Ok(result) => {
                 self.successes.fetch_add(1, Ordering::Relaxed);
-                
+
                 if current_state == CircuitState::HalfOpen {
                     let successes = self.successes.load(Ordering::Relaxed);
                     if successes >= self.success_threshold {
@@ -197,12 +191,12 @@ impl CircuitBreaker {
                         }
                     }
                 }
-                
+
                 Ok(result)
             }
             Err(error) => {
                 self.failures.fetch_add(1, Ordering::Relaxed);
-                
+
                 let failures = self.failures.load(Ordering::Relaxed);
                 if failures >= self.failure_threshold {
                     let mut state = self.state.write().await;
@@ -214,7 +208,7 @@ impl CircuitBreaker {
                         tracing::error!("Circuit breaker opened after {} failures", failures);
                     }
                 }
-                
+
                 Err(error)
             }
         }
@@ -255,7 +249,7 @@ impl RateLimiter {
         let now = std::time::Instant::now();
         let elapsed = now.duration_since(*last_refill).as_secs_f64();
         let tokens_to_add = elapsed * self.max_rps;
-        
+
         *tokens = (*tokens + tokens_to_add).min(self.max_rps);
         *last_refill = now;
 
@@ -285,12 +279,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_retry_success() {
-        use std::sync::Arc;
         use std::sync::atomic::{AtomicU32, Ordering};
-        
+        use std::sync::Arc;
+
         let attempts = Arc::new(AtomicU32::new(0));
         let attempts_clone = attempts.clone();
-        
+
         let result = retry(move || {
             let attempts = attempts_clone.clone();
             async move {
@@ -310,10 +304,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_retry_non_recoverable() {
-        let result: Result<i32> = retry(|| async {
-            Err(UrpoError::config("permanent failure"))
-        })
-        .await;
+        let result: Result<i32> =
+            retry(|| async { Err(UrpoError::config("permanent failure")) }).await;
 
         assert!(result.is_err());
     }
@@ -323,31 +315,27 @@ mod tests {
         let cb = CircuitBreaker::new(2, 2, Duration::from_millis(100));
 
         // First failure
-        let _: Result<i32> = cb.call(|| async {
-            Err(UrpoError::network("failure 1"))
-        }).await;
+        let _: Result<i32> = cb
+            .call(|| async { Err(UrpoError::network("failure 1")) })
+            .await;
 
         // Second failure - should open circuit
-        let _: Result<i32> = cb.call(|| async {
-            Err(UrpoError::network("failure 2"))
-        }).await;
+        let _: Result<i32> = cb
+            .call(|| async { Err(UrpoError::network("failure 2")) })
+            .await;
 
         // Circuit should be open
         assert_eq!(cb.state().await, CircuitState::Open);
 
         // Should fail immediately
-        let result = cb.call(|| async {
-            Ok(42)
-        }).await;
+        let result = cb.call(|| async { Ok(42) }).await;
         assert!(result.is_err());
 
         // Wait for timeout
         tokio::time::sleep(Duration::from_millis(150)).await;
 
         // Should transition to half-open and allow test
-        let result = cb.call(|| async {
-            Ok(42)
-        }).await;
+        let result = cb.call(|| async { Ok(42) }).await;
         assert!(result.is_ok());
     }
 

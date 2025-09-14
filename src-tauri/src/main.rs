@@ -7,10 +7,17 @@
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
+use atomic_float::AtomicF64 as AtomicFloat;
+use dashmap::DashMap;
+use once_cell::sync::Lazy;
+use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::sync::atomic::{AtomicF64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tauri::State;
+use sysinfo::{CpuExt, System, SystemExt};
+use tauri::{AppHandle, Manager, State, Window};
 use tokio::sync::RwLock;
+
 use urpo_lib::{
     core::{Config, ConfigBuilder, ServiceName, TraceId},
     monitoring::Monitor,
@@ -18,6 +25,172 @@ use urpo_lib::{
     service_map::ServiceMapBuilder,
     storage::{StorageBackend, StorageManager},
 };
+
+// Global telemetry system for ultra-high performance monitoring
+static TELEMETRY: Lazy<TelemetryState> = Lazy::new(|| TelemetryState::new());
+
+struct TelemetryState {
+    command_latencies: DashMap<String, AtomicFloat>,
+    heap_usage_mb: AtomicFloat,
+    cpu_usage_percent: AtomicFloat,
+    memory_pressure: AtomicFloat,
+    cold_fetch_latency_ms: AtomicFloat,
+    tier_status: DashMap<String, String>,
+    free_space_mb: AtomicFloat,
+    system_info: tokio::sync::RwLock<Option<System>>,
+}
+
+impl TelemetryState {
+    fn new() -> Self {
+        Self {
+            command_latencies: DashMap::new(),
+            heap_usage_mb: AtomicFloat::new(0.0),
+            cpu_usage_percent: AtomicFloat::new(0.0),
+            memory_pressure: AtomicFloat::new(0.0),
+            cold_fetch_latency_ms: AtomicFloat::new(0.0),
+            tier_status: DashMap::new(),
+            free_space_mb: AtomicFloat::new(0.0),
+            system_info: tokio::sync::RwLock::new(None),
+        }
+    }
+
+    /// Record command latency with exponential moving average for ultra-low latency
+    #[inline(always)]
+    fn record_command_latency(&self, command: &str, latency_ms: f64) {
+        if let Some(existing) = self.command_latencies.get(command) {
+            let current = existing.load(Ordering::Relaxed);
+            let alpha = 0.1; // Exponential moving average
+            let new_value = alpha * latency_ms + (1.0 - alpha) * current;
+            existing.store(new_value, Ordering::Relaxed);
+        } else {
+            self.command_latencies
+                .insert(command.to_string(), AtomicFloat::new(latency_ms));
+        }
+    }
+
+    /// Update system metrics with minimal overhead (cached updates)
+    async fn update_system_metrics(&self) {
+        let mut system_guard = self.system_info.write().await;
+        if system_guard.is_none() {
+            *system_guard = Some(System::new_all());
+        }
+
+        if let Some(ref mut system) = system_guard.as_mut() {
+            system.refresh_memory();
+            system.refresh_cpu_all();
+
+            // Memory pressure calculation (0.0 = no pressure, 1.0 = maximum pressure)
+            let used_memory = system.used_memory() as f64;
+            let total_memory = system.total_memory() as f64;
+            let pressure = used_memory / total_memory;
+            self.memory_pressure.store(pressure, Ordering::Relaxed);
+
+            // Heap usage in MB
+            let heap_mb = used_memory / (1024.0 * 1024.0);
+            self.heap_usage_mb.store(heap_mb, Ordering::Relaxed);
+
+            // CPU usage percentage
+            let cpu_usage = system.cpus().iter().map(|cpu| cpu.cpu_usage()).sum::<f32>()
+                / system.cpus().len() as f32;
+            self.cpu_usage_percent
+                .store(cpu_usage as f64, Ordering::Relaxed);
+
+            // Available disk space (cold storage considerations)
+            let available_space = system.available_memory() as f64 / (1024.0 * 1024.0);
+            self.free_space_mb.store(available_space, Ordering::Relaxed);
+        }
+    }
+}
+
+/// Panic isolation and performance monitoring macro for production-grade robustness
+macro_rules! safe_command {
+    ($command_name:expr, $body:expr) => {{
+        let start = Instant::now();
+
+        let result = match catch_unwind(AssertUnwindSafe(|| $body)) {
+            Ok(future) => future.await,
+            Err(panic_info) => {
+                let panic_msg = if let Some(s) = panic_info.downcast_ref::<&str>() {
+                    s.to_string()
+                } else if let Some(s) = panic_info.downcast_ref::<String>() {
+                    s.clone()
+                } else {
+                    "Unknown panic".to_string()
+                };
+
+                tracing::error!("Command {} panicked: {}", $command_name, panic_msg);
+                Err(format!(
+                    "{} failed due to internal error: {}",
+                    $command_name, panic_msg
+                ))
+            }
+        };
+
+        let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
+        TELEMETRY.record_command_latency($command_name, latency_ms);
+
+        // Log performance warnings for GUI snappiness (<16ms target)
+        if latency_ms > 16.0 {
+            tracing::warn!(
+                "Command {} exceeded 16ms GUI target: {:.2}ms",
+                $command_name,
+                latency_ms
+            );
+        }
+
+        result
+    }};
+}
+
+/// Background telemetry task that streams performance data to the frontend
+async fn background_telemetry_task(window: Window) {
+    let mut interval = tokio::time::interval(Duration::from_secs(5));
+
+    loop {
+        interval.tick().await;
+
+        // Update system metrics with minimal overhead (cached updates)
+        TELEMETRY.update_system_metrics().await;
+
+        // Collect telemetry data for streaming
+        let telemetry_data = serde_json::json!({
+            "heap_usage_mb": TELEMETRY.heap_usage_mb.load(Ordering::Relaxed),
+            "cpu_usage_percent": TELEMETRY.cpu_usage_percent.load(Ordering::Relaxed),
+            "memory_pressure": TELEMETRY.memory_pressure.load(Ordering::Relaxed),
+            "cold_fetch_latency_ms": TELEMETRY.cold_fetch_latency_ms.load(Ordering::Relaxed),
+            "free_space_mb": TELEMETRY.free_space_mb.load(Ordering::Relaxed),
+            "command_latencies": TELEMETRY.command_latencies
+                .iter()
+                .map(|entry| (entry.key().clone(), entry.value().load(Ordering::Relaxed)))
+                .collect::<std::collections::HashMap<_, _>>(),
+            "tier_status": TELEMETRY.tier_status
+                .iter()
+                .map(|entry| (entry.key().clone(), entry.value().clone()))
+                .collect::<std::collections::HashMap<_, _>>(),
+            "timestamp": std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+        });
+
+        // Stream telemetry to frontend (non-blocking)
+        let _ = window.emit("telemetry-update", &telemetry_data);
+
+        // Log performance warnings for debugging
+        let memory_pressure = TELEMETRY.memory_pressure.load(Ordering::Relaxed);
+        if memory_pressure > 0.9 {
+            tracing::warn!(
+                "High memory pressure detected: {:.1}%",
+                memory_pressure * 100.0
+            );
+        }
+
+        let cold_fetch_latency = TELEMETRY.cold_fetch_latency_ms.load(Ordering::Relaxed);
+        if cold_fetch_latency > 100.0 {
+            tracing::warn!("Slow cold fetch detected: {:.1}ms", cold_fetch_latency);
+        }
+    }
+}
 
 struct AppState {
     storage: Arc<dyn StorageBackend>,
@@ -58,6 +231,21 @@ struct SystemMetrics {
     spans_per_second: f64,
     total_spans: usize,
     uptime_seconds: u64,
+
+    // Advanced performance metrics
+    heap_usage_mb: f64,
+    memory_pressure: f64, // 0.0-1.0 scale
+    cold_fetch_latency_ms: f64,
+    command_latencies: std::collections::HashMap<String, f64>,
+    free_space_mb: f64,
+    tier_health: Vec<TierHealthInfo>,
+}
+
+#[derive(serde::Serialize)]
+struct TierHealthInfo {
+    tier: String,
+    status: String,
+    health_score: f64, // 0.0-1.0 where 1.0 is perfect health
 }
 
 #[derive(serde::Serialize)]
@@ -116,7 +304,7 @@ async fn get_service_metrics(state: State<'_, AppState>) -> Result<Vec<ServiceMe
 
     // Pre-allocate exact capacity for zero reallocation
     let mut result = Vec::with_capacity(metrics.len());
-    
+
     for metric in metrics {
         result.push(ServiceMetrics {
             name: metric.name.to_string(),
@@ -149,7 +337,7 @@ async fn get_service_metrics_batch(
         .map_err(|e| e.to_string())?;
 
     let mut result = Vec::with_capacity(service_names.len());
-    
+
     for name in service_names {
         if let Some(metric) = metrics.iter().find(|m| m.name.as_str() == name) {
             result.push(ServiceMetrics {
@@ -185,7 +373,7 @@ async fn list_recent_traces(
         .map_err(|e| e.to_string())?;
 
     let mut result = Vec::with_capacity(traces.len());
-    
+
     for trace in traces {
         result.push(TraceInfo {
             trace_id: trace.trace_id.to_string(),
@@ -218,7 +406,7 @@ async fn get_error_traces(
         .map_err(|e| e.to_string())?;
 
     let mut result = Vec::with_capacity(traces.len());
-    
+
     for trace in traces {
         result.push(TraceInfo {
             trace_id: trace.trace_id.to_string(),
@@ -245,7 +433,7 @@ async fn get_trace_spans(
     trace_id: String,
 ) -> Result<Vec<serde_json::Value>, String> {
     let trace_id = TraceId::new(trace_id).map_err(|e| e.to_string())?;
-    
+
     let spans = state
         .storage
         .get_trace_spans(&trace_id)
@@ -253,7 +441,7 @@ async fn get_trace_spans(
         .map_err(|e| e.to_string())?;
 
     let mut result = Vec::with_capacity(spans.len());
-    
+
     for span in spans {
         result.push(serde_json::to_value(span).map_err(|e| e.to_string())?);
     }
@@ -274,7 +462,7 @@ async fn search_traces(
         .map_err(|e| e.to_string())?;
 
     let mut result = Vec::with_capacity(traces.len());
-    
+
     for trace in traces {
         result.push(TraceInfo {
             trace_id: trace.trace_id.to_string(),
@@ -297,78 +485,170 @@ async fn search_traces(
 
 #[tauri::command]
 async fn get_system_metrics(state: State<'_, AppState>) -> Result<SystemMetrics, String> {
-    // Get metrics from monitor
-    let system_metrics = state.monitor.get_metrics().await;
-    
-    // Calculate aggregate stats from resource metrics
-    let total_request_rate = system_metrics.performance.spans_per_second as f64;
-    
-    let total_spans = state
-        .storage
-        .get_span_count()
-        .await
-        .map_err(|e| e.to_string())?;
-    
-    let uptime = state.startup_time.elapsed().as_secs();
+    safe_command!("get_system_metrics", async {
+        // Update telemetry system metrics (background task with caching)
+        TELEMETRY.update_system_metrics().await;
 
-    // Get actual resource metrics
-    Ok(SystemMetrics {
-        memory_usage_mb: system_metrics.resources.memory_mb,
-        cpu_usage_percent: system_metrics.resources.cpu_percent,
-        spans_per_second: total_request_rate,
-        total_spans,
-        uptime_seconds: uptime,
+        // Get metrics from monitor
+        let system_metrics = state.monitor.get_metrics().await;
+
+        // Calculate aggregate stats from resource metrics
+        let total_request_rate = system_metrics.performance.spans_per_second as f64;
+
+        let total_spans = state
+            .storage
+            .get_span_count()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        let uptime = state.startup_time.elapsed().as_secs();
+
+        // Collect command latencies for advanced dashboard
+        let command_latencies: std::collections::HashMap<String, f64> = TELEMETRY
+            .command_latencies
+            .iter()
+            .map(|entry| (entry.key().clone(), entry.value().load(Ordering::Relaxed)))
+            .collect();
+
+        // Build tier health info
+        let tier_health = vec![
+            TierHealthInfo {
+                tier: "receiver".to_string(),
+                status: if system_metrics.receiver.grpc_healthy {
+                    "healthy"
+                } else {
+                    "stopped"
+                }
+                .to_string(),
+                health_score: if system_metrics.receiver.grpc_healthy {
+                    1.0
+                } else {
+                    0.0
+                },
+            },
+            TierHealthInfo {
+                tier: "storage".to_string(),
+                status: "healthy".to_string(),
+                health_score: 1.0, // TODO: Add storage health metrics
+            },
+            TierHealthInfo {
+                tier: "application".to_string(),
+                status: "running".to_string(),
+                health_score: 1.0,
+            },
+        ];
+
+        // Get actual resource metrics with enhanced telemetry
+        Ok(SystemMetrics {
+            memory_usage_mb: system_metrics.resources.memory_mb,
+            cpu_usage_percent: system_metrics.resources.cpu_percent,
+            spans_per_second: total_request_rate,
+            total_spans,
+            uptime_seconds: uptime,
+
+            // Advanced performance telemetry
+            heap_usage_mb: TELEMETRY.heap_usage_mb.load(Ordering::Relaxed),
+            memory_pressure: TELEMETRY.memory_pressure.load(Ordering::Relaxed),
+            cold_fetch_latency_ms: TELEMETRY.cold_fetch_latency_ms.load(Ordering::Relaxed),
+            command_latencies,
+            free_space_mb: TELEMETRY.free_space_mb.load(Ordering::Relaxed),
+            tier_health,
+        })
     })
 }
 
-// Stream trace data for large datasets
+// Stream trace data for large datasets with adaptive performance
 #[tauri::command]
 async fn stream_trace_data(
     window: tauri::Window,
     state: State<'_, AppState>,
     trace_id: String,
 ) -> Result<(), String> {
-    let trace_id = TraceId::new(trace_id).map_err(|e| e.to_string())?;
-    
-    let spans = state
-        .storage
-        .get_trace_spans(&trace_id)
+    safe_command!("stream_trace_data", async {
+        let trace_id = TraceId::new(trace_id).map_err(|e| e.to_string())?;
+
+        // Use spawn_blocking for potentially slow storage operations
+        let spans = tokio::task::spawn_blocking({
+            let storage = state.storage.clone();
+            let trace_id = trace_id.clone();
+            move || {
+                tokio::runtime::Handle::current().block_on(async {
+                    let fetch_start = Instant::now();
+                    let result = storage.get_trace_spans(&trace_id).await;
+
+                    // Record cold fetch latency for telemetry
+                    let latency = fetch_start.elapsed().as_secs_f64() * 1000.0;
+                    if latency > 50.0 {
+                        TELEMETRY
+                            .cold_fetch_latency_ms
+                            .store(latency, Ordering::Relaxed);
+                    }
+
+                    result
+                })
+            }
+        })
         .await
+        .map_err(|e| e.to_string())?
         .map_err(|e| e.to_string())?;
 
-    // Stream in chunks to prevent blocking
-    const CHUNK_SIZE: usize = 100;
-    let chunks: Vec<_> = spans.chunks(CHUNK_SIZE).collect();
+        // Optimize chunk size based on memory pressure
+        let memory_pressure = TELEMETRY.memory_pressure.load(Ordering::Relaxed);
+        let chunk_size = if memory_pressure > 0.8 {
+            50 // Reduce chunk size under memory pressure
+        } else if memory_pressure > 0.6 {
+            75
+        } else {
+            100 // Default chunk size
+        };
 
-    for (i, chunk) in chunks.iter().enumerate() {
-        let chunk_data: Result<Vec<_>, _> = chunk
-            .iter()
-            .map(|span| serde_json::to_value(span))
-            .collect();
-        
-        let chunk_data = chunk_data.map_err(|e| format!("Failed to serialize span: {}", e))?;
+        let chunks: Vec<_> = spans.chunks(chunk_size).collect();
+
+        for (i, chunk) in chunks.iter().enumerate() {
+            // Use rayon for parallel serialization of chunks
+            let chunk_data = tokio::task::spawn_blocking({
+                let chunk = chunk.to_vec();
+                move || {
+                    use rayon::prelude::*;
+                    chunk
+                        .par_iter()
+                        .map(|span| serde_json::to_value(span))
+                        .collect::<Result<Vec<_>, _>>()
+                }
+            })
+            .await
+            .map_err(|e| format!("Join error: {}", e))?
+            .map_err(|e| format!("Failed to serialize span: {}", e))?;
+
+            window
+                .emit("trace-chunk", &chunk_data)
+                .map_err(|e| e.to_string())?;
+
+            // Adaptive yielding based on memory pressure
+            if i < chunks.len() - 1 {
+                let yield_time = if memory_pressure > 0.8 {
+                    Duration::from_millis(5) // Longer yield under pressure
+                } else if memory_pressure > 0.6 {
+                    Duration::from_millis(1)
+                } else {
+                    Duration::from_micros(100) // Fast yield under normal conditions
+                };
+                tokio::time::sleep(yield_time).await;
+            }
+        }
 
         window
-            .emit("trace-chunk", &chunk_data)
+            .emit("trace-complete", ())
             .map_err(|e| e.to_string())?;
 
-        // Yield to prevent blocking
-        if i < chunks.len() - 1 {
-            tokio::time::sleep(Duration::from_micros(100)).await;
-        }
-    }
-
-    window
-        .emit("trace-complete", ())
-        .map_err(|e| e.to_string())?;
-
-    Ok(())
+        Ok(())
+    })
 }
 
 #[tauri::command]
 async fn start_receiver(state: State<'_, AppState>) -> Result<(), String> {
     let mut receiver_guard = state.receiver.write().await;
-    
+
     if receiver_guard.is_some() {
         return Ok(()); // Already running
     }
@@ -379,9 +659,9 @@ async fn start_receiver(state: State<'_, AppState>) -> Result<(), String> {
     // but our app uses Arc<dyn StorageBackend>
     use urpo_lib::storage::InMemoryStorage;
     let storage_impl = InMemoryStorage::new(state.config.storage.max_spans);
-    let receiver_storage: Arc<tokio::sync::RwLock<dyn urpo_lib::storage::StorageBackend>> = 
+    let receiver_storage: Arc<tokio::sync::RwLock<dyn urpo_lib::storage::StorageBackend>> =
         Arc::new(tokio::sync::RwLock::new(storage_impl));
-    
+
     let receiver = Arc::new(OtelReceiver::new(
         4317, // GRPC port
         4318, // HTTP port
@@ -404,19 +684,27 @@ async fn start_receiver(state: State<'_, AppState>) -> Result<(), String> {
 #[tauri::command]
 async fn stop_receiver(state: State<'_, AppState>) -> Result<(), String> {
     let mut receiver_guard = state.receiver.write().await;
-    
+
     // Simply drop the receiver to stop it
     *receiver_guard = None;
-    
+
     Ok(())
 }
 
 #[tauri::command]
 async fn get_storage_info(state: State<'_, AppState>) -> Result<StorageInfo, String> {
-    let stats = state.storage_manager.get_stats().await.map_err(|e| e.to_string())?;
-    
+    let stats = state
+        .storage_manager
+        .get_stats()
+        .await
+        .map_err(|e| e.to_string())?;
+
     Ok(StorageInfo {
-        mode: if state.config.storage.persistent { "persistent".to_string() } else { "in-memory".to_string() },
+        mode: if state.config.storage.persistent {
+            "persistent".to_string()
+        } else {
+            "in-memory".to_string()
+        },
         persistent_enabled: state.config.storage.persistent,
         data_dir: state.config.storage.data_dir.to_string_lossy().to_string(),
         hot_size: state.config.storage.hot_storage_size,
@@ -431,8 +719,12 @@ async fn get_storage_info(state: State<'_, AppState>) -> Result<StorageInfo, Str
 #[tauri::command]
 async fn trigger_tier_migration(state: State<'_, AppState>) -> Result<String, String> {
     // Trigger cleanup and tier migration
-    state.storage_manager.run_cleanup().await.map_err(|e| e.to_string())?;
-    
+    state
+        .storage_manager
+        .run_cleanup()
+        .await
+        .map_err(|e| e.to_string())?;
+
     Ok("Tier migration triggered successfully".to_string())
 }
 
@@ -443,58 +735,119 @@ async fn get_service_map(
     limit: Option<usize>,
     time_window_seconds: Option<u64>,
 ) -> Result<ServiceMapResponse, String> {
-    // Use optimized defaults for maximum performance
-    let limit = limit.unwrap_or(1000);
-    let time_window = time_window_seconds.unwrap_or(3600);
-    
-    // Create builder with zero-allocation storage access
-    let mut builder = ServiceMapBuilder::new(&**state.storage);
-    
-    // Build map from recent traces with bounded memory usage
-    let service_map = builder
-        .build_from_recent_traces(limit, time_window)
+    safe_command!("get_service_map", async {
+        // Use optimized defaults for maximum performance
+        let limit = limit.unwrap_or(1000);
+        let time_window = time_window_seconds.unwrap_or(3600);
+
+        // Parallel service map building with spawn_blocking
+        let service_map = tokio::task::spawn_blocking({
+            let storage = state.storage.clone();
+            move || {
+                tokio::runtime::Handle::current().block_on(async {
+                    // Create builder with zero-allocation storage access
+                    let mut builder = ServiceMapBuilder::new(&*storage);
+
+                    // Build map from recent traces with bounded memory usage
+                    builder.build_from_recent_traces(limit, time_window).await
+                })
+            }
+        })
         .await
+        .map_err(|e| format!("Join error: {}", e))?
         .map_err(|e| format!("Failed to build service map: {}", e))?;
-    
-    // Convert to response format with pre-allocated vectors for speed
-    let nodes = service_map.nodes
-        .into_iter()
-        .map(|node| ServiceNodeResponse {
-            name: node.name.to_string(),
-            request_count: node.request_count,
-            error_rate: node.error_rate,
-            avg_latency_us: node.avg_latency_us,
-            is_root: node.is_root,
-            is_leaf: node.is_leaf,
-            tier: node.tier,
+
+        // Check memory pressure and adjust parallelization accordingly
+        let memory_pressure = TELEMETRY.memory_pressure.load(Ordering::Relaxed);
+
+        if memory_pressure > 0.8 || service_map.nodes.len() < 100 {
+            // Sequential processing under memory pressure or for small datasets
+            let nodes = service_map
+                .nodes
+                .into_iter()
+                .map(|node| ServiceNodeResponse {
+                    name: node.name.to_string(),
+                    request_count: node.request_count,
+                    error_rate: node.error_rate,
+                    avg_latency_us: node.avg_latency_us,
+                    is_root: node.is_root,
+                    is_leaf: node.is_leaf,
+                    tier: node.tier,
+                })
+                .collect();
+
+            let edges = service_map
+                .edges
+                .into_iter()
+                .map(|edge| ServiceEdgeResponse {
+                    from: edge.from.to_string(),
+                    to: edge.to.to_string(),
+                    call_count: edge.call_count,
+                    error_count: edge.error_count,
+                    avg_latency_us: edge.avg_latency_us,
+                    p99_latency_us: edge.p99_latency_us,
+                    operations: edge.operations.into_iter().collect(),
+                })
+                .collect();
+
+            (nodes, edges)
+        } else {
+            // Parallel processing for large datasets with rayon
+            let (nodes, edges) = tokio::task::spawn_blocking({
+                let service_nodes = service_map.nodes;
+                let service_edges = service_map.edges;
+                move || {
+                    use rayon::prelude::*;
+
+                    let nodes: Vec<ServiceNodeResponse> = service_nodes
+                        .into_par_iter()
+                        .map(|node| ServiceNodeResponse {
+                            name: node.name.to_string(),
+                            request_count: node.request_count,
+                            error_rate: node.error_rate,
+                            avg_latency_us: node.avg_latency_us,
+                            is_root: node.is_root,
+                            is_leaf: node.is_leaf,
+                            tier: node.tier,
+                        })
+                        .collect();
+
+                    let edges: Vec<ServiceEdgeResponse> = service_edges
+                        .into_par_iter()
+                        .map(|edge| ServiceEdgeResponse {
+                            from: edge.from.to_string(),
+                            to: edge.to.to_string(),
+                            call_count: edge.call_count,
+                            error_count: edge.error_count,
+                            avg_latency_us: edge.avg_latency_us,
+                            p99_latency_us: edge.p99_latency_us,
+                            operations: edge.operations.into_iter().collect(),
+                        })
+                        .collect();
+
+                    (nodes, edges)
+                }
+            })
+            .await
+            .map_err(|e| format!("Join error during parallel processing: {}", e))?;
+
+            (nodes, edges)
+        };
+
+        // Convert SystemTime to unix timestamp for frontend compatibility
+        let generated_at = service_map
+            .generated_at
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64;
+
+        Ok(ServiceMapResponse {
+            nodes,
+            edges,
+            generated_at,
+            trace_count: service_map.trace_count,
+            time_window_seconds: service_map.time_window_seconds,
         })
-        .collect();
-    
-    let edges = service_map.edges
-        .into_iter()
-        .map(|edge| ServiceEdgeResponse {
-            from: edge.from.to_string(),
-            to: edge.to.to_string(),
-            call_count: edge.call_count,
-            error_count: edge.error_count,
-            avg_latency_us: edge.avg_latency_us,
-            p99_latency_us: edge.p99_latency_us,
-            operations: edge.operations.into_iter().collect(),
-        })
-        .collect();
-    
-    // Convert SystemTime to unix timestamp for frontend compatibility
-    let generated_at = service_map.generated_at
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs() as i64;
-    
-    Ok(ServiceMapResponse {
-        nodes,
-        edges,
-        generated_at,
-        trace_count: service_map.trace_count,
-        time_window_seconds: service_map.time_window_seconds,
     })
 }
 
@@ -511,31 +864,36 @@ fn main() {
     let config = ConfigBuilder::new()
         .persistent(std::env::var("URPO_PERSISTENT").unwrap_or_default() == "true")
         .data_dir(std::path::PathBuf::from(
-            std::env::var("URPO_DATA_DIR").unwrap_or_else(|_| "./urpo_data".to_string())
+            std::env::var("URPO_DATA_DIR").unwrap_or_else(|_| "./urpo_data".to_string()),
         ))
         .max_spans(100_000)
         .max_memory_mb(512)
         .build()
         .expect("Failed to build config");
-    
+
     let config = Arc::new(config);
-    
+
     // Create storage manager with optional persistence
     let storage_manager = if config.storage.persistent {
-        tracing::info!("Starting with persistent storage at {:?}", config.storage.data_dir);
-        Arc::new(StorageManager::new_persistent(&config).expect("Failed to create persistent storage"))
+        tracing::info!(
+            "Starting with persistent storage at {:?}",
+            config.storage.data_dir
+        );
+        Arc::new(
+            StorageManager::new_persistent(&config).expect("Failed to create persistent storage"),
+        )
     } else {
         tracing::info!("Starting with in-memory storage only");
         Arc::new(StorageManager::new_in_memory(config.storage.max_spans))
     };
-    
+
     let storage_backend = storage_manager.backend();
-    
+
     // Create monitor with performance manager
     use urpo_lib::storage::PerformanceManager;
     let perf_manager = Arc::new(PerformanceManager::new());
     let monitor = Arc::new(Monitor::new(perf_manager));
-    
+
     let app_state = AppState {
         storage: storage_backend,
         storage_manager: storage_manager.clone(),
@@ -562,13 +920,47 @@ fn main() {
             trigger_tier_migration,
             get_service_map,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .setup(|app| {
+            // Start background telemetry task with main window
+            let window = app.get_window("main").expect("Failed to get main window");
+            tokio::spawn(background_telemetry_task(window));
 
+            // Initialize tier status
+            TELEMETRY
+                .tier_status
+                .insert("application".to_string(), "starting".to_string());
+
+            Ok(())
+        })
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    // Mark application as ready
+    TELEMETRY
+        .tier_status
+        .insert("application".to_string(), "ready".to_string());
+
+    // Log startup performance
     let elapsed = startup_time.elapsed();
     tracing::info!("Startup time: {:?}", elapsed);
-    
+
     if elapsed > Duration::from_millis(200) {
-        tracing::warn!("Startup time exceeded 200ms target!");
+        tracing::warn!("Startup time exceeded 200ms target: {:?}", elapsed);
+    } else {
+        tracing::info!("✅ Startup time meets <200ms target: {:?}", elapsed);
     }
+
+    // Run the application
+    app.run(|_app_handle, event| match event {
+        tauri::RunEvent::ExitRequested { api, .. } => {
+            // Clean shutdown with telemetry
+            TELEMETRY
+                .tier_status
+                .insert("application".to_string(), "shutting_down".to_string());
+            api.prevent_exit();
+        }
+        _ => {}
+    });
+
+    tracing::info!("Application shutdown complete");
 }

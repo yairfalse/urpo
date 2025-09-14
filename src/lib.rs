@@ -46,6 +46,7 @@ pub mod api;
 pub mod cli;
 pub mod core;
 pub mod export;
+pub mod metrics;
 pub mod monitoring;
 pub mod receiver;
 pub mod service_map;
@@ -54,4 +55,3 @@ pub mod tui;
 
 // Re-export core types for convenience
 pub use crate::core::{Config, Result};
-

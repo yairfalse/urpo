@@ -235,10 +235,10 @@ impl Default for StorageConfig {
             compression_enabled: false,
             persistent: false,
             data_dir: PathBuf::from("./urpo_data"),
-            hot_storage_size: 10_000,  // 10k spans in hot ring
-            warm_storage_mb: 512,       // 512MB warm storage
-            cold_retention_hours: 24,   // Keep cold data for 24 hours
-            enable_archival: false,     // Disabled by default
+            hot_storage_size: 10_000, // 10k spans in hot ring
+            warm_storage_mb: 512,     // 512MB warm storage
+            cold_retention_hours: 24, // Keep cold data for 24 hours
+            enable_archival: false,   // Disabled by default
         }
     }
 }
@@ -325,7 +325,7 @@ impl Config {
                 self.server.grpc_port
             )));
         }
-        
+
         if self.server.max_connections == 0 {
             return Err(UrpoError::config("max_connections must be greater than 0"));
         }
@@ -334,7 +334,7 @@ impl Config {
         if self.storage.max_spans == 0 {
             return Err(UrpoError::config("max_spans must be greater than 0"));
         }
-        
+
         if self.storage.max_memory_mb == 0 {
             return Err(UrpoError::config("max_memory_mb must be greater than 0"));
         }
@@ -343,7 +343,7 @@ impl Config {
         if self.sampling.default_rate < 0.0 || self.sampling.default_rate > 1.0 {
             return Err(UrpoError::InvalidSamplingRate(self.sampling.default_rate));
         }
-        
+
         for (service, rate) in &self.sampling.per_service {
             if *rate < 0.0 || *rate > 1.0 {
                 return Err(UrpoError::config(format!(
@@ -354,8 +354,9 @@ impl Config {
         }
 
         // Alert validation
-        if self.monitoring.alerts.error_rate_threshold < 0.0 
-            || self.monitoring.alerts.error_rate_threshold > 100.0 {
+        if self.monitoring.alerts.error_rate_threshold < 0.0
+            || self.monitoring.alerts.error_rate_threshold > 100.0
+        {
             return Err(UrpoError::config(format!(
                 "Error rate threshold must be between 0 and 100, got {}",
                 self.monitoring.alerts.error_rate_threshold
@@ -368,7 +369,7 @@ impl Config {
     /// Check if a port is available
     pub async fn check_port_available(port: u16) -> Result<()> {
         use tokio::net::TcpListener;
-        
+
         match TcpListener::bind(("127.0.0.1", port)).await {
             Ok(_) => Ok(()),
             Err(e) => Err(UrpoError::config(format!(
@@ -382,11 +383,11 @@ impl Config {
     pub async fn validate_ports(&self) -> Result<()> {
         Self::check_port_available(self.server.grpc_port).await?;
         Self::check_port_available(self.server.http_port).await?;
-        
+
         if let Some(metrics_port) = self.monitoring.metrics_port {
             Self::check_port_available(metrics_port).await?;
         }
-        
+
         Ok(())
     }
 
@@ -529,26 +530,27 @@ impl ConfigWatcher {
     pub async fn watch(self) -> Result<()> {
         use notify::{RecursiveMode, Watcher};
         use std::sync::mpsc::channel;
-        
+
         let (tx, rx) = channel();
-        
+
         let mut watcher = notify::recommended_watcher(move |res| {
             if let Ok(event) = res {
                 let _ = tx.send(event);
             }
-        }).map_err(|e| UrpoError::config(format!("Failed to create file watcher: {}", e)))?;
-        
+        })
+        .map_err(|e| UrpoError::config(format!("Failed to create file watcher: {}", e)))?;
+
         watcher
             .watch(&self.path, RecursiveMode::NonRecursive)
             .map_err(|e| UrpoError::config(format!("Failed to watch config file: {}", e)))?;
-        
+
         tracing::info!("Watching configuration file: {:?}", self.path);
-        
+
         // Process file change events
         while let Ok(event) = rx.recv() {
             if matches!(event.kind, notify::EventKind::Modify(_)) {
                 tracing::info!("Configuration file changed, reloading...");
-                
+
                 match tokio::fs::read_to_string(&self.path).await {
                     Ok(content) => {
                         match serde_yaml::from_str::<Config>(&content) {
@@ -557,14 +559,14 @@ impl ConfigWatcher {
                                     tracing::error!("Invalid configuration: {}", e);
                                     continue;
                                 }
-                                
+
                                 // Preserve runtime-only settings
                                 new_config.debug = self.tx.borrow().debug;
-                                
+
                                 if let Err(e) = self.tx.send(new_config) {
                                     tracing::error!("Failed to update configuration: {}", e);
                                 }
-                                
+
                                 tracing::info!("Configuration reloaded successfully");
                             }
                             Err(e) => {
@@ -578,7 +580,7 @@ impl ConfigWatcher {
                 }
             }
         }
-        
+
         Ok(())
     }
 }
@@ -598,7 +600,7 @@ mod tests {
         let mut config = Config::default();
         config.sampling.default_rate = 1.5;
         assert!(config.validate().is_err());
-        
+
         config.sampling.default_rate = -0.1;
         assert!(config.validate().is_err());
     }
@@ -620,7 +622,7 @@ mod tests {
             .sampling_rate(0.5)
             .debug(true)
             .build();
-        
+
         assert!(config.is_ok());
         let config = config.unwrap();
         assert_eq!(config.server.grpc_port, 9090);
@@ -635,11 +637,14 @@ mod tests {
         let mut config = Config::default();
         config.sampling.default_rate = 0.0;
         assert!(!config.should_sample("test-service"));
-        
+
         config.sampling.default_rate = 1.0;
         assert!(config.should_sample("test-service"));
-        
-        config.sampling.per_service.insert("special".to_string(), 0.0);
+
+        config
+            .sampling
+            .per_service
+            .insert("special".to_string(), 0.0);
         assert!(!config.should_sample("special"));
         assert!(config.should_sample("other"));
     }
@@ -659,12 +664,9 @@ sampling:
   per_service:
     high-volume: 0.1
 "#;
-        
-        let config = ConfigBuilder::new()
-            .from_yaml(yaml)
-            .unwrap()
-            .build();
-        
+
+        let config = ConfigBuilder::new().from_yaml(yaml).unwrap().build();
+
         assert!(config.is_ok());
         let config = config.unwrap();
         assert_eq!(config.server.grpc_port, 5317);

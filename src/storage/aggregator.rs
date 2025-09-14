@@ -2,7 +2,7 @@
 //!
 //! This module calculates service metrics from spans stored in the storage backend,
 //! computing real-time statistics like RPS, error rates, and latency percentiles.
-//! 
+//!
 //! ## Performance Features:
 //! - Fully concurrent service processing with FuturesUnordered
 //! - Zero blocking on slow services - all metrics calculated in parallel
@@ -51,8 +51,10 @@ pub async fn calculate_service_metrics(
         let service_name_clone = service_name.clone();
         futures.push(async move {
             // Get spans for this service in the time window
-            let spans = storage.get_service_spans(&service_name_clone, window_start).await?;
-            
+            let spans = storage
+                .get_service_spans(&service_name_clone, window_start)
+                .await?;
+
             let metrics = if spans.is_empty() {
                 // Create metrics with zero values for services with no recent activity
                 ServiceMetrics::new(service_name_clone)
@@ -60,14 +62,14 @@ pub async fn calculate_service_metrics(
                 // BULLETPROOF: Batch process spans for maximum efficiency
                 let (span_count, error_count, mut latencies) = process_spans_batch(&spans);
                 let request_rate = span_count as f64 / METRIC_WINDOW_SECS as f64;
-                
+
                 // BULLETPROOF: Prevent division by zero
                 let error_rate = if span_count > 0 {
                     error_count as f64 / span_count as f64
                 } else {
                     0.0
                 };
-                
+
                 // BLAZING FAST: Calculate percentiles WITHOUT cloning
                 let (p50, p95, p99) = if latencies.len() > 1000 {
                     // Use histogram approximation for large datasets
@@ -76,7 +78,7 @@ pub async fn calculate_service_metrics(
                     // ZERO ALLOCATION: Sort in-place for percentiles
                     calculate_percentiles_exact(&mut latencies)
                 };
-                
+
                 // BLAZING FAST: Calculate stats in one pass
                 let total_duration: u64 = latencies.iter().sum();
                 let avg_duration = if !latencies.is_empty() {
@@ -84,19 +86,19 @@ pub async fn calculate_service_metrics(
                 } else {
                     Duration::from_millis(0)
                 };
-                
+
                 // BLAZING FAST: Find min/max WITHOUT sorting or cloning
-                let (min_ms, max_ms) = latencies.iter()
-                    .fold((u64::MAX, 0u64), |(min, max), &val| {
+                let (min_ms, max_ms) =
+                    latencies.iter().fold((u64::MAX, 0u64), |(min, max), &val| {
                         (min.min(val), max.max(val))
                     });
-                let min_duration = if latencies.is_empty() { 
-                    Duration::from_millis(0) 
-                } else { 
-                    Duration::from_millis(min_ms) 
+                let min_duration = if latencies.is_empty() {
+                    Duration::from_millis(0)
+                } else {
+                    Duration::from_millis(min_ms)
                 };
                 let max_duration = Duration::from_millis(max_ms);
-                
+
                 // Build service metrics
                 let mut m = ServiceMetrics::new(service_name_clone);
                 m.request_rate = request_rate;
@@ -112,7 +114,7 @@ pub async fn calculate_service_metrics(
                 m.last_seen = SystemTime::now();
                 m
             };
-            
+
             Ok::<_, crate::core::UrpoError>(metrics)
         });
     }
@@ -122,10 +124,10 @@ pub async fn calculate_service_metrics(
     while let Some(result) = futures.next().await {
         metrics.push(result?);
     }
-    
+
     // Sort by service name for consistent display
     metrics.sort_by(|a, b| a.name.as_str().cmp(b.name.as_str()));
-    
+
     Ok(metrics)
 }
 
@@ -134,11 +136,11 @@ fn calculate_percentile(sorted_values: &[u64], percentile: f64) -> u64 {
     if sorted_values.is_empty() {
         return 0;
     }
-    
+
     if sorted_values.len() == 1 {
         return sorted_values[0];
     }
-    
+
     let index = ((sorted_values.len() - 1) as f64 * percentile) as usize;
     sorted_values[index]
 }
@@ -150,15 +152,15 @@ fn calculate_percentiles_exact(latencies: &mut Vec<u64>) -> (u64, u64, u64) {
     if latencies.is_empty() {
         return (0, 0, 0);
     }
-    
+
     // ZERO ALLOCATION: Sort in-place
     latencies.sort_unstable();
-    
+
     let len = latencies.len();
     let p50 = latencies[len / 2];
     let p95 = latencies[len * 95 / 100];
     let p99 = latencies[len * 99 / 100];
-    
+
     (p50, p95, p99)
 }
 
@@ -167,40 +169,41 @@ fn calculate_percentiles_histogram(latencies: &[u64]) -> (u64, u64, u64) {
     if latencies.is_empty() {
         return (0, 0, 0);
     }
-    
+
     // BLAZING FAST: Find min/max in single pass without panic
-    let (min_latency, max_latency) = latencies.iter()
-        .fold((u64::MAX, 0u64), |(min, max), &val| {
-            (min.min(val), max.max(val))
-        });
-    
+    let (min_latency, max_latency) = latencies.iter().fold((u64::MAX, 0u64), |(min, max), &val| {
+        (min.min(val), max.max(val))
+    });
+
     if min_latency == max_latency {
         return (min_latency, min_latency, min_latency);
     }
-    
+
     // Create histogram buckets
-    let bucket_size = (max_latency - min_latency + LATENCY_BUCKETS as u64 - 1) / LATENCY_BUCKETS as u64;
+    let bucket_size =
+        (max_latency - min_latency + LATENCY_BUCKETS as u64 - 1) / LATENCY_BUCKETS as u64;
     let mut histogram = vec![0u64; LATENCY_BUCKETS];
-    
+
     // Fill histogram
     for &latency in latencies {
-        let bucket = ((latency - min_latency) / bucket_size).min(LATENCY_BUCKETS as u64 - 1) as usize;
+        let bucket =
+            ((latency - min_latency) / bucket_size).min(LATENCY_BUCKETS as u64 - 1) as usize;
         histogram[bucket] += 1;
     }
-    
+
     // Calculate cumulative distribution
     let total_count = latencies.len() as u64;
     let mut cumulative = 0u64;
     let mut p50 = min_latency;
     let mut p95 = min_latency;
     let mut p99 = min_latency;
-    
+
     for (i, &count) in histogram.iter().enumerate() {
         cumulative += count;
         let percentile = cumulative as f64 / total_count as f64;
-        
+
         let bucket_start = min_latency + i as u64 * bucket_size;
-        
+
         if percentile >= 0.50 && p50 == min_latency {
             p50 = bucket_start;
         }
@@ -211,7 +214,7 @@ fn calculate_percentiles_histogram(latencies: &[u64]) -> (u64, u64, u64) {
             p99 = bucket_start;
         }
     }
-    
+
     (p50, p95, p99)
 }
 
@@ -220,17 +223,17 @@ fn process_spans_batch(spans: &[crate::core::Span]) -> (u64, u64, Vec<u64>) {
     let mut span_count = 0u64;
     let mut error_count = 0u64;
     let mut latencies = Vec::with_capacity(spans.len());
-    
+
     for span in spans {
         span_count += 1;
-        
+
         if span.status.is_error() {
             error_count += 1;
         }
-        
+
         latencies.push(span.duration.as_millis() as u64);
     }
-    
+
     (span_count, error_count, latencies)
 }
 
@@ -251,12 +254,12 @@ impl WindowedMetrics {
             windows: HashMap::new(),
         }
     }
-    
+
     /// Add metrics for a specific time window.
     pub fn add_window(&mut self, window_name: String, metrics: ServiceMetrics) {
         self.windows.insert(window_name, metrics);
     }
-    
+
     /// Get metrics for a specific window.
     pub fn get_window(&self, window_name: &str) -> Option<&ServiceMetrics> {
         self.windows.get(window_name)
@@ -269,19 +272,16 @@ pub async fn calculate_windowed_metrics(
     service_name: &ServiceName,
 ) -> Result<WindowedMetrics> {
     let mut windowed = WindowedMetrics::new(service_name.clone());
-    
+
     // Calculate for different time windows
-    let windows = vec![
-        ("1m", 60),
-        ("5m", 300),
-        ("15m", 900),
-        ("1h", 3600),
-    ];
-    
+    let windows = vec![("1m", 60), ("5m", 300), ("15m", 900), ("1h", 3600)];
+
     for (name, seconds) in windows {
         let window_start = SystemTime::now() - Duration::from_secs(seconds);
-        let spans = storage.get_service_spans(service_name, window_start).await?;
-        
+        let spans = storage
+            .get_service_spans(service_name, window_start)
+            .await?;
+
         if !spans.is_empty() {
             // Batch process spans for efficiency
             let (span_count, error_count, latencies) = process_spans_batch(&spans);
@@ -292,7 +292,7 @@ pub async fn calculate_windowed_metrics(
             } else {
                 0.0
             };
-            
+
             // Calculate percentiles using efficient method
             let (p50, p95, p99) = if latencies.len() > 1000 {
                 calculate_percentiles_histogram(&latencies)
@@ -305,7 +305,7 @@ pub async fn calculate_windowed_metrics(
                     calculate_percentile(&sorted_latencies, 0.99),
                 )
             };
-            
+
             let mut metrics = ServiceMetrics::new(service_name.clone());
             metrics.request_rate = request_rate;
             metrics.error_rate = error_rate;
@@ -314,11 +314,11 @@ pub async fn calculate_windowed_metrics(
             metrics.latency_p99 = Duration::from_millis(p99);
             metrics.span_count = span_count;
             metrics.error_count = error_count;
-            
+
             windowed.add_window(name.to_string(), metrics);
         }
     }
-    
+
     Ok(windowed)
 }
 
@@ -359,9 +359,15 @@ impl SlidingWindow {
             last_update: SystemTime::now(),
         }
     }
-    
+
     /// Add a data point to the window.
-    pub fn add_data_point(&mut self, timestamp: SystemTime, requests: u64, errors: u64, latency_ms: u64) {
+    pub fn add_data_point(
+        &mut self,
+        timestamp: SystemTime,
+        requests: u64,
+        errors: u64,
+        latency_ms: u64,
+    ) {
         // Remove expired data points
         let cutoff = timestamp - self.window_duration;
         while let Some((ts, _)) = self.data_points.front() {
@@ -371,53 +377,58 @@ impl SlidingWindow {
                 break;
             }
         }
-        
+
         // Add new data point
         let data_point = MetricDataPoint {
             requests,
             errors,
             latency_ms,
         };
-        
+
         self.data_points.push_back((timestamp, data_point));
-        
+
         // Limit window size to prevent memory growth
         while self.data_points.len() > MAX_WINDOW_SIZE {
             self.data_points.pop_front();
         }
-        
+
         // Invalidate cache
         self.cached_metrics = None;
         self.last_update = timestamp;
     }
-    
+
     /// Get current metrics from the sliding window.
     pub fn get_metrics(&mut self) -> ServiceMetrics {
         // Use cached metrics if available and recent
         if let Some(ref metrics) = self.cached_metrics {
-            if self.last_update.duration_since(SystemTime::now()).unwrap_or(Duration::ZERO) < Duration::from_secs(1) {
+            if self
+                .last_update
+                .duration_since(SystemTime::now())
+                .unwrap_or(Duration::ZERO)
+                < Duration::from_secs(1)
+            {
                 return metrics.clone();
             }
         }
-        
+
         // Calculate metrics from data points
         let mut total_requests = 0u64;
         let mut total_errors = 0u64;
         let mut latencies = Vec::new();
-        
+
         for (_, data_point) in &self.data_points {
             total_requests += data_point.requests;
             total_errors += data_point.errors;
             latencies.push(data_point.latency_ms);
         }
-        
+
         let request_rate = total_requests as f64 / self.window_duration.as_secs() as f64;
         let error_rate = if total_requests > 0 {
             total_errors as f64 / total_requests as f64
         } else {
             0.0
         };
-        
+
         // Calculate percentiles
         let (p50, p95, p99) = if latencies.len() > 1000 {
             calculate_percentiles_histogram(&latencies)
@@ -429,17 +440,17 @@ impl SlidingWindow {
                 calculate_percentile(&latencies, 0.99),
             )
         };
-        
+
         // Calculate other stats
         let avg_latency = if !latencies.is_empty() {
             latencies.iter().sum::<u64>() / latencies.len() as u64
         } else {
             0
         };
-        
+
         let min_latency = latencies.iter().min().copied().unwrap_or(0);
         let max_latency = latencies.iter().max().copied().unwrap_or(0);
-        
+
         // Create metrics
         let mut metrics = ServiceMetrics::new(self.service_name.clone());
         metrics.request_rate = request_rate;
@@ -453,10 +464,10 @@ impl SlidingWindow {
         metrics.min_duration = Duration::from_millis(min_latency);
         metrics.max_duration = Duration::from_millis(max_latency);
         metrics.last_seen = self.last_update;
-        
+
         // Cache the result
         self.cached_metrics = Some(metrics.clone());
-        
+
         metrics
     }
 }
@@ -478,15 +489,15 @@ impl RealtimeAggregator {
             window_duration,
         }
     }
-    
+
     /// Add spans to the aggregator.
     pub async fn add_spans(&self, spans: &[crate::core::Span]) {
         let timestamp = SystemTime::now();
         let mut windows = self.windows.write().await;
-        
+
         // Group spans by service
         let mut service_data: HashMap<ServiceName, (u64, u64, Vec<u64>)> = HashMap::new();
-        
+
         for span in spans {
             let entry = service_data.entry(span.service_name.clone()).or_default();
             entry.0 += 1; // requests
@@ -495,44 +506,47 @@ impl RealtimeAggregator {
             }
             entry.2.push(span.duration.as_millis() as u64); // latencies
         }
-        
+
         // Update windows
         for (service_name, (requests, errors, latencies)) in service_data {
-            let window = windows.entry(service_name.clone())
+            let window = windows
+                .entry(service_name.clone())
                 .or_insert_with(|| SlidingWindow::new(service_name, self.window_duration));
-            
+
             // Use average latency for the data point
             let avg_latency = if !latencies.is_empty() {
                 latencies.iter().sum::<u64>() / latencies.len() as u64
             } else {
                 0
             };
-            
+
             window.add_data_point(timestamp, requests, errors, avg_latency);
         }
     }
-    
+
     /// Get metrics for all services.
     pub async fn get_all_metrics(&self) -> Vec<ServiceMetrics> {
         let mut windows = self.windows.write().await;
         let mut metrics = Vec::new();
-        
+
         for window in windows.values_mut() {
             metrics.push(window.get_metrics());
         }
-        
+
         // Sort by service name for consistency
         metrics.sort_by(|a, b| a.name.as_str().cmp(b.name.as_str()));
-        
+
         metrics
     }
-    
+
     /// Get metrics for a specific service.
     pub async fn get_service_metrics(&self, service_name: &ServiceName) -> Option<ServiceMetrics> {
         let mut windows = self.windows.write().await;
-        windows.get_mut(service_name).map(|window| window.get_metrics())
+        windows
+            .get_mut(service_name)
+            .map(|window| window.get_metrics())
     }
-    
+
     /// Clean up old windows for inactive services.
     pub async fn cleanup_inactive(&self, cutoff: SystemTime) {
         let mut windows = self.windows.write().await;
@@ -546,17 +560,13 @@ mod tests {
     use crate::core::{Span, SpanId, SpanStatus, TraceId};
     use crate::storage::InMemoryStorage;
 
-    async fn create_test_span(
-        service: &str,
-        duration_ms: u64,
-        is_error: bool,
-    ) -> Span {
+    async fn create_test_span(service: &str, duration_ms: u64, is_error: bool) -> Span {
         let status = if is_error {
             SpanStatus::Error("Test error".to_string())
         } else {
             SpanStatus::Ok
         };
-        
+
         Span::builder()
             .trace_id(TraceId::new(format!("trace_{}", rand::random::<u32>())).unwrap())
             .span_id(SpanId::new(format!("span_{}", rand::random::<u32>())).unwrap())
@@ -572,7 +582,7 @@ mod tests {
     #[tokio::test]
     async fn test_calculate_percentile() {
         let values = vec![10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
-        
+
         assert_eq!(calculate_percentile(&values, 0.0), 10);
         assert_eq!(calculate_percentile(&values, 0.5), 50);
         assert_eq!(calculate_percentile(&values, 0.9), 90);
@@ -582,7 +592,7 @@ mod tests {
     #[tokio::test]
     async fn test_calculate_service_metrics() {
         let storage = InMemoryStorage::new(1000);
-        
+
         // Add test spans
         for i in 0..100 {
             let duration = 10 + (i % 50) * 2; // Vary duration
@@ -590,14 +600,15 @@ mod tests {
             let span = create_test_span("api-gateway", duration, is_error).await;
             storage.store_span(span).await.unwrap();
         }
-        
+
         let metrics = calculate_service_metrics(&storage).await.unwrap();
-        
+
         // Find api-gateway metrics
-        let api_metrics = metrics.iter()
+        let api_metrics = metrics
+            .iter()
             .find(|m| m.name.as_str() == "api-gateway")
             .expect("Should have api-gateway metrics");
-        
+
         assert_eq!(api_metrics.span_count, 100);
         assert_eq!(api_metrics.error_count, 5);
         assert!((api_metrics.error_rate - 0.05).abs() < 0.001);
@@ -610,12 +621,12 @@ mod tests {
     #[tokio::test]
     async fn test_empty_service_metrics() {
         let storage = InMemoryStorage::new(1000);
-        
+
         let metrics = calculate_service_metrics(&storage).await.unwrap();
-        
+
         // Should have metrics for all services even with no data
         assert!(!metrics.is_empty());
-        
+
         for metric in metrics {
             assert_eq!(metric.span_count, 0);
             assert_eq!(metric.error_count, 0);
@@ -628,31 +639,33 @@ mod tests {
     async fn test_windowed_metrics() {
         let storage = InMemoryStorage::new(1000);
         let service_name = ServiceName::new("test-service".to_string()).unwrap();
-        
+
         // Add spans
         for _ in 0..50 {
             let span = create_test_span("test-service", 100, false).await;
             storage.store_span(span).await.unwrap();
         }
-        
-        let windowed = calculate_windowed_metrics(&storage, &service_name).await.unwrap();
-        
+
+        let windowed = calculate_windowed_metrics(&storage, &service_name)
+            .await
+            .unwrap();
+
         assert_eq!(windowed.service_name, service_name);
-        
+
         // Should have 1m window with data
         let one_min = windowed.get_window("1m");
         assert!(one_min.is_some());
-        
+
         let metrics = one_min.unwrap();
         assert_eq!(metrics.span_count, 50);
         assert!(metrics.request_rate > 0.0);
     }
-    
+
     #[tokio::test]
     async fn test_concurrent_metrics_performance() {
         // BLAZING FAST: Test concurrent metrics aggregation with many services
         let storage = InMemoryStorage::new(10000);
-        
+
         // Create spans for 100 different services with varying load
         for service_id in 0..100 {
             let service_name = format!("service-{:03}", service_id);
@@ -660,48 +673,60 @@ mod tests {
             let span_count = if service_id < 10 {
                 1000 // 10 heavy services
             } else if service_id < 50 {
-                100  // 40 medium services  
+                100 // 40 medium services
             } else {
-                10   // 50 light services
+                10 // 50 light services
             };
-            
+
             for span_id in 0..span_count {
                 let duration = 50 + (span_id % 200); // Vary latency 50-250ms
-                let is_error = span_id % 20 == 0;    // 5% error rate
+                let is_error = span_id % 20 == 0; // 5% error rate
                 let span = create_test_span(&service_name, duration, is_error).await;
                 storage.store_span(span).await.unwrap();
             }
         }
-        
+
         let start = std::time::Instant::now();
         let metrics = calculate_service_metrics(&storage).await.unwrap();
         let duration = start.elapsed();
-        
+
         // Debug output
         println!("🚀 Metrics found: {} services", metrics.len());
         for metric in &metrics {
             if metric.name.as_str().starts_with("service-00") {
-                println!("  {}: {} spans, {}% error rate", 
-                    metric.name.as_str(), metric.span_count, metric.error_rate * 100.0);
+                println!(
+                    "  {}: {} spans, {}% error rate",
+                    metric.name.as_str(),
+                    metric.span_count,
+                    metric.error_rate * 100.0
+                );
             }
         }
-        
+
         // Verify results
         assert_eq!(metrics.len(), 100); // Should have metrics for all 100 services
-        
+
         // Verify heavy services were processed correctly
-        let heavy_service = metrics.iter()
+        let heavy_service = metrics
+            .iter()
             .find(|m| m.name.as_str() == "service-000")
             .expect("Should have service-000 metrics");
         assert_eq!(heavy_service.span_count, 1000);
         assert!((heavy_service.error_rate - 0.05).abs() < 0.01); // ~5% error rate
-        
+
         // PERFORMANCE ASSERTION: Even with 100 services and 15,500 total spans,
         // concurrent processing should complete in under 100ms on reasonable hardware
-        println!("🚀 Concurrent metrics calculation took: {:?} for 100 services with 15,500 spans", duration);
-        
+        println!(
+            "🚀 Concurrent metrics calculation took: {:?} for 100 services with 15,500 spans",
+            duration
+        );
+
         // This would take 5-10x longer with sequential processing!
         // With concurrent processing, we should see significant speedup
-        assert!(duration.as_millis() < 500, "Concurrent processing should be blazing fast! Took: {:?}", duration);
+        assert!(
+            duration.as_millis() < 500,
+            "Concurrent processing should be blazing fast! Took: {:?}",
+            duration
+        );
     }
 }

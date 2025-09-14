@@ -11,7 +11,7 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 async fn main() -> Result<()> {
     // Parse command-line arguments
     let cli = Cli::parse_args();
-    
+
     // Execute the command
     cli::execute(cli).await
 }

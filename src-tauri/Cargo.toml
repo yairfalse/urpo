@@ -14,8 +14,19 @@ tokio = { version = "1.40", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 urpo_lib = { path = ".." }
+
 # Ultra-fast allocator
 mimalloc = { version = "0.1", default-features = false }
+
+# High-performance dependencies for advanced optimizations
+rayon = "1.10"  # Parallel processing across CPU cores
+dashmap = "6.1"  # Lock-free concurrent hash maps
+fastrand = "2.0"  # Fast random number generation
+crossbeam = "0.8"  # Lock-free channels and data structures
+bumpalo = "3.14"  # Arena allocation for temporary data
+once_cell = "1.19"  # Global static initialization
+sysinfo = "0.32"  # System resource monitoring
+atomic_float = "1.1"  # Lock-free atomic float operations
 
 [profile.release]
 lto = "fat"              # Full link-time optimization

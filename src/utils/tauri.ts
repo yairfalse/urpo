@@ -40,7 +40,7 @@ export const checkTauriFeatures = () => {
 // Service Map API helpers
 import type { ServiceMap } from '../types';
 
-export interface ServiceMapOptions {
+export interface ServiceMapOptions extends Record<string, unknown> {
   limit?: number;
   time_window_seconds?: number;
 }

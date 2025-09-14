@@ -2,7 +2,10 @@
 //!
 //! Run with: cargo run --example send_otel_data
 
-use opentelemetry::{global, trace::{Span, SpanKind, Status, Tracer, TracerProvider as _}};
+use opentelemetry::{
+    global,
+    trace::{Span, SpanKind, Status, Tracer, TracerProvider as _},
+};
 use opentelemetry_otlp::{Protocol, WithExportConfig};
 use opentelemetry_sdk as sdk;
 use std::time::Duration;
@@ -15,7 +18,7 @@ fn init_tracer() -> impl Tracer {
         .with_protocol(Protocol::Grpc)
         .with_timeout(Duration::from_secs(3));
 
-    let trace_config = sdk::trace::config()
+    let trace_config = sdk::trace::Config::default()
         .with_sampler(sdk::trace::Sampler::AlwaysOn)
         .with_resource(sdk::Resource::new(vec![
             opentelemetry::KeyValue::new("service.name", "test-service"),
@@ -39,7 +42,7 @@ async fn main() {
     // Initialize logging
     let filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
-    
+
     tracing_subscriber::registry()
         .with(filter)
         .with(tracing_subscriber::fmt::layer())
@@ -47,13 +50,13 @@ async fn main() {
 
     // Initialize the tracer
     let tracer = init_tracer();
-    
+
     println!("Sending OTEL trace data to localhost:4317...");
-    
+
     // Create some sample traces
     for i in 0..5 {
         println!("Sending trace batch {}...", i + 1);
-        
+
         // Create a root span
         let mut root_span = tracer
             .span_builder(format!("process_request_{}", i))
@@ -65,25 +68,28 @@ async fn main() {
                 opentelemetry::KeyValue::new("user.id", format!("user_{}", i)),
             ])
             .start(&tracer);
-        
+
         // Simulate some work
         tokio::time::sleep(Duration::from_millis(50)).await;
-        
+
         // Create child spans
         for j in 0..3 {
-            let child_span = tracer
+            let mut child_span = tracer
                 .span_builder(format!("database_query_{}", j))
                 .with_kind(SpanKind::Client)
                 .with_attributes(vec![
                     opentelemetry::KeyValue::new("db.system", "postgresql"),
                     opentelemetry::KeyValue::new("db.operation", "SELECT"),
-                    opentelemetry::KeyValue::new("db.statement", format!("SELECT * FROM table_{}", j)),
+                    opentelemetry::KeyValue::new(
+                        "db.statement",
+                        format!("SELECT * FROM table_{}", j),
+                    ),
                 ])
                 .start(&tracer);
-            
+
             // Simulate database query
             tokio::time::sleep(Duration::from_millis(20)).await;
-            
+
             // Add events to the span
             child_span.add_event(
                 "query_executed",
@@ -92,14 +98,14 @@ async fn main() {
                     opentelemetry::KeyValue::new("execution_time_ms", 15i64),
                 ],
             );
-            
+
             // Set status
             child_span.set_status(Status::Ok);
             child_span.end();
         }
-        
+
         // Create another service call
-        let service_span = tracer
+        let mut service_span = tracer
             .span_builder("call_external_service")
             .with_kind(SpanKind::Client)
             .with_attributes(vec![
@@ -108,18 +114,21 @@ async fn main() {
                 opentelemetry::KeyValue::new("rpc.system", "grpc"),
             ])
             .start(&tracer);
-        
+
         tokio::time::sleep(Duration::from_millis(30)).await;
-        
+
         // Simulate an error occasionally
         if i % 3 == 0 {
-            service_span.record_error(&std::io::Error::new(std::io::ErrorKind::Other, "Payment processing failed"));
+            service_span.record_error(&std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Payment processing failed",
+            ));
             service_span.set_status(Status::error("Payment service unavailable"));
         } else {
             service_span.set_status(Status::Ok);
         }
         service_span.end();
-        
+
         // Complete the root span
         root_span.set_status(if i % 3 == 0 {
             Status::error("Request failed due to payment error")
@@ -127,22 +136,27 @@ async fn main() {
             Status::Ok
         });
         root_span.end();
-        
+
         // Wait a bit between traces
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
-    
+
     // Create spans from multiple services
     println!("\nSending traces from multiple services...");
-    
-    let services = vec!["auth-service", "user-service", "order-service", "inventory-service"];
-    
+
+    let services = vec![
+        "auth-service",
+        "user-service",
+        "order-service",
+        "inventory-service",
+    ];
+
     for service_name in &services {
         // Create a tracer for each service
         let service_tracer = global::tracer(service_name.to_string());
-        
+
         for i in 0..3 {
-            let span = service_tracer
+            let mut span = service_tracer
                 .span_builder(format!("{}_operation_{}", service_name, i))
                 .with_kind(SpanKind::Internal)
                 .with_attributes(vec![
@@ -151,9 +165,9 @@ async fn main() {
                     opentelemetry::KeyValue::new("request.id", format!("req_{}", i)),
                 ])
                 .start(&service_tracer);
-            
+
             tokio::time::sleep(Duration::from_millis(25)).await;
-            
+
             span.add_event(
                 "operation_completed",
                 vec![
@@ -161,15 +175,15 @@ async fn main() {
                     opentelemetry::KeyValue::new("items_processed", (i + 1) * 10),
                 ],
             );
-            
+
             span.set_status(Status::Ok);
             span.end();
         }
     }
-    
+
     // Force flush to ensure all spans are sent
     println!("\nFlushing spans...");
     global::shutdown_tracer_provider();
-    
+
     println!("Done! Check Urpo to see the traces.");
 }

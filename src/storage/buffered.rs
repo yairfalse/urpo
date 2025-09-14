@@ -3,14 +3,16 @@
 //! This module provides intelligent buffering to handle traffic spikes without data loss,
 //! following CLAUDE.md extreme performance guidelines.
 
-use crate::core::{Span, Result, UrpoError, ServiceName, TraceId, SpanId, ServiceMetrics};
-use crate::storage::{StorageBackend, TraceInfo, StorageStats, StorageHealth, GLOBAL_SPAN_POOL, PooledSpan};
+use crate::core::{Result, ServiceMetrics, ServiceName, Span, SpanId, TraceId, UrpoError};
+use crate::storage::{
+    PooledSpan, StorageBackend, StorageHealth, StorageStats, TraceInfo, GLOBAL_SPAN_POOL,
+};
+use crossbeam::queue::ArrayQueue;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
-use tokio::sync::{RwLock, Notify};
-use crossbeam::queue::ArrayQueue;
+use tokio::sync::{Notify, RwLock};
 
 /// Configuration for buffered storage behavior.
 #[derive(Debug, Clone)]
@@ -61,7 +63,7 @@ pub struct BufferStats {
 }
 
 /// Lock-free ring buffer for ultra-fast span buffering.
-/// 
+///
 /// Uses atomic operations to achieve <10μs write performance per CLAUDE.md.
 pub struct RingBuffer {
     /// Lock-free queue for spans
@@ -80,7 +82,7 @@ impl RingBuffer {
     /// Create a new ring buffer with the specified configuration.
     pub fn new(config: BufferConfig) -> Self {
         let buffer = Arc::new(ArrayQueue::new(config.max_size));
-        
+
         Self {
             buffer,
             size: Arc::new(AtomicUsize::new(0)),
@@ -91,7 +93,7 @@ impl RingBuffer {
     }
 
     /// Buffer a span with zero-allocation hot path.
-    /// 
+    ///
     /// Performance target: <10μs per call (CLAUDE.md requirement).
     #[inline(always)]
     pub fn push(&self, span: Span) -> Result<()> {
@@ -115,7 +117,7 @@ impl RingBuffer {
     }
 
     /// Drain spans from buffer in batches for flushing.
-    /// 
+    ///
     /// Returns up to `batch_size` spans for efficient batch processing.
     pub fn drain_batch(&self, batch_size: usize) -> Vec<Span> {
         let mut batch = Vec::with_capacity(batch_size);
@@ -167,7 +169,7 @@ impl RingBuffer {
 }
 
 /// Buffered storage backend that provides intelligent buffering like Jaeger's Kafka pattern.
-/// 
+///
 /// This implementation is optimized for Rust and single-binary deployment while maintaining
 /// the same traffic spike handling capabilities.
 pub struct BufferedStorage {
@@ -187,10 +189,7 @@ pub struct BufferedStorage {
 
 impl BufferedStorage {
     /// Create a new buffered storage with the specified backend and configuration.
-    pub fn new(
-        backend: Box<dyn StorageBackend>, 
-        config: BufferConfig
-    ) -> Self {
+    pub fn new(backend: Box<dyn StorageBackend>, config: BufferConfig) -> Self {
         let buffer = Arc::new(RingBuffer::new(config.clone()));
         let backend = Arc::new(RwLock::new(backend));
         let flush_notify = Arc::new(Notify::new());
@@ -232,7 +231,7 @@ impl BufferedStorage {
 
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(config.flush_interval);
-            
+
             while !shutdown.load(Ordering::Relaxed) {
                 tokio::select! {
                     _ = interval.tick() => {
@@ -275,7 +274,7 @@ impl BufferedStorage {
                 }
             }
             drop(backend_guard);
-            
+
             match success {
                 true => {
                     // Success - update stats
@@ -283,11 +282,8 @@ impl BufferedStorage {
                     stats_lock.total_flushed += spans.len() as u64;
                     stats_lock.flush_count += 1;
                     stats_lock.last_flush = Some(SystemTime::now());
-                    
-                    tracing::debug!(
-                        "Flushed {} spans to storage",
-                        spans.len()
-                    );
+
+                    tracing::debug!("Flushed {} spans to storage", spans.len());
                     break;
                 }
                 false => {
@@ -298,7 +294,7 @@ impl BufferedStorage {
                         let mut stats_lock = stats.write().await;
                         stats_lock.failed_flushes += 1;
                         stats_lock.total_dropped += spans.len() as u64;
-                        
+
                         tracing::error!(
                             "Failed to flush {} spans after {} retries: {}",
                             spans.len(),
@@ -310,7 +306,7 @@ impl BufferedStorage {
                         // Exponential backoff
                         let delay = Duration::from_millis(100 * 2_u64.pow((retries - 1) as u32));
                         tokio::time::sleep(delay).await;
-                        
+
                         tracing::warn!(
                             "Flush attempt {} failed: {}, retrying in {:?}",
                             retries,
@@ -338,7 +334,7 @@ impl BufferedStorage {
                 backend_guard.store_span(span.clone()).await?;
             }
             drop(backend_guard);
-            
+
             // Update stats
             let mut stats = self.stats.write().await;
             stats.total_flushed += spans.len() as u64;
@@ -353,13 +349,13 @@ impl BufferedStorage {
     pub async fn get_buffer_stats(&self) -> BufferStats {
         let buffer_stats = self.buffer.stats();
         let mut stats = self.stats.write().await;
-        
+
         // Merge buffer stats with persistent stats
         stats.size = buffer_stats.size;
         stats.utilization = buffer_stats.utilization;
         stats.total_buffered = buffer_stats.total_buffered;
         stats.total_dropped += buffer_stats.total_dropped;
-        
+
         stats.clone()
     }
 
@@ -387,10 +383,10 @@ impl StorageBackend for BufferedStorage {
             Err(UrpoError::BufferFull) => {
                 // Buffer full - trigger emergency flush and retry once
                 self.flush_notify.notify_one();
-                
+
                 // Brief yield to allow background flush
                 tokio::task::yield_now().await;
-                
+
                 // Retry once
                 if let Err(_) = self.buffer.push(span.clone()) {
                     // Still full - this span will be dropped
@@ -400,7 +396,7 @@ impl StorageBackend for BufferedStorage {
             }
             Err(e) => return Err(e),
         }
-        
+
         Ok(())
     }
 
@@ -417,8 +413,11 @@ impl StorageBackend for BufferedStorage {
         end_time: Option<u64>,
         limit: usize,
     ) -> Result<Vec<TraceInfo>> {
-        self.backend.read().await
-            .list_traces(service, start_time, end_time, limit).await
+        self.backend
+            .read()
+            .await
+            .list_traces(service, start_time, end_time, limit)
+            .await
     }
 
     /// Get service list (delegates to backend storage).
@@ -439,8 +438,16 @@ impl StorageBackend for BufferedStorage {
 
     /// Get service spans (BLAZING FAST delegation).
     #[inline(always)]
-    async fn get_service_spans(&self, service: &ServiceName, since: SystemTime) -> Result<Vec<Span>> {
-        self.backend.read().await.get_service_spans(service, since).await
+    async fn get_service_spans(
+        &self,
+        service: &ServiceName,
+        since: SystemTime,
+    ) -> Result<Vec<Span>> {
+        self.backend
+            .read()
+            .await
+            .get_service_spans(service, since)
+            .await
     }
 
     /// Get service metrics (BLAZING FAST delegation).
@@ -476,7 +483,8 @@ impl StorageBackend for BufferedStorage {
     /// Get health status (BLAZING FAST delegation).
     #[inline(always)]
     fn get_health(&self) -> StorageHealth {
-        self.backend.try_read()
+        self.backend
+            .try_read()
             .map(|backend| backend.get_health())
             .unwrap_or(StorageHealth::Degraded)
     }
@@ -489,8 +497,16 @@ impl StorageBackend for BufferedStorage {
 
     /// List recent traces (BLAZING FAST delegation).
     #[inline(always)]
-    async fn list_recent_traces(&self, limit: usize, service_filter: Option<&ServiceName>) -> Result<Vec<TraceInfo>> {
-        self.backend.read().await.list_recent_traces(limit, service_filter).await
+    async fn list_recent_traces(
+        &self,
+        limit: usize,
+        service_filter: Option<&ServiceName>,
+    ) -> Result<Vec<TraceInfo>> {
+        self.backend
+            .read()
+            .await
+            .list_recent_traces(limit, service_filter)
+            .await
     }
 
     /// Get error traces (BLAZING FAST delegation).
@@ -502,7 +518,11 @@ impl StorageBackend for BufferedStorage {
     /// Get slow traces (BLAZING FAST delegation).
     #[inline(always)]
     async fn get_slow_traces(&self, threshold: Duration, limit: usize) -> Result<Vec<TraceInfo>> {
-        self.backend.read().await.get_slow_traces(threshold, limit).await
+        self.backend
+            .read()
+            .await
+            .get_slow_traces(threshold, limit)
+            .await
     }
 
     /// Get service metrics map (BLAZING FAST delegation).
@@ -513,8 +533,18 @@ impl StorageBackend for BufferedStorage {
 
     /// Search spans (BLAZING FAST delegation).
     #[inline(always)]
-    async fn search_spans(&self, query: &str, service: Option<&str>, attribute_key: Option<&str>, limit: usize) -> Result<Vec<Span>> {
-        self.backend.read().await.search_spans(query, service, attribute_key, limit).await
+    async fn search_spans(
+        &self,
+        query: &str,
+        service: Option<&str>,
+        attribute_key: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<Span>> {
+        self.backend
+            .read()
+            .await
+            .search_spans(query, service, attribute_key, limit)
+            .await
     }
 
     /// Get stats (BLAZING FAST delegation).
@@ -528,7 +558,7 @@ impl Drop for BufferedStorage {
     fn drop(&mut self) {
         // Signal shutdown and attempt final flush
         self.shutdown.store(true, Ordering::Relaxed);
-        
+
         // Note: In a real implementation, we'd want to wait for the final flush
         // but Drop is synchronous, so we can't await here.
         // Consider using an async Drop pattern or explicit shutdown method.
@@ -538,8 +568,8 @@ impl Drop for BufferedStorage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::InMemoryStorage;
     use crate::core::SpanBuilder;
+    use crate::storage::InMemoryStorage;
 
     #[tokio::test]
     async fn test_ring_buffer_basic_operations() {
@@ -592,7 +622,10 @@ mod tests {
         let storage = BufferedStorage::new(backend, config);
 
         // Store spans
-        let spans = vec![SpanBuilder::default().build_default(), SpanBuilder::default().build_default()];
+        let spans = vec![
+            SpanBuilder::default().build_default(),
+            SpanBuilder::default().build_default(),
+        ];
         for span in spans {
             assert!(storage.store_span(span).await.is_ok());
         }
@@ -603,7 +636,7 @@ mod tests {
         // Verify spans were flushed to backend
         let stats = storage.get_buffer_stats().await;
         assert_eq!(stats.total_buffered, 2);
-        
+
         // Buffer should be empty after flush
         assert_eq!(stats.size, 0);
     }

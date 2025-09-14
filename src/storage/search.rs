@@ -1,27 +1,27 @@
 // BLAZING FAST SEARCH - MAKE ZIPKIN CRY
 // Zero-allocation, cache-optimized, SIMD-ready search engine
 
-use std::sync::Arc;
-use dashmap::DashMap;
 use crate::core::ServiceName;
-use std::sync::atomic::{AtomicU64, Ordering};
+use dashmap::DashMap;
 use parking_lot::RwLock;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 
 /// Inverted index for BLAZING FAST searches
 /// Uses zero-copy string slices and atomic operations
 pub struct SearchIndex {
     // Token -> Set of trace IDs (using u128 for fast comparison)
     inverted_index: Arc<DashMap<Arc<str>, Arc<RwLock<Vec<u128>>>>>,
-    
+
     // Service name -> trace IDs (pre-computed for fast filtering)
     service_index: Arc<DashMap<ServiceName, Arc<RwLock<Vec<u128>>>>>,
-    
+
     // Error traces (pre-computed bit set for instant error filtering)
     error_traces: Arc<DashMap<u128, bool>>,
-    
+
     // Operation name -> trace IDs (most common search)
     operation_index: Arc<DashMap<Arc<str>, Arc<RwLock<Vec<u128>>>>>,
-    
+
     // Stats for performance monitoring
     searches_performed: AtomicU64,
     avg_search_ns: AtomicU64,
@@ -72,7 +72,8 @@ impl SearchIndex {
 
         // Tokenize and index operation name (zero-copy)
         for token in tokenize_zero_copy(operation) {
-            if token.len() > 2 {  // Skip tiny tokens
+            if token.len() > 2 {
+                // Skip tiny tokens
                 let token_key = Arc::from(token);
                 self.inverted_index
                     .entry(token_key)
@@ -104,7 +105,7 @@ impl SearchIndex {
     #[inline]
     pub fn search(&self, query: &str, limit: usize) -> Vec<u128> {
         let start = std::time::Instant::now();
-        
+
         // Fast path: exact operation match
         if let Some(traces) = self.operation_index.get(query) {
             let result = traces.read().iter().take(limit).copied().collect();
@@ -123,7 +124,8 @@ impl SearchIndex {
 
         // Fast path: error filter
         if query.to_lowercase() == "error" || query.to_lowercase() == "errors" {
-            let result: Vec<u128> = self.error_traces
+            let result: Vec<u128> = self
+                .error_traces
                 .iter()
                 .take(limit)
                 .map(|entry| *entry.key())
@@ -149,9 +151,15 @@ impl SearchIndex {
                     for trace_id in traces.iter().take(limit * 2) {
                         if seen_traces.insert(*trace_id) {
                             // New trace, calculate score efficiently
-                            let score = if token.len() > 8 { 3 } else if token.len() > 5 { 2 } else { 1 };
+                            let score = if token.len() > 8 {
+                                3
+                            } else if token.len() > 5 {
+                                2
+                            } else {
+                                1
+                            };
                             trace_scores.push((*trace_id, score));
-                            
+
                             // Early exit if we have enough high-quality results
                             if trace_scores.len() >= limit * 2 {
                                 break;
@@ -203,7 +211,7 @@ impl SearchIndex {
     #[inline(always)]
     fn update_stats(&self, search_ns: u64) {
         self.searches_performed.fetch_add(1, Ordering::Relaxed);
-        
+
         // Update rolling average
         let old_avg = self.avg_search_ns.load(Ordering::Relaxed);
         let count = self.searches_performed.load(Ordering::Relaxed);
@@ -222,7 +230,7 @@ impl SearchIndex {
     pub fn evict_trace(&self, trace_id: u128) {
         // Remove from all indices
         self.error_traces.remove(&trace_id);
-        
+
         // Note: We don't remove from inverted indices to avoid locking
         // They will be cleaned up during periodic maintenance
     }
@@ -239,13 +247,22 @@ fn tokenize_zero_copy(text: &str) -> impl Iterator<Item = &str> {
 /// Check if attribute should be indexed
 #[inline(always)]
 fn is_searchable_attribute(key: &str) -> bool {
-    matches!(key,
-        "http.url" | "http.method" | "http.status_code" |
-        "db.statement" | "db.operation" | "db.name" |
-        "rpc.method" | "rpc.service" |
-        "error.message" | "error.type" |
-        "user.id" | "user.email" |
-        "request.id" | "correlation.id"
+    matches!(
+        key,
+        "http.url"
+            | "http.method"
+            | "http.status_code"
+            | "db.statement"
+            | "db.operation"
+            | "db.name"
+            | "rpc.method"
+            | "rpc.service"
+            | "error.message"
+            | "error.type"
+            | "user.id"
+            | "user.email"
+            | "request.id"
+            | "correlation.id"
     )
 }
 
@@ -256,13 +273,13 @@ mod tests {
     #[test]
     fn test_blazing_fast_search() {
         let index = SearchIndex::new();
-        
+
         // Index some test data
         let trace1 = 0x1234567890abcdef_u128;
         // BULLETPROOF: Test should panic on invalid service name
-        let service = ServiceName::new("api-gateway".to_string())
-            .expect("Test service name should be valid");
-        
+        let service =
+            ServiceName::new("api-gateway".to_string()).expect("Test service name should be valid");
+
         index.index_span(
             trace1,
             &service,
@@ -278,7 +295,7 @@ mod tests {
         let start = std::time::Instant::now();
         let results = index.search("users", 10);
         let elapsed = start.elapsed();
-        
+
         assert!(!results.is_empty());
         assert!(elapsed.as_micros() < 100); // Less than 100 microseconds!
         assert_eq!(results[0], trace1);
@@ -287,12 +304,12 @@ mod tests {
     #[test]
     fn test_error_trace_search() {
         let index = SearchIndex::new();
-        
+
         let error_trace = 0xdeadbeef_u128;
         // BULLETPROOF: Test should panic on invalid service name
-        let service = ServiceName::new("database".to_string())
-            .expect("Test service name should be valid");
-        
+        let service =
+            ServiceName::new("database".to_string()).expect("Test service name should be valid");
+
         index.index_span(
             error_trace,
             &service,

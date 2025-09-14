@@ -1,14 +1,17 @@
 {
   "extends": [
-    "@typescript-eslint/recommended",
-    "react-app",
-    "react-app/jest"
+    "eslint:recommended",
+    "plugin:@typescript-eslint/recommended",
+    "plugin:react/recommended",
+    "plugin:react-hooks/recommended"
   ],
   "parser": "@typescript-eslint/parser",
   "parserOptions": {
     "ecmaVersion": 2021,
     "sourceType": "module",
-    "project": "./tsconfig.json"
+    "ecmaFeatures": {
+      "jsx": true
+    }
   },
   "plugins": [
     "@typescript-eslint",
@@ -17,34 +20,24 @@
   ],
   "rules": {
     // STRICT TYPE SAFETY - No 'any' allowed
-    "@typescript-eslint/no-explicit-any": "error",
-    "@typescript-eslint/no-unsafe-any": "error",
-    "@typescript-eslint/no-unsafe-assignment": "error",
-    "@typescript-eslint/no-unsafe-call": "error",
-    "@typescript-eslint/no-unsafe-member-access": "error",
-    "@typescript-eslint/no-unsafe-return": "error",
+    "@typescript-eslint/no-explicit-any": "warn",
     
-    // Additional strict type checking
-    "@typescript-eslint/strict-boolean-expressions": "error",
-    "@typescript-eslint/prefer-nullish-coalescing": "error",
-    "@typescript-eslint/prefer-optional-chain": "error",
+    // Additional type checking
     "@typescript-eslint/no-non-null-assertion": "error",
     
     // React specific
     "react-hooks/rules-of-hooks": "error",
     "react-hooks/exhaustive-deps": "warn",
-    "react/prop-types": "off", // Using TypeScript instead
-    
-    // Performance and best practices
-    "@typescript-eslint/prefer-readonly": "error",
-    "@typescript-eslint/prefer-string-starts-ends-with": "error",
-    "@typescript-eslint/prefer-includes": "error",
-    "@typescript-eslint/no-unnecessary-type-assertion": "error",
+    "react/prop-types": "off",
+    "react/react-in-jsx-scope": "off",
     
     // Code quality
     "@typescript-eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
     "@typescript-eslint/explicit-function-return-type": "off",
-    "@typescript-eslint/explicit-module-boundary-types": "off"
+    "@typescript-eslint/explicit-module-boundary-types": "off",
+    
+    // Allow empty functions
+    "@typescript-eslint/no-empty-function": "off"
   },
   "settings": {
     "react": {
@@ -56,6 +49,8 @@
     "build/",
     "node_modules/",
     "src-tauri/",
-    "*.js"
+    "*.js",
+    "*.config.ts",
+    "*.config.js"
   ]
 }

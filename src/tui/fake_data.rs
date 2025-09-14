@@ -120,7 +120,8 @@ impl FakeDataGenerator {
                 let span_count = (rps * 60.0) as u64; // Approximation for last minute
                 let error_count = (span_count as f64 * (error_rate / 100.0)) as u64;
 
-                let mut metrics = ServiceMetrics::new(ServiceName::new(service.name.clone()).unwrap());
+                let mut metrics =
+                    ServiceMetrics::new(ServiceName::new(service.name.clone()).unwrap());
                 metrics.span_count = span_count;
                 metrics.error_count = error_count;
                 metrics.request_rate = rps;
@@ -144,17 +145,13 @@ impl FakeDataGenerator {
 
         for _ in 0..count {
             let service = &self.services[rng.gen_range(0..self.services.len())];
-            
+
             // Generate random trace ID (32 chars)
-            let trace_id_str: String = (0..32)
-                .map(|_| rng.sample(Alphanumeric) as char)
-                .collect();
+            let trace_id_str: String = (0..32).map(|_| rng.sample(Alphanumeric) as char).collect();
             let trace_id = TraceId::new(trace_id_str).unwrap();
 
             // Generate random span ID (16 chars)
-            let span_id_str: String = (0..16)
-                .map(|_| rng.sample(Alphanumeric) as char)
-                .collect();
+            let span_id_str: String = (0..16).map(|_| rng.sample(Alphanumeric) as char).collect();
             let span_id = SpanId::new(span_id_str).unwrap();
 
             // Random operation names

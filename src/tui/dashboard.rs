@@ -23,10 +23,10 @@ pub fn draw_dashboard(frame: &mut Frame, app: &mut Dashboard) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(4),  // Header
-            Constraint::Length(3),  // Stats bar
-            Constraint::Min(10),    // Service table
-            Constraint::Length(3),  // Footer
+            Constraint::Length(4), // Header
+            Constraint::Length(3), // Stats bar
+            Constraint::Min(10),   // Service table
+            Constraint::Length(3), // Footer
         ])
         .split(size);
 
@@ -47,9 +47,9 @@ fn draw_header(frame: &mut Frame, area: Rect, app: &Dashboard) {
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Length(20),  // Urpo title
-            Constraint::Min(20),     // Center stats
-            Constraint::Length(25),  // Time
+            Constraint::Length(20), // Urpo title
+            Constraint::Min(20),    // Center stats
+            Constraint::Length(25), // Time
         ])
         .split(area);
 
@@ -57,7 +57,12 @@ fn draw_header(frame: &mut Frame, area: Rect, app: &Dashboard) {
     let title = Paragraph::new(vec![
         Line::from(""),
         Line::from(vec![
-            Span::styled("  URPO ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "  URPO ",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::styled("v0.1.0", Style::default().fg(Color::DarkGray)),
         ]),
     ])
@@ -84,12 +89,16 @@ fn draw_header(frame: &mut Frame, area: Rect, app: &Dashboard) {
             Span::raw("  Services: "),
             Span::styled(
                 format!("{}", app.get_filtered_services().len()),
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
             ),
             Span::raw(" | RPS: "),
             Span::styled(
                 format!("{:.0}", total_rps),
-                Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
             ),
             Span::raw(" | Errors: "),
             Span::styled(
@@ -131,7 +140,9 @@ fn draw_header(frame: &mut Frame, area: Rect, app: &Dashboard) {
             Span::raw(" "),
             Span::styled(
                 now.format("%H:%M:%S").to_string(),
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
             ),
         ]),
     ])
@@ -159,7 +170,7 @@ fn draw_stats_bar(frame: &mut Frame, area: Rect, app: &Dashboard) {
     // Find top services by different metrics
     let mut services_by_error: Vec<&ServiceMetrics> = app.services.iter().collect();
     services_by_error.sort_by(|a, b| b.error_rate.partial_cmp(&a.error_rate).unwrap());
-    
+
     let mut services_by_latency: Vec<&ServiceMetrics> = app.services.iter().collect();
     services_by_latency.sort_by(|a, b| b.latency_p99.cmp(&a.latency_p99));
 
@@ -187,7 +198,11 @@ fn draw_stats_bar(frame: &mut Frame, area: Rect, app: &Dashboard) {
 
     // Slowest service
     let latency_info = if let Some(slowest) = services_by_latency.first() {
-        format!("{}: {}ms", slowest.name.as_str(), slowest.latency_p99.as_millis())
+        format!(
+            "{}: {}ms",
+            slowest.name.as_str(),
+            slowest.latency_p99.as_millis()
+        )
     } else {
         "No services".to_string()
     };
@@ -207,7 +222,11 @@ fn draw_stats_bar(frame: &mut Frame, area: Rect, app: &Dashboard) {
     let sort_filter = Paragraph::new(vec![Line::from(vec![
         Span::raw(" Sort: "),
         Span::styled(
-            format!("{} {}", app.sort_by.as_str(), if app.sort_desc { "↓" } else { "↑" }),
+            format!(
+                "{} {}",
+                app.sort_by.as_str(),
+                if app.sort_desc { "↓" } else { "↑" }
+            ),
             Style::default().fg(Color::Cyan),
         ),
         Span::raw(" | Filter: "),
@@ -230,7 +249,11 @@ fn draw_stats_bar(frame: &mut Frame, area: Rect, app: &Dashboard) {
         Span::raw(" | "),
         Span::styled(
             format!("{}MB", app.memory_usage_mb as u32),
-            Style::default().fg(if app.memory_usage_mb > 256.0 { Color::Red } else { Color::Green }),
+            Style::default().fg(if app.memory_usage_mb > 256.0 {
+                Color::Red
+            } else {
+                Color::Green
+            }),
         ),
     ])])
     .block(
@@ -245,10 +268,10 @@ fn draw_stats_bar(frame: &mut Frame, area: Rect, app: &Dashboard) {
 fn get_system_health_info() -> (&'static str, Color, &'static str) {
     // In a real implementation, this would check actual system health
     // For now, return placeholder values based on simple heuristics
-    
+
     // Simulate health check (this would use the monitoring module)
     let health_status = "Healthy"; // SystemHealth::Healthy, Degraded, Unhealthy, Critical
-    
+
     match health_status {
         "Healthy" => ("●", Color::Green, "Healthy"),
         "Degraded" => ("●", Color::Yellow, "Degraded"),
@@ -273,7 +296,7 @@ fn draw_service_table(frame: &mut Frame, area: Rect, app: &mut Dashboard) {
         ("P99", app.sort_by == SortBy::P99),
         ("Health", false),
     ];
-    
+
     let header_cells: Vec<Cell> = header_items
         .into_iter()
         .map(|(title, is_sorted)| {
@@ -283,7 +306,11 @@ fn draw_service_table(frame: &mut Frame, area: Rect, app: &mut Dashboard) {
             }
             Cell::from(cell_text).style(
                 Style::default()
-                    .fg(if is_sorted { Color::Cyan } else { Color::Yellow })
+                    .fg(if is_sorted {
+                        Color::Cyan
+                    } else {
+                        Color::Yellow
+                    })
                     .add_modifier(Modifier::BOLD),
             )
         })
@@ -402,7 +429,11 @@ fn draw_service_table(frame: &mut Frame, area: Rect, app: &mut Dashboard) {
         Block::default()
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
-            .title(format!(" Services ({}/{}) ", services.len(), app.services.len()))
+            .title(format!(
+                " Services ({}/{}) ",
+                services.len(),
+                app.services.len()
+            ))
             .title_alignment(Alignment::Center)
             .border_style(Style::default().fg(Color::Cyan)),
     );
@@ -491,19 +522,24 @@ fn draw_footer_bar(frame: &mut Frame, area: Rect, app: &Dashboard) {
 /// Draw search overlay.
 fn draw_search_overlay(frame: &mut Frame, query: &str) {
     let size = frame.area();
-    
+
     // Create centered search box
     let search_width = 60;
     let search_height = 3;
     let x = (size.width.saturating_sub(search_width)) / 2;
     let y = size.height / 3;
-    
+
     let search_area = Rect::new(x, y, search_width, search_height);
 
     let search_text = vec![Line::from(vec![
         Span::raw(" Search: "),
         Span::styled(query, Style::default().fg(Color::Cyan)),
-        Span::styled("_", Style::default().fg(Color::Cyan).add_modifier(Modifier::SLOW_BLINK)),
+        Span::styled(
+            "_",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::SLOW_BLINK),
+        ),
     ])];
 
     let search_box = Paragraph::new(search_text)
@@ -528,7 +564,7 @@ fn create_mini_sparkline(data: &[u64]) -> String {
 
     let spark_chars = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
     let max = *data.iter().max().unwrap_or(&1).max(&1) as f64;
-    
+
     let last_5: Vec<char> = data
         .iter()
         .rev()
