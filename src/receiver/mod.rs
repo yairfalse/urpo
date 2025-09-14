@@ -340,7 +340,7 @@ fn convert_otel_span(
             opentelemetry_proto::tonic::trace::v1::status::StatusCode::Unset => SpanStatus::Unknown,
             opentelemetry_proto::tonic::trace::v1::status::StatusCode::Ok => SpanStatus::Ok,
             opentelemetry_proto::tonic::trace::v1::status::StatusCode::Error => {
-                SpanStatus::Error(status.message.clone())
+                SpanStatus::Error(status.message)
             },
         }
     } else {
