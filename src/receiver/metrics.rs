@@ -73,12 +73,12 @@ impl OtelMetricsReceiver {
                 Data::Histogram(histogram) => {
                     for data_point in &histogram.data_points {
                         // For histogram, use the sum as a latency indicator
-                        if data_point.sum > 0.0 {
+                        if data_point.sum.unwrap_or(0.0) > 0.0 {
                             points.push(MetricPoint::new(
                                 timestamp,
                                 service_id,
                                 metric_name_id,
-                                data_point.sum,
+                                data_point.sum.unwrap_or(0.0),
                             ));
                         }
                     }
@@ -338,6 +338,7 @@ mod tests {
             name: "request_count".to_string(),
             description: "Total requests".to_string(),
             unit: "1".to_string(),
+            metadata: None,
             data: Some(opentelemetry_proto::tonic::metrics::v1::metric::Data::Sum(Sum {
                 data_points: vec![NumberDataPoint {
                     attributes: vec![],
@@ -369,6 +370,7 @@ mod tests {
             name: "empty_metric".to_string(),
             description: "".to_string(),
             unit: "".to_string(),
+            metadata: None,
             data: None,
         };
 
@@ -400,6 +402,7 @@ mod tests {
                                 name: "test_metric".to_string(),
                                 description: "Test metric".to_string(),
                                 unit: "ms".to_string(),
+                                metadata: None,
                                 data: Some(
                                     opentelemetry_proto::tonic::metrics::v1::metric::Data::Gauge(
                                         Gauge {
@@ -438,7 +441,7 @@ mod tests {
     #[test]
     fn test_create_metrics_service_server() {
         let storage = create_test_metric_storage();
-        let server = create_metrics_service_server(storage);
+        let _server = create_metrics_service_server(storage);
 
         // Just verify it creates without panic
         assert!(true);

@@ -166,7 +166,10 @@ fn draw_stats_bar(frame: &mut Frame, area: Rect, app: &Dashboard) {
 
     // Find top services by different metrics
     let mut services_by_error: Vec<&ServiceMetrics> = app.services.iter().collect();
-    services_by_error.sort_by(|a, b| b.error_rate.partial_cmp(&a.error_rate).unwrap());
+    services_by_error.sort_by(|a, b| {
+        b.error_rate.partial_cmp(&a.error_rate)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     let mut services_by_latency: Vec<&ServiceMetrics> = app.services.iter().collect();
     services_by_latency.sort_by(|a, b| b.latency_p99.cmp(&a.latency_p99));

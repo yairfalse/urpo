@@ -211,7 +211,7 @@ impl ColdStorage {
         // Generate archive ID based on timestamp
         let archive_id = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_else(|_| Duration::from_secs(0))
             .as_secs();
 
         let archive_path = self.storage_dir.join(format!("archive_{}.lz4", archive_id));
@@ -496,7 +496,7 @@ impl TieredStorageEngine {
     fn trigger_hot_to_warm_migration(&self) -> Result<()> {
         let current_time = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_else(|_| Duration::from_secs(0))
             .as_nanos() as u64;
 
         let cutoff_time = current_time - self.config.hot_retention.as_nanos() as u64;
