@@ -115,7 +115,7 @@ const SystemMetrics = memo(({ metrics }: Props) => {
           </div>
           <div className="h-2 bg-surface-200 rounded-full overflow-hidden">
             <div
-              className="h-full bg-status-healthy transition-all duration-300"
+              className="h-full bg-status-healthy  "
               style={{
                 width: `${Math.max(100 - (metrics.memory_usage_mb / 100) * 100, 0)}%`
               }}
@@ -132,7 +132,7 @@ const SystemMetrics = memo(({ metrics }: Props) => {
           </div>
           <div className="h-2 bg-surface-200 rounded-full overflow-hidden">
             <div
-              className="h-full bg-text-700 transition-all duration-300"
+              className="h-full bg-text-700  "
               style={{
                 width: `${Math.min((metrics.spans_per_second / 10000) * 100, 100)}%`
               }}
@@ -146,4 +146,4 @@ const SystemMetrics = memo(({ metrics }: Props) => {
 
 SystemMetrics.displayName = 'SystemMetrics';
 
-export default SystemMetrics;
+export { SystemMetrics };

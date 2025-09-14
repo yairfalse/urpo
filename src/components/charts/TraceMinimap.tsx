@@ -1,5 +1,5 @@
 // TRACE MINIMAP - SEE EVERYTHING AT A GLANCE
-import React, { useRef, useEffect, useCallback, useState } from 'react';
+import { useRef, useEffect, useCallback, useState, memo } from 'react';
 
 interface MinimapProps {
   traces: any[];
@@ -9,13 +9,13 @@ interface MinimapProps {
   width?: number;
 }
 
-const TraceMinimap: React.FC<MinimapProps> = ({ 
+const TraceMinimapImpl = ({ 
   traces, 
   currentView, 
   onViewChange,
   height = 400,
   width = 60 
-}) => {
+}: MinimapProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [hoverInfo, setHoverInfo] = useState<{ y: number; text: string } | null>(null);
@@ -329,4 +329,5 @@ const TraceMinimap: React.FC<MinimapProps> = ({
   );
 };
 
-export default TraceMinimap;
+export const TraceMinimap = memo(TraceMinimapImpl);
+TraceMinimap.displayName = 'TraceMinimap';

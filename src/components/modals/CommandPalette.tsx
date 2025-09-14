@@ -1,5 +1,5 @@
 // COMMAND PALETTE - POWER USER MODE ACTIVATED
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { invoke } from '@tauri-apps/api/tauri';
 
 interface Command {
@@ -17,7 +17,7 @@ interface CommandPaletteProps {
   onCommand?: (command: Command) => void;
 }
 
-const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, onCommand }) => {
+const CommandPaletteImpl = ({ isOpen, onClose, onCommand }: CommandPaletteProps) => {
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [results, setResults] = useState<Command[]>([]);
@@ -266,7 +266,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, onComm
             results.map((cmd, index) => (
               <div
                 key={cmd.id}
-                className={`flex items-center justify-between px-4 py-2 cursor-pointer transition-colors ${
+                className={`flex items-center justify-between px-4 py-2 cursor-pointer  ${
                   index === selectedIndex
                     ? 'bg-gray-500/10 text-white border-l-2 border-gray-500'
                     : 'text-gray-400 hover:bg-gray-900 hover:text-white'
@@ -311,4 +311,5 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, onComm
   );
 };
 
-export default CommandPalette;
+export const CommandPalette = memo(CommandPaletteImpl);
+CommandPalette.displayName = 'CommandPalette';

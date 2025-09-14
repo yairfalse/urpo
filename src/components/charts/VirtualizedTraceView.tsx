@@ -180,7 +180,7 @@ const VirtualizedTraceView = memo(({ trace, spans }: Props) => {
             return (
               <div
                 key={span.span_id}
-                className={`absolute w-full h-8 border-b border-surface-200 hover:bg-surface-100 transition-colors cursor-pointer ${
+                className={`absolute w-full h-8 border-b border-surface-200 hover:bg-surface-100  cursor-pointer ${
                   selectedSpan === span.span_id ? 'bg-surface-200 border-text-700' : ''
                 }`}
                 style={{ top: `${actualIndex * 32}px` }}
@@ -320,4 +320,4 @@ const VirtualizedTraceView = memo(({ trace, spans }: Props) => {
 
 VirtualizedTraceView.displayName = 'VirtualizedTraceView';
 
-export default VirtualizedTraceView;
+export { VirtualizedTraceView };

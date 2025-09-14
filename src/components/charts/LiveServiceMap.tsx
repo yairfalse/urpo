@@ -1,5 +1,5 @@
 // LIVE SERVICE MAP - WATCH YOUR SYSTEM BREATHE
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useState, useCallback, memo } from 'react';
 import { invoke } from '@tauri-apps/api/tauri';
 
 interface ServiceNode {
@@ -22,7 +22,7 @@ interface TraceFlow {
   offset: number;
 }
 
-const LiveServiceMap = () => {
+const LiveServiceMapImpl = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number>();
   const [services, setServices] = useState<Map<string, ServiceNode>>(new Map());
@@ -296,4 +296,5 @@ const LiveServiceMap = () => {
   );
 };
 
-export default LiveServiceMap;
+export const LiveServiceMap = memo(LiveServiceMapImpl);
+LiveServiceMap.displayName = 'LiveServiceMap';
