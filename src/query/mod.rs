@@ -7,7 +7,7 @@ pub mod ast;
 pub mod executor;
 pub mod parser;
 
-use crate::core::{Result, UrpoError};
+use crate::core::Result;
 use crate::storage::StorageBackend;
 use std::sync::Arc;
 

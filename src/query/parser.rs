@@ -5,10 +5,10 @@ use super::ast::*;
 use nom::{
     branch::alt,
     bytes::complete::{tag, tag_no_case, take_while1},
-    character::complete::{char, digit1, multispace0, alpha1, alphanumeric1},
-    combinator::{map, opt, recognize, value as nom_value},
+    character::complete::{char, digit1, multispace0},
+    combinator::{map, recognize, value as nom_value},
     multi::many0,
-    sequence::{delimited, pair, preceded, terminated, tuple},
+    sequence::{delimited, pair, preceded, tuple},
     IResult,
 };
 

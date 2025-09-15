@@ -2,7 +2,7 @@
 
 use super::ast::*;
 use super::QueryResult;
-use crate::core::{Result, ServiceName, SpanStatus, UrpoError};
+use crate::core::{Result, ServiceName, SpanStatus};
 use crate::storage::StorageBackend;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -152,7 +152,12 @@ impl QueryExecutor {
                 // Status comparison
                 if *op == Operator::Eq {
                     match value {
-                        Value::Status(StatusValue::Error) | Value::String(s) if s == "error" => {
+                        Value::Status(StatusValue::Error) => {
+                            // Get error traces
+                            let error_traces = self.get_error_traces(storage, limit).await?;
+                            Ok(error_traces)
+                        }
+                        Value::String(s) if s == "error" => {
                             // Get error traces
                             let error_traces = self.get_error_traces(storage, limit).await?;
                             Ok(error_traces)

@@ -88,7 +88,6 @@ pub mod attributes {
 
 /// W3C TraceContext propagation support.
 pub mod trace_context {
-    use std::fmt;
     
     /// W3C TraceContext header name.
     pub const TRACEPARENT_HEADER: &str = "traceparent";
@@ -154,8 +153,8 @@ pub enum ValidationError {
     MissingServiceName,
 }
 
-impl fmt::Display for ValidationError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for ValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::InvalidTraceId => write!(f, "Invalid trace ID format"),
             Self::InvalidSpanId => write!(f, "Invalid span ID format"),
