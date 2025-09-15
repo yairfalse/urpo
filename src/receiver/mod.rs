@@ -4,9 +4,13 @@
 //! trace and metrics data following the OTLP specification.
 
 pub mod http;
+pub mod logs;
 pub mod metrics;
 
-use crate::core::{Result, ServiceName, Span as UrpoSpan, SpanId, SpanStatus, TraceId, UrpoError};
+use crate::core::{
+    otel_compliance::{self, attributes, trace_context},
+    Result, ServiceName, Span as UrpoSpan, SpanId, SpanStatus, TraceId, UrpoError,
+};
 use crate::storage::UnifiedStorage;
 use chrono::{DateTime, Utc};
 use opentelemetry_proto::tonic::collector::trace::v1::{
@@ -340,7 +344,7 @@ fn convert_otel_span(
             opentelemetry_proto::tonic::trace::v1::status::StatusCode::Unset => SpanStatus::Unknown,
             opentelemetry_proto::tonic::trace::v1::status::StatusCode::Ok => SpanStatus::Ok,
             opentelemetry_proto::tonic::trace::v1::status::StatusCode::Error => {
-                SpanStatus::Error(status.message.clone())
+                SpanStatus::Error(status.message)
             },
         }
     } else {

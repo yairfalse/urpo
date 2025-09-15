@@ -60,7 +60,7 @@ impl SearchIndex {
         // Index by operation (intern string for deduplication)
         let op_key: Arc<str> = Arc::from(operation);
         self.operation_index
-            .entry(op_key.clone())
+            .entry(op_key)
             .or_insert_with(|| Arc::new(RwLock::new(Vec::with_capacity(100))))
             .write()
             .push(trace_id);

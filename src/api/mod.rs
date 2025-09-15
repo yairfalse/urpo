@@ -5,6 +5,7 @@
 
 use crate::core::{Result, UrpoError};
 use crate::export::{ExportFormat, ExportOptions, TraceExporter};
+use crate::query::QueryEngine;
 use crate::service_map::ServiceMapBuilder;
 use crate::storage::{StorageBackend, UnifiedStorage};
 use axum::{
@@ -95,6 +96,15 @@ struct SearchQuery {
     limit: Option<usize>,
 }
 
+/// Query parameters for TraceQL queries.
+#[derive(Debug, Deserialize)]
+struct TraceQLQuery {
+    /// TraceQL query string
+    q: String,
+    /// Maximum results
+    limit: Option<usize>,
+}
+
 /// Start the API server with UnifiedStorage (recommended).
 pub async fn start_server_with_storage(storage: &UnifiedStorage, config: ApiConfig) -> Result<()> {
     start_server(storage.as_backend(), config).await
@@ -118,6 +128,7 @@ pub async fn start_server(
         .route("/api/services", get(list_services_handler))
         .route("/api/service-map", get(get_service_map_handler))
         .route("/api/search", get(search_handler))
+        .route("/api/query", get(query_handler))
         .with_state(state);
 
     // Add CORS if enabled
@@ -409,6 +420,56 @@ async fn search_handler(
         spans: results,
     })
     .into_response()
+}
+
+/// GET /api/query - Execute TraceQL query
+async fn query_handler(
+    State(state): State<ApiState>,
+    Query(params): Query<TraceQLQuery>,
+) -> impl IntoResponse {
+    // Validate query
+    if params.q.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "Query parameter 'q' is required".to_string(),
+                code: 400,
+            }),
+        )
+            .into_response();
+    }
+
+    let limit = params.limit.unwrap_or(100).min(state.config.max_results);
+
+    // Create query engine
+    let engine = QueryEngine::new(state.storage.clone());
+
+    // Execute query
+    match engine.execute(&params.q, Some(limit)).await {
+        Ok(result) => Json(result).into_response(),
+        Err(e) => {
+            // Check if it's a parse error
+            if e.to_string().contains("parse") {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse {
+                        error: format!("Invalid query: {}", e),
+                        code: 400,
+                    }),
+                )
+                    .into_response()
+            } else {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ErrorResponse {
+                        error: format!("Query execution failed: {}", e),
+                        code: 500,
+                    }),
+                )
+                    .into_response()
+            }
+        }
+    }
 }
 
 /// Service information with metrics.

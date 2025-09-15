@@ -5,6 +5,7 @@
 
 pub mod dashboard;
 mod fake_data;
+pub mod service_health;
 mod span_details;
 mod widgets;
 
@@ -800,7 +801,7 @@ impl Dashboard {
         let (update_tx, update_rx) = mpsc::unbounded_channel::<DataUpdate>();
 
         // Replace the existing channels with the new ones
-        self.data_tx = Some(cmd_tx.clone());
+        self.data_tx = Some(cmd_tx);
         self.data_rx = Some(update_rx);
 
         // Spawn the async data fetcher task
