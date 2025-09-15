@@ -8,7 +8,7 @@ pub mod logs;
 pub mod metrics;
 
 use crate::core::{
-    otel_compliance::{self, attributes, trace_context},
+    otel_compliance,
     Result, ServiceName, Span as UrpoSpan, SpanId, SpanStatus, TraceId, UrpoError,
 };
 use crate::storage::UnifiedStorage;
