@@ -206,12 +206,12 @@ impl BufferedStorage {
         }));
 
         let storage = Self {
-            buffer: buffer.clone(),
+            buffer,
             backend,
-            flush_notify: flush_notify.clone(),
-            shutdown: shutdown.clone(),
-            stats: stats.clone(),
-            config: config.clone(),
+            flush_notify,
+            shutdown,
+            stats,
+            config,
         };
 
         // Start background flush loop

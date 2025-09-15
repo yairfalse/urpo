@@ -6,7 +6,10 @@
 pub mod http;
 pub mod metrics;
 
-use crate::core::{Result, ServiceName, Span as UrpoSpan, SpanId, SpanStatus, TraceId, UrpoError};
+use crate::core::{
+    otel_compliance::{self, attributes, trace_context},
+    Result, ServiceName, Span as UrpoSpan, SpanId, SpanStatus, TraceId, UrpoError,
+};
 use crate::storage::UnifiedStorage;
 use chrono::{DateTime, Utc};
 use opentelemetry_proto::tonic::collector::trace::v1::{
