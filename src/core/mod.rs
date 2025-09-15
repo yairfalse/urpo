@@ -6,6 +6,7 @@
 pub mod config;
 pub mod diagnostics;
 pub mod error;
+pub mod otel_compliance;
 pub mod retry;
 pub mod string_intern;
 pub mod types;
