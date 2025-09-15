@@ -35,7 +35,7 @@ use std::time::SystemTime;
 /// 3. Padding eliminated through careful field ordering
 /// 4. Alignment for SIMD operations
 #[repr(C, align(64))]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct CompactSpan {
     // ---- Cache Line 1 (64 bytes total) ----
     // Hot fields (frequently accessed together) - 32 bytes
@@ -70,7 +70,7 @@ pub struct CompactSpan {
     // bits 8-31: reserved (24 bits)
 
     // Padding to exactly 64 bytes
-    _padding: u32, // 4 bytes, offset 60
+    pub _padding: u32, // 4 bytes, offset 60
 }
 
 // Static assertion to ensure struct is exactly 64 bytes
@@ -157,6 +157,7 @@ impl CompactSpan {
             SpanStatus::Ok => 1,
             SpanStatus::Error(_) => 2,
             SpanStatus::Cancelled => 3,
+            SpanStatus::Unset => 4,
         };
 
         let mut flags = 0u8;
@@ -684,7 +685,7 @@ mod tests {
         let idx2 = intern.intern_service(&service);
 
         assert_eq!(idx1, idx2); // Should reuse same index
-        assert_eq!(intern.get_service_name(idx1).unwrap(), "test-service");
+        assert_eq!(intern.get_service_name(idx1).unwrap().as_ref(), "test-service");
     }
 
     #[test]
