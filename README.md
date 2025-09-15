@@ -2,15 +2,6 @@
 
 High-performance OpenTelemetry trace explorer with terminal and GUI interfaces.
 
-## Performance
-
-| Operation | Time | Notes |
-|-----------|------|-------|
-| Span ingestion | <10μs | Lock-free ring buffer |
-| Search (100K spans) | <1ms | SIMD acceleration |
-| Memory (1M spans) | <100MB | Arc<str> string interning |
-| Cold start | <200ms | Zero-allocation initialization |
-
 ## Features
 
 - **OpenTelemetry Protocol**: Full OTLP compliance with official protobuf types
