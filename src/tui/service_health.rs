@@ -5,7 +5,6 @@
 
 use crate::metrics::storage::{MetricStorage, ServiceHealth};
 use ratatui::{
-    backend::Backend,
     layout::{Constraint, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
