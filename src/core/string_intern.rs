@@ -95,6 +95,12 @@ impl StringIntern {
         reverse.get(id.0 as usize).cloned()
     }
 
+    /// Alias for get() method for compatibility
+    #[inline]
+    pub fn lookup(&self, id: InternId) -> Option<Arc<str>> {
+        self.get(id)
+    }
+
     /// Get string reference by ID (zero-copy)
     #[inline]
     pub fn get_ref(&self, id: InternId) -> Option<&str> {

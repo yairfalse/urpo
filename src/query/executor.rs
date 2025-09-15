@@ -68,8 +68,8 @@ impl QueryExecutor {
             }
 
             QueryFilter::Logical { op, left, right } => {
-                let left_results = self.execute_filter(storage, left, limit * 2).await?;
-                let right_results = self.execute_filter(storage, right, limit * 2).await?;
+                let left_results = Box::pin(self.execute_filter(storage, left, limit * 2)).await?;
+                let right_results = Box::pin(self.execute_filter(storage, right, limit * 2)).await?;
 
                 match op {
                     LogicalOp::And => {
@@ -100,7 +100,7 @@ impl QueryExecutor {
                 }
             }
 
-            QueryFilter::Group(inner) => self.execute_filter(storage, inner, limit).await,
+            QueryFilter::Group(inner) => Box::pin(self.execute_filter(storage, inner, limit)).await,
         }
     }
 
@@ -131,12 +131,11 @@ impl QueryExecutor {
                             // Extract unique trace IDs
                             let mut trace_ids = HashSet::new();
                             for span in spans.iter().take(limit * 10) {
-                                if let Ok(trace_id_str) = span.trace_id.as_str() {
-                                    if let Ok(trace_id) = u128::from_str_radix(trace_id_str, 16) {
-                                        trace_ids.insert(trace_id);
-                                        if trace_ids.len() >= limit {
-                                            break;
-                                        }
+                                let trace_id_str = span.trace_id.as_str();
+                                if let Ok(trace_id) = u128::from_str_radix(trace_id_str, 16) {
+                                    trace_ids.insert(trace_id);
+                                    if trace_ids.len() >= limit {
+                                        break;
                                     }
                                 }
                             }
@@ -193,12 +192,11 @@ impl QueryExecutor {
                         };
 
                         if matches {
-                            if let Ok(trace_id_str) = span.trace_id.as_str() {
-                                if let Ok(trace_id) = u128::from_str_radix(trace_id_str, 16) {
-                                    trace_ids.insert(trace_id);
-                                    if trace_ids.len() >= limit {
-                                        break;
-                                    }
+                            let trace_id_str = span.trace_id.as_str();
+                            if let Ok(trace_id) = u128::from_str_radix(trace_id_str, 16) {
+                                trace_ids.insert(trace_id);
+                                if trace_ids.len() >= limit {
+                                    break;
                                 }
                             }
                         }
@@ -230,12 +228,11 @@ impl QueryExecutor {
         let mut trace_ids = HashSet::new();
         for span in spans {
             if matches!(span.status, SpanStatus::Error(_)) {
-                if let Ok(trace_id_str) = span.trace_id.as_str() {
-                    if let Ok(trace_id) = u128::from_str_radix(trace_id_str, 16) {
-                        trace_ids.insert(trace_id);
-                        if trace_ids.len() >= limit {
-                            break;
-                        }
+                let trace_id_str = span.trace_id.as_str();
+                if let Ok(trace_id) = u128::from_str_radix(trace_id_str, 16) {
+                    trace_ids.insert(trace_id);
+                    if trace_ids.len() >= limit {
+                        break;
                     }
                 }
             }

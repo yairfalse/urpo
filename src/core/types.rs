@@ -216,6 +216,23 @@ impl TraceId {
     pub fn into_inner(self) -> Arc<str> {
         self.0
     }
+
+    /// Creates a TraceId from a hex string
+    pub fn from_hex(hex: &str) -> Result<Self> {
+        // Validate that it's a valid hex string
+        if hex.len() > 32 {
+            return Err(UrpoError::InvalidSpan(format!(
+                "TraceId hex string too long: {} chars",
+                hex.len()
+            )));
+        }
+        if !hex.chars().all(|c| c.is_ascii_hexdigit()) {
+            return Err(UrpoError::InvalidSpan(
+                "TraceId hex string contains invalid characters".to_string(),
+            ));
+        }
+        Ok(TraceId(Arc::from(hex)))
+    }
 }
 
 impl fmt::Display for TraceId {
@@ -229,6 +246,12 @@ impl FromStr for TraceId {
 
     fn from_str(s: &str) -> Result<Self> {
         TraceId::new(s.to_string())
+    }
+}
+
+impl AsRef<str> for TraceId {
+    fn as_ref(&self) -> &str {
+        &self.0
     }
 }
 
@@ -273,11 +296,34 @@ impl SpanId {
     pub fn into_inner(self) -> Arc<str> {
         self.0
     }
+
+    /// Creates a SpanId from a hex string
+    pub fn from_hex(hex: &str) -> Result<Self> {
+        // Validate that it's a valid hex string
+        if hex.len() > 16 {
+            return Err(UrpoError::InvalidSpan(format!(
+                "SpanId hex string too long: {} chars",
+                hex.len()
+            )));
+        }
+        if !hex.chars().all(|c| c.is_ascii_hexdigit()) {
+            return Err(UrpoError::InvalidSpan(
+                "SpanId hex string contains invalid characters".to_string(),
+            ));
+        }
+        Ok(SpanId(Arc::from(hex)))
+    }
 }
 
 impl fmt::Display for SpanId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+impl AsRef<str> for SpanId {
+    fn as_ref(&self) -> &str {
+        &self.0
     }
 }
 
@@ -328,6 +374,12 @@ impl fmt::Display for ServiceName {
     }
 }
 
+impl AsRef<str> for ServiceName {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
 /// Type of span according to OpenTelemetry specification
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum SpanKind {
@@ -360,6 +412,8 @@ pub enum SpanStatus {
     Cancelled,
     /// Span status is unknown
     Unknown,
+    /// Span status is unset (default state)
+    Unset,
 }
 
 impl SpanStatus {
@@ -756,6 +810,30 @@ impl ServiceMetrics {
             avg_duration: Duration::from_millis(0),
             max_duration: Duration::from_millis(0),
             min_duration: Duration::from_millis(0),
+        }
+    }
+
+    /// Creates service metrics with specific values
+    pub fn with_data(
+        service_name: ServiceName,
+        span_count: u64,
+        error_count: u64,
+        avg_duration: Duration,
+        error_rate: f64,
+    ) -> Self {
+        Self {
+            name: service_name,
+            request_rate: 0.0,
+            error_rate,
+            latency_p50: avg_duration,
+            latency_p95: avg_duration,
+            latency_p99: avg_duration,
+            last_seen: SystemTime::now(),
+            span_count,
+            error_count,
+            avg_duration,
+            max_duration: avg_duration,
+            min_duration: avg_duration,
         }
     }
 

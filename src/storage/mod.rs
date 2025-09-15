@@ -27,6 +27,7 @@ pub mod memory;
 pub mod span_pool;
 pub mod tiered_engine;
 pub mod types;
+pub mod ultra_compact_storage;
 pub mod ultra_fast;
 
 // Re-export commonly used types
@@ -41,6 +42,7 @@ pub use types::{CleanupConfig, StorageHealth, StorageStats, TraceInfo};
 // pub use async_archive::{AsyncArchiveWriter, FlushTask};
 // pub use async_archive_reader::{AsyncArchiveReader, MappedArchive, ArchiveStats};
 pub use tiered_engine::{TieredConfig, TieredStorageEngine, TieredStorageStats};
+pub use ultra_compact_storage::UltraCompactStorage;
 pub use ultra_fast::{BitmapIndices, CompactSpan, HotTraceRing, StringIntern, UltraFastStorage};
 
 // UnifiedStorage is defined below
