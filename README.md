@@ -45,11 +45,34 @@ exporter = OTLPSpanExporter(endpoint="localhost:4317", insecure=True)
 ## Architecture
 
 ```
-OTEL Clients → Receivers (GRPC/HTTP) → Storage Engine → Query Engine → UI
-                                      ↓
-                           Hot Tier (Ring Buffer)
-                           Warm Tier (Memory-mapped)
-                           Cold Tier (LZ4 Archive)
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   OTEL Clients  │    │    Receivers    │    │  Storage Engine │
+│                 │    │                 │    │                 │
+│ • Python Apps   │───▶│ • GRPC :4317    │───▶│ ┌─────────────┐ │
+│ • Java Apps     │    │ • HTTP :4318    │    │ │ Hot Tier    │ │
+│ • Go Services   │    │ • W3C Context   │    │ │ Ring Buffer │ │
+│ • Any OTEL SDK  │    │ • OTLP Protocol │    │ │ <10μs       │ │
+└─────────────────┘    └─────────────────┘    │ └─────────────┘ │
+                                              │ ┌─────────────┐ │
+                                              │ │ Warm Tier   │ │
+                                              │ │ Memory-map  │ │
+                                              │ │ <100μs      │ │
+                                              │ └─────────────┘ │
+                                              │ ┌─────────────┐ │
+                                              │ │ Cold Tier   │ │
+                                              │ │ LZ4 Archive │ │
+                                              │ │ <1ms        │ │
+                                              │ └─────────────┘ │
+                                              └─────────────────┘
+                                                       │
+                                                       ▼
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│  User Interface │    │  Query Engine   │    │   Aggregation   │
+│                 │    │                 │    │                 │
+│ • Terminal UI   │◀───│ • SIMD Search   │◀───│ • Service Map   │
+│ • Tauri GUI     │    │ • TraceQL       │    │ • Health Check  │
+│ • 60fps Render  │    │ • <1ms Results  │    │ • Metrics       │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
 
 **Storage Engine**:
@@ -61,6 +84,19 @@ OTEL Clients → Receivers (GRPC/HTTP) → Storage Engine → Query Engine → U
 - SIMD-accelerated pattern matching
 - TraceQL-inspired syntax
 - Real-time execution
+
+```sql
+-- Find slow API requests
+service = "api" && duration > 100ms
+
+-- Find all errors
+status = error
+
+-- Complex queries with grouping
+service = "frontend" && (status = error || duration > 500ms)
+```
+
+📖 **[Query Language Docs](docs/query-language.md)** | **[API Reference](docs/api.md)**
 
 ## Development
 

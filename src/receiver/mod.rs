@@ -4,6 +4,7 @@
 //! trace and metrics data following the OTLP specification.
 
 pub mod http;
+pub mod logs;
 pub mod metrics;
 
 use crate::core::{

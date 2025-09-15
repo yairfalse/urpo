@@ -5,7 +5,7 @@
 
 use crate::core::{Result, UrpoError};
 use crate::export::{ExportFormat, ExportOptions, TraceExporter};
-use crate::query::{QueryEngine, QueryResult};
+use crate::query::QueryEngine;
 use crate::service_map::ServiceMapBuilder;
 use crate::storage::{StorageBackend, UnifiedStorage};
 use axum::{

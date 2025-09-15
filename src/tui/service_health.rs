@@ -67,7 +67,7 @@ impl ServiceHealthView {
     }
 
     /// Render the service health dashboard
-    pub fn render<B: Backend>(&self, f: &mut Frame<B>, area: Rect) {
+    pub fn render(&self, f: &mut Frame, area: Rect) {
         let header_style = Style::default()
             .fg(Color::Cyan)
             .add_modifier(Modifier::BOLD);
