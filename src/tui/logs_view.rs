@@ -4,7 +4,6 @@
 
 use crate::logs::{storage::LogStorage, types::{LogRecord, LogSeverity}};
 use ratatui::{
-    backend::Backend,
     layout::{Constraint, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
@@ -71,7 +70,7 @@ impl LogsView {
     }
 
     /// Render the logs viewer
-    pub fn render<B: Backend>(&self, f: &mut Frame<B>, area: Rect) {
+    pub fn render(&self, f: &mut Frame, area: Rect) {
         let chunks = ratatui::layout::Layout::default()
             .direction(ratatui::layout::Direction::Vertical)
             .constraints([
@@ -92,7 +91,7 @@ impl LogsView {
     }
 
     /// Render search bar
-    fn render_search_bar<B: Backend>(&self, f: &mut Frame<B>, area: Rect) {
+    fn render_search_bar(&self, f: &mut Frame, area: Rect) {
         let search_text = if self.search_active {
             format!("Search: {}█", self.search_query)
         } else if !self.search_query.is_empty() {
@@ -124,7 +123,7 @@ impl LogsView {
     }
 
     /// Render logs table
-    fn render_logs_table<B: Backend>(&self, f: &mut Frame<B>, area: Rect) {
+    fn render_logs_table(&self, f: &mut Frame, area: Rect) {
         let header_style = Style::default()
             .fg(Color::Cyan)
             .add_modifier(Modifier::BOLD);
@@ -192,21 +191,23 @@ impl LogsView {
             .collect();
 
         // Create table
-        let table = Table::new(rows)
+        let table = Table::new(
+            rows,
+            &[
+                Constraint::Length(12), // Time
+                Constraint::Length(8),  // Level
+                Constraint::Length(15), // Service
+                Constraint::Min(30),    // Message
+                Constraint::Length(10), // Trace
+            ]
+        )
             .header(header)
             .block(
                 Block::default()
                     .title(format!(" Logs ({}) ", self.logs.len()))
                     .borders(Borders::ALL)
                     .border_style(Style::default().fg(Color::White)),
-            )
-            .widths(&[
-                Constraint::Length(12), // Time
-                Constraint::Length(8),  // Level
-                Constraint::Length(15), // Service
-                Constraint::Min(30),    // Message
-                Constraint::Length(10), // Trace
-            ]);
+            );
 
         f.render_widget(table, area);
 
@@ -242,7 +243,7 @@ impl LogsView {
     }
 
     /// Render status bar
-    fn render_status_bar<B: Backend>(&self, f: &mut Frame<B>, area: Rect) {
+    fn render_status_bar(&self, f: &mut Frame, area: Rect) {
         let status_text = if let Some(severity) = self.severity_filter {
             format!("Filter: {} | Total: {} logs", severity.as_str(), self.logs.len())
         } else {
