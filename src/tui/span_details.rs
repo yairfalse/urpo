@@ -118,6 +118,7 @@ fn draw_basic_info(frame: &mut Frame, area: Rect, span: &Span) {
         crate::core::SpanStatus::Error(msg) => msg,
         crate::core::SpanStatus::Cancelled => "Cancelled",
         crate::core::SpanStatus::Unknown => "Unknown",
+        crate::core::SpanStatus::Unset => "Unset",
     };
 
     lines.push(Line::from(vec![

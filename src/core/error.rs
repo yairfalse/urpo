@@ -113,6 +113,11 @@ impl UrpoError {
         Self::Terminal(msg.into())
     }
 
+    /// Creates a new internal error
+    pub fn internal<S: Into<String>>(msg: S) -> Self {
+        Self::Storage(format!("Internal error: {}", msg.into()))
+    }
+
     /// Returns true if this error is recoverable
     pub fn is_recoverable(&self) -> bool {
         match self {
