@@ -120,21 +120,23 @@ impl ServiceHealthView {
             .collect();
 
         // Create table
-        let table = Table::new(rows)
+        let table = Table::new(
+            rows,
+            &[
+                Constraint::Percentage(30),
+                Constraint::Percentage(15),
+                Constraint::Percentage(15),
+                Constraint::Percentage(20),
+                Constraint::Percentage(20),
+            ]
+        )
             .header(header)
             .block(
                 Block::default()
                     .title(" Service Health Dashboard ")
                     .borders(Borders::ALL)
                     .border_style(Style::default().fg(Color::White)),
-            )
-            .widths(&[
-                Constraint::Percentage(30),
-                Constraint::Percentage(15),
-                Constraint::Percentage(15),
-                Constraint::Percentage(20),
-                Constraint::Percentage(20),
-            ]);
+            );
 
         f.render_widget(table, area);
 

@@ -191,21 +191,23 @@ impl LogsView {
             .collect();
 
         // Create table
-        let table = Table::new(rows)
+        let table = Table::new(
+            rows,
+            &[
+                Constraint::Length(12), // Time
+                Constraint::Length(8),  // Level
+                Constraint::Length(15), // Service
+                Constraint::Min(30),    // Message
+                Constraint::Length(10), // Trace
+            ]
+        )
             .header(header)
             .block(
                 Block::default()
                     .title(format!(" Logs ({}) ", self.logs.len()))
                     .borders(Borders::ALL)
                     .border_style(Style::default().fg(Color::White)),
-            )
-            .widths(&[
-                Constraint::Length(12), // Time
-                Constraint::Length(8),  // Level
-                Constraint::Length(15), // Service
-                Constraint::Min(30),    // Message
-                Constraint::Length(10), // Trace
-            ]);
+            );
 
         f.render_widget(table, area);
 
