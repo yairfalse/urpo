@@ -665,7 +665,7 @@ async fn start_receiver(state: State<'_, AppState>) -> Result<(), String> {
 
     // Start receiver in background
     let receiver_clone = receiver.clone();
-    tokio::spawn(async move {
+    tauri::async_runtime::spawn(async move {
         if let Err(e) = receiver_clone.run().await {
             tracing::error!("Receiver error: {}", e);
         }
@@ -912,7 +912,7 @@ fn main() {
         .setup(|app| {
             // Start background telemetry task with main window
             let window = app.get_window("main").expect("Failed to get main window");
-            tokio::spawn(background_telemetry_task(window));
+            tauri::async_runtime::spawn(background_telemetry_task(window));
 
             // Initialize tier status
             TELEMETRY
