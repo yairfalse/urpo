@@ -51,6 +51,7 @@ pub mod metrics;
 pub mod monitoring;
 pub mod query;
 pub mod receiver;
+pub mod sampling;
 pub mod service_map;
 pub mod storage;
 pub mod tui;
