@@ -130,6 +130,18 @@ harness = false
 name = "hot_path"
 harness = false
 
+[[bench]]
+name = "zero_alloc_benchmark"
+harness = false
+
+[[bench]]
+name = "pool_performance"
+harness = false
+
+[[bench]]
+name = "compression_benchmark"
+harness = false
+
 [[example]]
 name = "performance_showcase"
 path = "examples/performance_showcase.rs"

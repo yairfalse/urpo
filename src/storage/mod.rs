@@ -21,18 +21,22 @@ pub mod simd_search;
 pub mod archive_integration;
 pub mod backend;
 pub mod buffered;
+pub mod compression;
 pub mod health;
 pub mod manager;
 pub mod memory;
+pub mod simple_pool;
 pub mod span_pool;
 pub mod tiered_engine;
 pub mod types;
 pub mod ultra_compact_storage;
 pub mod ultra_fast;
+pub mod zero_alloc_pool;
 
 // Re-export commonly used types
 pub use backend::StorageBackend;
 pub use buffered::{BufferConfig, BufferStats, BufferedStorage};
+pub use compression::{CompressedSpanBatch, CompressionEngine, CompressionLevel, CompressionStats};
 pub use fake_spans::SpanGenerator;
 pub use manager::StorageManager;
 pub use memory::InMemoryStorage;
