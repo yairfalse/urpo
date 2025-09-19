@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Urpo Test</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+</head>
+<body>
+    <div id="root"></div>
+    <script>
+        const { createElement: h } = React;
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+
+        function TestApp() {
+            return h('div', { style: { padding: '20px', fontFamily: 'monospace' } }, [
+                h('h1', { key: '1' }, '✅ React is working!'),
+                h('p', { key: '2' }, 'If you can see this, React rendering works.'),
+                h('button', {
+                    key: '3',
+                    onClick: () => alert('Button clicked!')
+                }, 'Test Button')
+            ]);
+        }
+
+        root.render(h(TestApp));
+        console.log('Test app rendered');
+    </script>
+</body>
+</html>

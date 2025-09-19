@@ -1,0 +1,424 @@
+import { useState, useEffect, useCallback, memo } from 'react';
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+import { useLocalStorage } from './hooks/useLocalStorage';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
+import { ServiceHealthDashboard } from './components/tables/ServiceHealthDashboard';
+import { TraceExplorer } from './components/tables/TraceExplorer';
+import { SystemMetrics } from './components/panels/SystemMetrics';
+import { ServiceGraph } from './components/charts/ServiceGraph';
+import { ServiceMap } from './components/tables/ServiceMap';
+import { FlowTable } from './components/tables/FlowTable';
+import { VirtualizedFlowTable } from './components/tables/VirtualizedFlowTable';
+import { ServiceMetrics, TraceInfo, SystemMetrics as SystemMetricsType, ViewMode, NavigationItem } from './types';
+import {
+  Activity,
+  BarChart3,
+  Layers,
+  GitBranch,
+  Share2,
+  Search,
+  Filter,
+  RefreshCw,
+  Settings,
+  Bell,
+  ChevronDown
+} from 'lucide-react';
+import { isTauriAvailable, safeTauriInvoke } from './utils/tauri';
+import { POLLING } from './constants/ui';
+
+const App = memo(() => {
+  const [activeView, setActiveView] = useLocalStorage<ViewMode>('urpo-active-view', 'graph');
+  const [services, setServices] = useState<ServiceMetrics[]>([]);
+  const [traces, setTraces] = useState<TraceInfo[]>([]);
+  const [systemMetrics, setSystemMetrics] = useState<SystemMetricsType | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const updateMetrics = useCallback(async () => {
+    try {
+      if (isTauriAvailable()) {
+        const [serviceData, systemData] = await Promise.all([
+          safeTauriInvoke<ServiceMetrics[]>('get_service_metrics'),
+          safeTauriInvoke<SystemMetricsType>('get_system_metrics'),
+        ]);
+
+        if (serviceData && systemData) {
+          requestAnimationFrame(() => {
+            setServices(serviceData);
+            setSystemMetrics(systemData);
+            setError(null);
+          });
+        }
+      } else {
+        requestAnimationFrame(() => {
+          setServices([]);
+          setSystemMetrics(null);
+          setError('Backend not available - ensure OTEL receiver is running');
+        });
+      }
+    } catch (err) {
+      console.error('Error updating metrics:', err);
+      requestAnimationFrame(() => {
+        setServices([]);
+        setSystemMetrics(null);
+        setError(`Failed to connect to backend`);
+      });
+    }
+  }, []);
+
+  const loadTraces = useCallback(async () => {
+    try {
+      if (isTauriAvailable()) {
+        const traceData = await safeTauriInvoke<TraceInfo[]>('list_recent_traces', {
+          limit: 100,
+        });
+
+        if (traceData) {
+          requestAnimationFrame(() => {
+            setTraces(traceData);
+            setError(null);
+          });
+        }
+      } else {
+        requestAnimationFrame(() => {
+          setTraces([]);
+          setError('Backend not available');
+        });
+      }
+    } catch (err) {
+      console.error('Error loading traces:', err);
+      requestAnimationFrame(() => {
+        setTraces([]);
+        setError(`Failed to load traces`);
+      });
+    }
+  }, []);
+
+  useKeyboardShortcuts([
+    { key: '1', handler: () => setActiveView('graph'), description: 'Service Map' },
+    { key: '2', handler: () => setActiveView('flows'), description: 'Trace Flows' },
+    { key: '3', handler: () => setActiveView('health'), description: 'Health Metrics' },
+    { key: '4', handler: () => setActiveView('traces'), description: 'Traces' },
+    { key: '5', handler: () => setActiveView('servicemap'), description: 'Dependencies' },
+    { key: 'r', handler: updateMetrics, description: 'Refresh', ctrl: true },
+    { key: 't', handler: loadTraces, description: 'Reload traces', ctrl: true },
+    { key: '/', handler: () => document.getElementById('global-search')?.focus(), description: 'Search' },
+  ]);
+
+  useEffect(() => {
+    const startReceiver = async () => {
+      if (isTauriAvailable()) {
+        try {
+          await safeTauriInvoke('start_receiver');
+          setLoading(false);
+          setError(null);
+        } catch (err) {
+          setError(`Failed to start OTEL receiver: ${err}`);
+          setLoading(false);
+        }
+      } else {
+        setLoading(false);
+        setError(null);
+      }
+    };
+
+    startReceiver();
+
+    return () => {
+      if (isTauriAvailable()) {
+        safeTauriInvoke('stop_receiver').catch(console.error);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (loading) return;
+    updateMetrics();
+    const interval = setInterval(updateMetrics, POLLING.METRICS_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [loading, updateMetrics]);
+
+  useEffect(() => {
+    if (activeView === 'traces' && !loading) {
+      loadTraces();
+    }
+  }, [activeView, loading, loadTraces]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-dark-50">
+        <div className="text-center">
+          <div className="w-12 h-12 mx-auto mb-4 rounded-full border-2 border-data-blue border-t-transparent animate-spin"></div>
+          <h2 className="text-light-100 font-semibold text-lg mb-2">Initializing URPO</h2>
+          <p className="text-light-400 text-sm">Starting observability engine...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const navigationItems: NavigationItem[] = [
+    { key: 'graph', icon: GitBranch, label: 'Service Map', shortcut: '1' },
+    { key: 'flows', icon: Activity, label: 'Trace Flows', shortcut: '2' },
+    { key: 'health', icon: BarChart3, label: 'Health', shortcut: '3' },
+    { key: 'traces', icon: Layers, label: 'Traces', shortcut: '4' },
+    { key: 'servicemap', icon: Share2, label: 'Dependencies', shortcut: '5' },
+  ];
+
+  return (
+    <ErrorBoundary componentName="App">
+      <div className="h-screen bg-dark-50 text-light-100 flex flex-col">
+        {/* Modern Observability Header */}
+        <header className="bg-dark-100 border-b border-dark-300">
+          <div className="px-4 py-3">
+            <div className="flex items-center justify-between">
+              {/* Logo and Brand */}
+              <div className="flex items-center gap-8">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-gradient-to-br from-data-blue to-data-cyan rounded-lg flex items-center justify-center">
+                    <Activity className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h1 className="text-lg font-semibold text-light-50">URPO</h1>
+                    <p className="text-[10px] text-light-500 uppercase tracking-wider">
+                      Trace Explorer
+                    </p>
+                  </div>
+                </div>
+
+                {/* Navigation */}
+                <nav className="flex items-center gap-1">
+                  {navigationItems.map(({ key, icon: Icon, label, shortcut }) => (
+                    <button
+                      key={key}
+                      onClick={() => setActiveView(key)}
+                      className={`
+                        px-3 py-2 rounded-md flex items-center gap-2 text-sm font-medium
+                        transition-all duration-150
+                        ${activeView === key
+                          ? 'bg-dark-200 text-data-blue'
+                          : 'text-light-300 hover:text-light-100 hover:bg-dark-200'
+                        }
+                      `}
+                    >
+                      <Icon className="w-4 h-4" />
+                      <span>{label}</span>
+                      <kbd className="hidden lg:inline-block px-1.5 py-0.5 text-[10px] bg-dark-300 text-light-500 rounded">
+                        {shortcut}
+                      </kbd>
+                    </button>
+                  ))}
+                </nav>
+              </div>
+
+              {/* Actions and Status */}
+              <div className="flex items-center gap-4">
+                {/* Global Search */}
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-light-500" />
+                  <input
+                    id="global-search"
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search traces, services... (Press /)"
+                    className="search-input pl-9 w-64"
+                  />
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex items-center gap-2">
+                  <button className="btn-ghost p-2">
+                    <Filter className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={updateMetrics}
+                    className="btn-ghost p-2"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                  </button>
+                  <button className="btn-ghost p-2">
+                    <Bell className="w-4 h-4" />
+                  </button>
+                  <button className="btn-ghost p-2">
+                    <Settings className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* User Menu */}
+                <div className="flex items-center gap-2 pl-4 border-l border-dark-300">
+                  <div className="w-8 h-8 bg-gradient-to-br from-data-purple to-data-pink rounded-full"></div>
+                  <ChevronDown className="w-4 h-4 text-light-500" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Sub-header with Metrics */}
+          {systemMetrics && (
+            <div className="px-4 py-2 bg-dark-150 border-t border-dark-300">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-6">
+                  {/* Connection Status */}
+                  <div className="flex items-center gap-2">
+                    <div className={`w-2 h-2 rounded-full ${
+                      isTauriAvailable() ? 'bg-semantic-success' : 'bg-semantic-warning'
+                    } animate-pulse`}></div>
+                    <span className="text-xs text-light-400">
+                      {isTauriAvailable() ? 'OTLP Connected' : 'Demo Mode'}
+                    </span>
+                  </div>
+
+                  {/* Key Metrics Bar */}
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-light-500">Services</span>
+                      <span className="text-sm font-medium text-light-200">{services.length}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-light-500">Traces</span>
+                      <span className="text-sm font-medium text-light-200">{traces.length}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-light-500">Spans/s</span>
+                      <span className="text-sm font-medium text-data-cyan">
+                        {systemMetrics.spans_per_second.toFixed(0)}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-light-500">Memory</span>
+                      <span className="text-sm font-medium text-data-yellow">
+                        {systemMetrics.memory_usage_mb.toFixed(0)}MB
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-light-500">CPU</span>
+                      <span className="text-sm font-medium text-data-orange">
+                        {systemMetrics.cpu_usage_percent.toFixed(1)}%
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Time Range Selector */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-light-500">Time Range</span>
+                  <select className="bg-dark-200 border border-dark-400 rounded px-2 py-1 text-xs text-light-200">
+                    <option>Last 15 minutes</option>
+                    <option>Last 1 hour</option>
+                    <option>Last 6 hours</option>
+                    <option>Last 24 hours</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
+        </header>
+
+        {/* Error Banner */}
+        {error && (
+          <div className="px-4 py-2 bg-semantic-error bg-opacity-10 border-b border-semantic-error border-opacity-30">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-semantic-error rounded-full"></div>
+              <span className="text-sm text-semantic-error">{error}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Main Content Area */}
+        <main className="flex-1 overflow-hidden bg-dark-50">
+          <div className="h-full">
+            {activeView === 'graph' && (
+              <ErrorBoundary componentName="ServiceGraph" isolate>
+                <div className="h-full p-4">
+                  <ServiceGraph services={services} traces={traces} />
+                </div>
+              </ErrorBoundary>
+            )}
+
+            {activeView === 'flows' && (
+              <ErrorBoundary componentName="FlowTable" isolate>
+                <div className="h-full p-4">
+                  {traces.length > 100 ? (
+                    <VirtualizedFlowTable traces={traces} onRefresh={loadTraces} />
+                  ) : (
+                    <FlowTable traces={traces} onRefresh={loadTraces} />
+                  )}
+                </div>
+              </ErrorBoundary>
+            )}
+
+            {activeView === 'health' && (
+              <ErrorBoundary componentName="HealthView" isolate>
+                <div className="p-4 dashboard-grid">
+                  <div className="panel-full">
+                    <ServiceHealthDashboard services={services} />
+                  </div>
+                  {systemMetrics && (
+                    <div className="panel-full">
+                      <SystemMetrics metrics={systemMetrics} />
+                    </div>
+                  )}
+                </div>
+              </ErrorBoundary>
+            )}
+
+            {activeView === 'traces' && (
+              <ErrorBoundary componentName="TraceExplorer" isolate>
+                <div className="h-full p-4">
+                  <TraceExplorer
+                    traces={traces}
+                    onRefresh={loadTraces}
+                  />
+                </div>
+              </ErrorBoundary>
+            )}
+
+            {activeView === 'servicemap' && (
+              <ErrorBoundary componentName="ServiceMap" isolate>
+                <div className="h-full p-4 bg-dark-50">
+                  <ServiceMap />
+                </div>
+              </ErrorBoundary>
+            )}
+          </div>
+        </main>
+
+        {/* Status Bar */}
+        <footer className="bg-dark-100 border-t border-dark-300 px-4 py-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4 text-xs">
+              <span className="text-light-500">
+                © 2025 URPO • Ultra-Fast OTEL Explorer
+              </span>
+              <span className="text-light-600">
+                v0.1.0
+              </span>
+            </div>
+
+            <div className="flex items-center gap-4 text-xs">
+              {systemMetrics && (
+                <>
+                  <span className="text-light-500">
+                    Total Spans: <span className="font-medium text-light-300">
+                      {systemMetrics.total_spans.toLocaleString()}
+                    </span>
+                  </span>
+                  <span className="text-light-500">
+                    Uptime: <span className="font-medium text-light-300">
+                      {Math.floor(systemMetrics.uptime_seconds / 60)}m
+                    </span>
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
+        </footer>
+      </div>
+    </ErrorBoundary>
+  );
+});
+
+App.displayName = 'App';
+
+export default App;

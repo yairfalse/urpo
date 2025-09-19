@@ -85,27 +85,27 @@ const ServiceMap = memo(({ className = '' }: ServiceMapProps) => {
 
   // Get health color for a service
   const getHealthColor = (node: ServiceNode) => {
-    if (node.error_rate > 0.1) return 'text-status-error';
-    if (node.error_rate > 0.01) return 'text-status-warning';
-    return 'text-text-700';
+    if (node.error_rate > 0.1) return 'text-semantic-error';
+    if (node.error_rate > 0.01) return 'text-semantic-warning';
+    return 'text-data-green';
   };
 
   // Get health color class for background
   const getHealthBgColor = (node: ServiceNode) => {
-    if (node.error_rate > 0.1) return 'bg-status-error bg-opacity-5 border-status-error border-opacity-20';
-    if (node.error_rate > 0.01) return 'bg-status-warning bg-opacity-5 border-status-warning border-opacity-20';
-    return 'bg-surface-100 border-surface-400';
+    if (node.error_rate > 0.1) return 'bg-semantic-error bg-opacity-10 border-semantic-error border-opacity-30';
+    if (node.error_rate > 0.01) return 'bg-semantic-warning bg-opacity-10 border-semantic-warning border-opacity-30';
+    return 'bg-dark-150 border-dark-300';
   };
 
   if (loading) {
     return (
-      <div className={`clean-card p-6 ${className}`}>
+      <div className={`bg-dark-100 border border-dark-300 rounded-md p-6 ${className}`}>
         <div className="">
-          <div className="h-4 bg-surface-200 rounded w-48 mb-4"></div>
+          <div className="h-4 bg-dark-200 rounded w-48 mb-4 skeleton"></div>
           <div className="space-y-3">
-            <div className="h-12 bg-surface-200 rounded"></div>
-            <div className="h-12 bg-surface-200 rounded"></div>
-            <div className="h-12 bg-surface-200 rounded"></div>
+            <div className="h-12 bg-dark-200 rounded skeleton"></div>
+            <div className="h-12 bg-dark-200 rounded skeleton"></div>
+            <div className="h-12 bg-dark-200 rounded skeleton"></div>
           </div>
         </div>
       </div>
@@ -114,15 +114,15 @@ const ServiceMap = memo(({ className = '' }: ServiceMapProps) => {
 
   if (error || !serviceMap) {
     return (
-      <div className={`clean-card p-6 ${className}`}>
+      <div className={`bg-dark-100 border border-dark-300 rounded-md p-6 ${className}`}>
         <div className="text-center">
-          <div className="text-status-error mb-2">Service Map Unavailable</div>
-          <div className="text-text-muted text-sm mb-4">
+          <div className="text-semantic-error mb-2">Service Map Unavailable</div>
+          <div className="text-light-400 text-sm mb-4">
             {error || 'No service map data available'}
           </div>
           <button
             onClick={loadServiceMap}
-            className="clean-button text-sm"
+            className="btn-secondary text-sm"
           >
             Retry
           </button>
@@ -132,25 +132,25 @@ const ServiceMap = memo(({ className = '' }: ServiceMapProps) => {
   }
 
   return (
-    <div className={`clean-card ${className}`}>
+    <div className={`bg-dark-100 border border-dark-300 rounded-md ${className}`}>
       {/* Header with view mode selector */}
-      <div className="p-4 border-b border-surface-200">
+      <div className="p-4 border-b border-dark-300 bg-dark-150">
         <div className="flex justify-between items-center">
           <div>
-            <h2 className="text-lg font-semibold text-text-primary">Service Map</h2>
-            <div className="text-sm text-text-muted">
+            <h2 className="text-lg font-semibold text-light-50">Service Map</h2>
+            <div className="text-sm text-light-400">
               {serviceMap.nodes.length} services, {serviceMap.edges.length} dependencies
               • {serviceMap.trace_count} traces analyzed
             </div>
           </div>
-          
+
           <div className="flex gap-2">
             {(['topology', 'focus', 'hotpaths', 'errors'] as ServiceMapViewMode[]).map(mode => (
               <button
                 key={mode}
                 onClick={() => setViewMode(mode)}
-                className={`clean-button text-xs ${
-                  viewMode === mode ? 'active' : ''
+                className={`btn-secondary text-xs ${
+                  viewMode === mode ? 'bg-data-blue text-white' : ''
                 }`}
               >
                 {mode === 'topology' && 'Topology'}
@@ -164,7 +164,7 @@ const ServiceMap = memo(({ className = '' }: ServiceMapProps) => {
       </div>
 
       {/* Service map visualization */}
-      <div className="p-6 overflow-auto" style={{ maxHeight: '600px' }}>
+      <div className="p-6 overflow-auto bg-dark-50" style={{ maxHeight: '600px' }}>
         {viewMode === 'topology' && (
           <TopologyView
             nodesByTier={nodesByTier}
@@ -220,7 +220,7 @@ const TopologyView = memo(({
         <div key={tier} className="space-y-4">
           {nodesByTier[tier] && (
             <>
-              <div className="text-sm font-medium text-text-muted border-b border-surface-200 pb-2">
+              <div className="text-sm font-medium text-light-400 border-b border-dark-300 pb-2">
                 Tier {tier} {tier === 0 ? '(Root Services)' : tier === maxTier ? '(Leaf Services)' : ''}
               </div>
               
@@ -229,16 +229,16 @@ const TopologyView = memo(({
                   <button
                     key={node.name}
                     onClick={() => onSelectService(node.name)}
-                    className={`p-3 rounded-lg border-2  hover:scale-105 ${
-                      selectedService === node.name 
-                        ? 'ring-2 ring-text-700' 
+                    className={`p-3 rounded-lg border-2 hover:scale-105 transition-transform bg-dark-100 ${
+                      selectedService === node.name
+                        ? 'ring-2 ring-data-blue'
                         : ''
                     } ${getHealthBgColor(node)}`}
                   >
                     <div className={`font-medium ${getHealthColor(node)}`}>
                       {node.name}
                     </div>
-                    <div className="text-xs text-text-muted space-y-1">
+                    <div className="text-xs text-light-400 space-y-1">
                       <div>{node.request_count.toLocaleString()} requests</div>
                       <div>{(node.error_rate * 100).toFixed(1)}% errors</div>
                       <div>{(node.avg_latency_us / 1000).toFixed(1)}ms avg</div>
@@ -250,7 +250,7 @@ const TopologyView = memo(({
               {/* Show connections to next tier */}
               {tier < maxTier && (
                 <div className="flex justify-center">
-                  <div className="text-text-700 text-2xl">↓</div>
+                  <div className="text-light-400 text-2xl">↓</div>
                 </div>
               )}
             </>
@@ -276,22 +276,22 @@ const FocusView = memo(({ serviceMap, selectedService, getHealthColor }: {
   return (
     <div className="space-y-6">
       {/* Selected service info */}
-      <div className="text-center p-4 bg-surface-100 rounded-lg">
+      <div className="text-center p-4 bg-dark-150 rounded-lg">
         <h3 className={`text-xl font-bold ${getHealthColor(selectedNode)}`}>
           {selectedService}
         </h3>
         <div className="grid grid-cols-3 gap-4 mt-2 text-sm">
           <div>
-            <div className="text-text-muted">Requests</div>
-            <div className="font-medium">{selectedNode.request_count.toLocaleString()}</div>
+            <div className="text-light-400">Requests</div>
+            <div className="font-medium text-light-100">{selectedNode.request_count.toLocaleString()}</div>
           </div>
           <div>
-            <div className="text-text-muted">Error Rate</div>
-            <div className="font-medium">{(selectedNode.error_rate * 100).toFixed(2)}%</div>
+            <div className="text-light-400">Error Rate</div>
+            <div className="font-medium text-light-100">{(selectedNode.error_rate * 100).toFixed(2)}%</div>
           </div>
           <div>
-            <div className="text-text-muted">Avg Latency</div>
-            <div className="font-medium">{(selectedNode.avg_latency_us / 1000).toFixed(1)}ms</div>
+            <div className="text-light-400">Avg Latency</div>
+            <div className="font-medium text-light-100">{(selectedNode.avg_latency_us / 1000).toFixed(1)}ms</div>
           </div>
         </div>
       </div>
@@ -299,11 +299,11 @@ const FocusView = memo(({ serviceMap, selectedService, getHealthColor }: {
       <div className="grid md:grid-cols-2 gap-6">
         {/* Incoming dependencies */}
         <div>
-          <h4 className="font-medium text-text-primary mb-3">
+          <h4 className="font-medium text-light-100 mb-3">
             Incoming Dependencies ({incomingEdges.length})
           </h4>
           {incomingEdges.length === 0 ? (
-            <div className="text-text-muted text-sm italic">Root service - no incoming calls</div>
+            <div className="text-light-400 text-sm italic">Root service - no incoming calls</div>
           ) : (
             <div className="space-y-2">
               {incomingEdges.map(edge => (
@@ -315,11 +315,11 @@ const FocusView = memo(({ serviceMap, selectedService, getHealthColor }: {
 
         {/* Outgoing dependencies */}
         <div>
-          <h4 className="font-medium text-text-primary mb-3">
+          <h4 className="font-medium text-light-100 mb-3">
             Outgoing Dependencies ({outgoingEdges.length})
           </h4>
           {outgoingEdges.length === 0 ? (
-            <div className="text-text-muted text-sm italic">Leaf service - no outgoing calls</div>
+            <div className="text-light-400 text-sm italic">Leaf service - no outgoing calls</div>
           ) : (
             <div className="space-y-2">
               {outgoingEdges.map(edge => (
@@ -339,21 +339,21 @@ const EdgeCard = memo(({ edge, direction }: { edge: ServiceEdge; direction: 'inc
   const serviceName = direction === 'incoming' ? edge.from : edge.to;
 
   return (
-    <div className="clean-card p-3">
+    <div className="bg-dark-100 border border-dark-300 rounded-md p-3">
       <div className="flex justify-between items-start">
         <div>
-          <div className="font-medium text-text-primary">{serviceName}</div>
-          <div className="text-xs text-text-muted">
+          <div className="font-medium text-light-100">{serviceName}</div>
+          <div className="text-xs text-light-400">
             {edge.operations.slice(0, 2).join(', ')}
             {edge.operations.length > 2 && ` +${edge.operations.length - 2} more`}
           </div>
         </div>
         <div className="text-right text-xs">
-          <div className="text-text-primary">{edge.call_count} calls</div>
-          <div className={errorRate > 10 ? 'text-text-900' : errorRate > 1 ? 'text-text-700' : 'text-text-700'}>
+          <div className="text-light-200">{edge.call_count} calls</div>
+          <div className={errorRate > 10 ? 'text-semantic-error' : errorRate > 1 ? 'text-semantic-warning' : 'text-data-green'}>
             {errorRate.toFixed(1)}% errors
           </div>
-          <div className="text-text-muted">{(edge.avg_latency_us / 1000).toFixed(1)}ms avg</div>
+          <div className="text-light-400">{(edge.avg_latency_us / 1000).toFixed(1)}ms avg</div>
         </div>
       </div>
     </div>
@@ -363,18 +363,18 @@ const EdgeCard = memo(({ edge, direction }: { edge: ServiceEdge; direction: 'inc
 // Hot paths view
 const HotPathsView = memo(({ edges }: { edges: ServiceEdge[] }) => (
   <div className="space-y-4">
-    <h3 className="text-lg font-semibold text-text-primary">Hottest Paths</h3>
+    <h3 className="text-lg font-semibold text-light-50">Hottest Paths</h3>
     <div className="space-y-2">
       {edges.map((edge, index) => (
-        <div key={`${edge.from}-${edge.to}`} className="clean-card p-4">
+        <div key={`${edge.from}-${edge.to}`} className="bg-dark-100 border border-dark-300 rounded-md p-4">
           <div className="flex justify-between items-center">
             <div>
-              <span className="text-text-muted">#{index + 1}</span>
-              <span className="ml-2 font-medium">{edge.from} → {edge.to}</span>
+              <span className="text-light-400">#{index + 1}</span>
+              <span className="ml-2 font-medium text-light-100">{edge.from} → {edge.to}</span>
             </div>
             <div className="text-right">
-              <div className="font-bold text-text-900">{edge.call_count.toLocaleString()} calls</div>
-              <div className="text-sm text-text-muted">{(edge.avg_latency_us / 1000).toFixed(1)}ms avg</div>
+              <div className="font-bold text-data-orange">{edge.call_count.toLocaleString()} calls</div>
+              <div className="text-sm text-light-400">{(edge.avg_latency_us / 1000).toFixed(1)}ms avg</div>
             </div>
           </div>
         </div>
@@ -386,14 +386,14 @@ const HotPathsView = memo(({ edges }: { edges: ServiceEdge[] }) => (
 // Error paths view
 const ErrorPathsView = memo(({ edges }: { edges: ServiceEdge[] }) => (
   <div className="space-y-4">
-    <h3 className="text-lg font-semibold text-text-primary">Error Paths</h3>
+    <h3 className="text-lg font-semibold text-light-50">Error Paths</h3>
     {edges.length === 0 ? (
-      <div className="clean-card text-center p-8">
-        <div className="w-12 h-12 mx-auto mb-4 rounded-lg bg-surface-200 flex items-center justify-center">
-          <span className="text-text-700 text-2xl">✓</span>
+      <div className="bg-dark-100 border border-dark-300 rounded-md text-center p-8">
+        <div className="w-12 h-12 mx-auto mb-4 rounded-lg bg-dark-200 flex items-center justify-center">
+          <span className="text-data-green text-2xl">✓</span>
         </div>
-        <p className="text-text-900 font-medium">No errors detected!</p>
-        <p className="text-text-500 text-sm mt-1">All service connections are healthy.</p>
+        <p className="text-light-100 font-medium">No errors detected!</p>
+        <p className="text-light-400 text-sm mt-1">All service connections are healthy.</p>
       </div>
     ) : (
       <div className="space-y-2">
@@ -402,15 +402,15 @@ const ErrorPathsView = memo(({ edges }: { edges: ServiceEdge[] }) => (
           .map((edge, index) => {
             const errorRate = (edge.error_count / edge.call_count) * 100;
             return (
-              <div key={`${edge.from}-${edge.to}`} className="clean-card p-4 border-l-4 border-status-error">
+              <div key={`${edge.from}-${edge.to}`} className="bg-dark-100 border border-dark-300 rounded-md p-4 border-l-4 border-semantic-error">
                 <div className="flex justify-between items-center">
                   <div>
-                    <span className="text-text-muted">#{index + 1}</span>
-                    <span className="ml-2 font-medium">{edge.from} → {edge.to}</span>
+                    <span className="text-light-400">#{index + 1}</span>
+                    <span className="ml-2 font-medium text-light-100">{edge.from} → {edge.to}</span>
                   </div>
                   <div className="text-right">
-                    <div className="font-bold text-status-error">{errorRate.toFixed(1)}% errors</div>
-                    <div className="text-sm text-text-muted">
+                    <div className="font-bold text-semantic-error">{errorRate.toFixed(1)}% errors</div>
+                    <div className="text-sm text-light-400">
                       {edge.error_count}/{edge.call_count} calls failed
                     </div>
                   </div>
