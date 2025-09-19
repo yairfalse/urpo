@@ -38,7 +38,7 @@ export const checkTauriFeatures = () => {
 };
 
 // Service Map API helpers
-import type { ServiceMap } from '../types';
+import type { ServiceMap } from '../types/index';
 
 export interface ServiceMapOptions extends Record<string, unknown> {
   limit?: number;
