@@ -1,0 +1,239 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Modern Observability Platform Design System */
+@layer base {
+  :root {
+    /* Dark theme by default - professional observability standard */
+    --bg-primary: #0B0E14;
+    --bg-secondary: #111923;
+    --bg-card: #1A2332;
+    --bg-elevated: #212D40;
+
+    --text-primary: #F9FAFB;
+    --text-secondary: #E5E7EB;
+    --text-muted: #9CA3AF;
+
+    --border-subtle: rgba(255, 255, 255, 0.08);
+    --border-default: rgba(255, 255, 255, 0.12);
+    --border-strong: rgba(255, 255, 255, 0.16);
+  }
+
+  html {
+    @apply bg-dark-50 text-light-100;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  body {
+    @apply bg-dark-50 text-light-100 font-sans antialiased;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+@layer components {
+  /* Card component inspired by Grafana panels */
+  .observability-card {
+    @apply bg-dark-100 border border-dark-300 rounded-md;
+    @apply shadow-card backdrop-blur-sm;
+  }
+
+  .observability-card-elevated {
+    @apply bg-dark-150 border border-dark-300 rounded-md;
+    @apply shadow-md;
+  }
+
+  /* Button styles for observability platforms */
+  .btn-primary {
+    @apply px-3 py-1.5 bg-data-blue text-white rounded-md;
+    @apply hover:bg-opacity-90 transition-colors duration-150;
+    @apply text-sm font-medium;
+  }
+
+  .btn-secondary {
+    @apply px-3 py-1.5 bg-dark-200 text-light-200 rounded-md;
+    @apply hover:bg-dark-300 transition-colors duration-150;
+    @apply text-sm font-medium border border-dark-400;
+  }
+
+  .btn-ghost {
+    @apply px-3 py-1.5 text-light-300 rounded-md;
+    @apply hover:bg-dark-200 transition-colors duration-150;
+    @apply text-sm font-medium;
+  }
+
+  /* Navigation tabs like Grafana */
+  .nav-tab {
+    @apply px-4 py-2 text-light-300 text-sm font-medium;
+    @apply hover:text-light-100 hover:bg-dark-200 rounded-md;
+    @apply transition-all duration-150 cursor-pointer;
+  }
+
+  .nav-tab.active {
+    @apply bg-dark-200 text-data-blue border-b-2 border-data-blue;
+  }
+
+  /* Data tables for flows and traces */
+  .data-table {
+    @apply w-full bg-dark-100 rounded-md overflow-hidden;
+  }
+
+  .data-table thead {
+    @apply bg-dark-150 border-b border-dark-300;
+  }
+
+  .data-table th {
+    @apply px-4 py-3 text-left text-xs font-medium text-light-400 uppercase tracking-wider;
+  }
+
+  .data-table td {
+    @apply px-4 py-3 text-sm text-light-200;
+    @apply border-b border-dark-300;
+  }
+
+  .data-table tbody tr {
+    @apply hover:bg-dark-150 transition-colors duration-75;
+  }
+
+  /* Status badges */
+  .status-badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .status-healthy {
+    @apply bg-semantic-success bg-opacity-20 text-semantic-success;
+  }
+
+  .status-warning {
+    @apply bg-semantic-warning bg-opacity-20 text-semantic-warning;
+  }
+
+  .status-error {
+    @apply bg-semantic-error bg-opacity-20 text-semantic-error;
+  }
+
+  /* Metric cards */
+  .metric-value {
+    @apply text-2xl font-bold text-light-50 tabular-nums;
+  }
+
+  .metric-label {
+    @apply text-xs text-light-400 uppercase tracking-wide;
+  }
+
+  .metric-trend {
+    @apply text-sm text-light-300 flex items-center gap-1;
+  }
+
+  /* Code/trace viewer */
+  .code-viewer {
+    @apply bg-dark-0 rounded-md p-4 font-mono text-sm;
+    @apply border border-dark-300 overflow-x-auto;
+  }
+
+  /* Graph container */
+  .graph-container {
+    @apply bg-dark-100 rounded-md border border-dark-300 p-4;
+    @apply min-h-[300px] relative;
+  }
+
+  /* Search input like Grafana */
+  .search-input {
+    @apply w-full bg-dark-200 border border-dark-400 rounded-md;
+    @apply px-3 py-2 text-sm text-light-100 placeholder-light-500;
+    @apply focus:outline-none focus:border-data-blue focus:ring-1 focus:ring-data-blue;
+  }
+
+  /* Scrollbar styling for dark theme */
+  ::-webkit-scrollbar {
+    @apply w-2 h-2;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-dark-100;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-dark-400 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-light-600;
+  }
+
+  /* Selection colors */
+  ::selection {
+    @apply bg-data-blue bg-opacity-30;
+  }
+
+  /* Focus styles */
+  :focus-visible {
+    @apply outline-none ring-2 ring-data-blue ring-offset-2 ring-offset-dark-50;
+  }
+
+  /* Loading skeleton */
+  .skeleton {
+    @apply bg-dark-200 rounded animate-pulse;
+  }
+
+  /* Tooltip styles */
+  .tooltip {
+    @apply absolute z-50 px-2 py-1 text-xs text-light-50 bg-dark-0;
+    @apply rounded border border-dark-400 shadow-lg;
+  }
+}
+
+@layer utilities {
+  /* Text utilities for observability data */
+  .text-metric {
+    @apply text-data-cyan font-mono;
+  }
+
+  .text-trace {
+    @apply text-semantic-trace font-mono;
+  }
+
+  .text-span {
+    @apply text-semantic-span font-mono;
+  }
+
+  .text-error-rate {
+    @apply text-semantic-error tabular-nums;
+  }
+
+  .text-latency {
+    @apply text-data-yellow tabular-nums;
+  }
+
+  /* Animation utilities */
+  .animate-fade-in {
+    animation: fadeIn 0.2s ease-in;
+  }
+
+  .animate-slide-up {
+    animation: slideUp 0.3s ease-out;
+  }
+
+  /* Grid layouts for dashboards */
+  .dashboard-grid {
+    @apply grid grid-cols-12 gap-4;
+  }
+
+  .panel-full {
+    @apply col-span-12;
+  }
+
+  .panel-half {
+    @apply col-span-12 lg:col-span-6;
+  }
+
+  .panel-third {
+    @apply col-span-12 lg:col-span-4;
+  }
+
+  .panel-quarter {
+    @apply col-span-12 md:col-span-6 lg:col-span-3;
+  }
+}

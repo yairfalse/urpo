@@ -82,19 +82,19 @@ function calculateTimelineLayout(spans: SpanData[], viewportWidth: number): {
   function buildTimelineSpan(span: SpanData, depth: number, parent?: TimelineSpan): TimelineSpan {
     const relativeStart = span.start_time - minStartTime;
     const x = relativeStart * pixelsPerMicrosecond;
-    const width = Math.max(2, span.duration_ms * 1000 * pixelsPerMicrosecond); // Min 2px width
+    const width = Math.max(2, span.duration * 1000 * pixelsPerMicrosecond); // Min 2px width
     
     // Color based on span characteristics
     let color: string;
     let textColor: string;
     
-    if (span.status?.code === 'ERROR') {
+    if (span.status === 'error') {
       color = '#dc2626'; // red-600
       textColor = '#ffffff';
-    } else if (span.duration_ms > 1000) {
+    } else if (span.duration > 1000) {
       color = '#d97706'; // amber-600
       textColor = '#ffffff';
-    } else if (span.duration_ms > 100) {
+    } else if (span.duration > 100) {
       color = '#eab308'; // yellow-500
       textColor = '#000000';
     } else {
@@ -249,7 +249,7 @@ const SpanRow: React.FC<{
       
       {/* Duration */}
       <div className="w-20 px-2 text-xs font-mono text-right text-text-600">
-        {formatDuration(timelineSpan.span.duration_ms)}
+        {formatDuration(timelineSpan.span.duration)}
       </div>
       
       {/* Start time */}

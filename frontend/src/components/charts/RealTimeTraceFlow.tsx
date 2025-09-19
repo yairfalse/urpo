@@ -70,11 +70,11 @@ function TraceFlowParticles({ traces, spans, onSpanSelect }: {
           Math.cos(span.start_time / 1000000) * 5
         ),
         color: new THREE.Color(
-          span.status?.code === 'ERROR' ? '#ff4444' :
-          span.duration_ms > 1000 ? '#ffaa44' :
+          span.status === 'error' ? '#ff4444' :
+          span.duration > 1000 ? '#ffaa44' :
           '#44ff44'
         ),
-        size: Math.log10(span.duration_ms + 1) * 0.5 + 0.1,
+        size: Math.log10(span.duration + 1) * 0.5 + 0.1,
         velocity: new THREE.Vector3(
           (Math.random() - 0.5) * 0.02,
           (Math.random() - 0.5) * 0.02,
@@ -83,8 +83,8 @@ function TraceFlowParticles({ traces, spans, onSpanSelect }: {
         trace_id: span.trace_id,
         service_name: span.service_name,
         operation_name: span.operation_name,
-        duration_ms: span.duration_ms,
-        is_error: span.status?.code === 'ERROR',
+        duration_ms: span.duration,
+        is_error: span.status === 'error',
         timestamp: span.start_time,
       };
       
@@ -125,7 +125,7 @@ function TraceFlowParticles({ traces, spans, onSpanSelect }: {
             from: from.span_id,
             to: to.span_id,
             color: new THREE.Color(
-              from.status?.code === 'ERROR' || to.status?.code === 'ERROR' 
+              from.status === 'error' || to.status === 'error' 
                 ? '#ff4444' : '#44aaff'
             ),
             opacity: 0.6,
