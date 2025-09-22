@@ -100,18 +100,21 @@ impl OtelMetricsReceiver {
         data_point: &opentelemetry_proto::tonic::metrics::v1::NumberDataPoint,
     ) -> Option<f64> {
         match &data_point.value {
-            Some(opentelemetry_proto::tonic::metrics::v1::number_data_point::Value::AsDouble(v)) => {
-                Some(*v)
-            }
+            Some(opentelemetry_proto::tonic::metrics::v1::number_data_point::Value::AsDouble(
+                v,
+            )) => Some(*v),
             Some(opentelemetry_proto::tonic::metrics::v1::number_data_point::Value::AsInt(v)) => {
                 Some(*v as f64)
-            }
+            },
             None => None,
         }
     }
 
     /// Extract service ID from resource attributes
-    fn extract_service_id(&self, resource: &opentelemetry_proto::tonic::resource::v1::Resource) -> u16 {
+    fn extract_service_id(
+        &self,
+        resource: &opentelemetry_proto::tonic::resource::v1::Resource,
+    ) -> u16 {
         // Look for service.name attribute
         for attribute in &resource.attributes {
             if attribute.key == "service.name" {
@@ -158,10 +161,10 @@ impl MetricsService for OtelMetricsReceiver {
                     match self.convert_otlp_metric(&metric, service_id, timestamp) {
                         Ok(mut points) => {
                             all_metric_points.append(&mut points);
-                        }
+                        },
                         Err(e) => {
                             tracing::warn!("Failed to convert metric {}: {}", metric.name, e);
-                        }
+                        },
                     }
                 }
             }
@@ -172,12 +175,16 @@ impl MetricsService for OtelMetricsReceiver {
             let mut storage = self.metric_storage.lock().await;
             match storage.process_metrics(&all_metric_points) {
                 Ok(processed) => {
-                    tracing::debug!("Processed {} metric points from {} metrics", processed, total_metrics);
-                }
+                    tracing::debug!(
+                        "Processed {} metric points from {} metrics",
+                        processed,
+                        total_metrics
+                    );
+                },
                 Err(e) => {
                     tracing::error!("Failed to process metrics: {}", e);
                     return Err(Status::internal(format!("Failed to process metrics: {}", e)));
-                }
+                },
             }
         }
 
@@ -306,21 +313,21 @@ mod tests {
             description: "CPU usage percentage".to_string(),
             unit: "%".to_string(),
             metadata: vec![],
-            data: Some(opentelemetry_proto::tonic::metrics::v1::metric::Data::Gauge(
-                Gauge {
-                    data_points: vec![NumberDataPoint {
-                        attributes: vec![],
-                        start_time_unix_nano: 0,
-                        time_unix_nano: 0,
-                        value: Some(DataPointValue::AsDouble(75.5)),
-                        exemplars: vec![],
-                        flags: 0,
-                    }],
-                },
-            )),
+            data: Some(opentelemetry_proto::tonic::metrics::v1::metric::Data::Gauge(Gauge {
+                data_points: vec![NumberDataPoint {
+                    attributes: vec![],
+                    start_time_unix_nano: 0,
+                    time_unix_nano: 0,
+                    value: Some(DataPointValue::AsDouble(75.5)),
+                    exemplars: vec![],
+                    flags: 0,
+                }],
+            })),
         };
 
-        let points = receiver.convert_otlp_metric(&metric, 1, 1234567890).unwrap();
+        let points = receiver
+            .convert_otlp_metric(&metric, 1, 1234567890)
+            .unwrap();
         assert_eq!(points.len(), 1);
 
         let point = &points[0];
@@ -353,7 +360,9 @@ mod tests {
             })),
         };
 
-        let points = receiver.convert_otlp_metric(&metric, 2, 1234567890).unwrap();
+        let points = receiver
+            .convert_otlp_metric(&metric, 2, 1234567890)
+            .unwrap();
         assert_eq!(points.len(), 1);
 
         let point = &points[0];
@@ -374,7 +383,9 @@ mod tests {
             data: None,
         };
 
-        let points = receiver.convert_otlp_metric(&metric, 1, 1234567890).unwrap();
+        let points = receiver
+            .convert_otlp_metric(&metric, 1, 1234567890)
+            .unwrap();
         assert_eq!(points.len(), 0);
     }
 
@@ -384,46 +395,40 @@ mod tests {
         let receiver = OtelMetricsReceiver::new(storage.clone());
 
         let request = ExportMetricsServiceRequest {
-            resource_metrics: vec![
-                opentelemetry_proto::tonic::metrics::v1::ResourceMetrics {
-                    resource: Some(Resource {
-                        attributes: vec![KeyValue {
-                            key: "service.name".to_string(),
-                            value: Some(AnyValue {
-                                value: Some(Value::StringValue("test-service".to_string())),
-                            }),
-                        }],
-                        dropped_attributes_count: 0,
-                    }),
-                    scope_metrics: vec![
-                        opentelemetry_proto::tonic::metrics::v1::ScopeMetrics {
-                            scope: None,
-                            metrics: vec![Metric {
-                                name: "test_metric".to_string(),
-                                description: "Test metric".to_string(),
-                                unit: "ms".to_string(),
-                                metadata: vec![],
-                                data: Some(
-                                    opentelemetry_proto::tonic::metrics::v1::metric::Data::Gauge(
-                                        Gauge {
-                                            data_points: vec![NumberDataPoint {
-                                                attributes: vec![],
-                                                start_time_unix_nano: 0,
-                                                time_unix_nano: 0,
-                                                value: Some(DataPointValue::AsDouble(1250.0)),
-                                                exemplars: vec![],
-                                                flags: 0,
-                                            }],
-                                        },
-                                    ),
-                                ),
-                            }],
-                            schema_url: "".to_string(),
-                        },
-                    ],
+            resource_metrics: vec![opentelemetry_proto::tonic::metrics::v1::ResourceMetrics {
+                resource: Some(Resource {
+                    attributes: vec![KeyValue {
+                        key: "service.name".to_string(),
+                        value: Some(AnyValue {
+                            value: Some(Value::StringValue("test-service".to_string())),
+                        }),
+                    }],
+                    dropped_attributes_count: 0,
+                }),
+                scope_metrics: vec![opentelemetry_proto::tonic::metrics::v1::ScopeMetrics {
+                    scope: None,
+                    metrics: vec![Metric {
+                        name: "test_metric".to_string(),
+                        description: "Test metric".to_string(),
+                        unit: "ms".to_string(),
+                        metadata: vec![],
+                        data: Some(opentelemetry_proto::tonic::metrics::v1::metric::Data::Gauge(
+                            Gauge {
+                                data_points: vec![NumberDataPoint {
+                                    attributes: vec![],
+                                    start_time_unix_nano: 0,
+                                    time_unix_nano: 0,
+                                    value: Some(DataPointValue::AsDouble(1250.0)),
+                                    exemplars: vec![],
+                                    flags: 0,
+                                }],
+                            },
+                        )),
+                    }],
                     schema_url: "".to_string(),
-                },
-            ],
+                }],
+                schema_url: "".to_string(),
+            }],
         };
 
         let result = receiver.export(Request::new(request)).await;

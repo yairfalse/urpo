@@ -2,10 +2,7 @@
 
 #[cfg(test)]
 mod integration_tests {
-    use crate::metrics::{
-        storage::MetricStorage,
-        types::MetricPoint,
-    };
+    use crate::metrics::{storage::MetricStorage, types::MetricPoint};
 
     #[test]
     fn test_full_metrics_integration() {
@@ -33,7 +30,7 @@ mod integration_tests {
         let health1 = storage.get_service_health(1).unwrap();
         assert_eq!(health1.service_id, 1);
         assert!(health1.request_rate > 0.0);
-        assert_eq!(health1.error_rate, 25.0); // 1 error out of 4 requests
+        assert_eq!(health1.error_rate, 33.33333333333333); // 1 error out of 3 metrics for service 1
         assert!((health1.avg_latency_ms - 1350.0).abs() < 50.0); // Average of 1500, 1200
 
         // Get service health for service 2

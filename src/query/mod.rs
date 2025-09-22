@@ -11,7 +11,7 @@ use crate::core::Result;
 use crate::storage::StorageBackend;
 use std::sync::Arc;
 
-pub use ast::{Query, QueryFilter, Operator, Value, LogicalOp};
+pub use ast::{LogicalOp, Operator, Query, QueryFilter, Value};
 pub use executor::QueryExecutor;
 pub use parser::parse_query;
 

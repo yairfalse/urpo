@@ -40,15 +40,15 @@ impl AdaptiveSampler {
             SamplingPriority::High => {
                 // Sample 50% of high priority
                 fast_hash_decision(&characteristics.trace_id, 5000)
-            }
+            },
             SamplingPriority::Medium => {
                 // Sample 10% of medium priority
                 fast_hash_decision(&characteristics.trace_id, 1000)
-            }
+            },
             SamplingPriority::Low => {
                 // Sample 1% of low priority
                 fast_hash_decision(&characteristics.trace_id, 100)
-            }
+            },
             SamplingPriority::Minimal => false,
         }
     }
@@ -57,7 +57,7 @@ impl AdaptiveSampler {
     pub async fn adjust_rate(&self, metrics: &SystemMetrics) {
         let current_tps = metrics.traces_per_second;
         let target = self.target_tps.load(Ordering::Relaxed) as f64;
-        
+
         // Calculate new rate based on load
         let ratio = target / current_tps.max(1.0);
         let new_rate = if ratio > 1.0 {
@@ -75,7 +75,8 @@ impl AdaptiveSampler {
         // Boost rate if error rate is high
         if metrics.error_rate > 0.05 {
             let boosted = clamped.saturating_mul(self.error_boost.load(Ordering::Relaxed));
-            self.sampling_rate.store(boosted.min(10000), Ordering::Relaxed);
+            self.sampling_rate
+                .store(boosted.min(10000), Ordering::Relaxed);
         }
     }
 
@@ -96,11 +97,11 @@ impl Default for AdaptiveSampler {
 fn fast_hash_decision(trace_id: &crate::core::TraceId, rate_per_10000: u64) -> bool {
     use rustc_hash::FxHasher;
     use std::hash::{Hash, Hasher};
-    
+
     let mut hasher = FxHasher::default();
     trace_id.hash(&mut hasher);
     let hash = hasher.finish();
-    
+
     let threshold = (u64::MAX / 10000) * rate_per_10000;
     hash < threshold
 }
@@ -110,13 +111,13 @@ mod tests {
     use super::*;
     use crate::core::TraceId;
 
-    #[test]
-    fn test_adaptive_rate_adjustment() {
+    #[tokio::test]
+    async fn test_adaptive_rate_adjustment() {
         let sampler = AdaptiveSampler::new();
-        
+
         // Initially 1%
         assert_eq!(sampler.get_rate_percent(), 1.0);
-        
+
         // Adjust with low load
         let metrics = SystemMetrics {
             traces_per_second: 100.0,
@@ -126,17 +127,17 @@ mod tests {
             cpu_usage: 0.3,
             memory_usage: 0.4,
         };
-        
-        tokio_test::block_on(sampler.adjust_rate(&metrics));
-        
+
+        sampler.adjust_rate(&metrics).await;
+
         // Should increase rate when under target
         assert!(sampler.get_rate_percent() > 1.0);
     }
 
-    #[test]
-    fn test_error_boost() {
+    #[tokio::test]
+    async fn test_error_boost() {
         let sampler = AdaptiveSampler::new();
-        
+
         // High error rate
         let metrics = SystemMetrics {
             traces_per_second: 1000.0,
@@ -146,9 +147,9 @@ mod tests {
             cpu_usage: 0.3,
             memory_usage: 0.4,
         };
-        
-        tokio_test::block_on(sampler.adjust_rate(&metrics));
-        
+
+        sampler.adjust_rate(&metrics).await;
+
         // Should boost sampling rate
         assert!(sampler.get_rate_percent() > 1.0);
     }

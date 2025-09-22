@@ -2,8 +2,8 @@
 
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
-use urpo_lib::core::{ServiceName, Span, SpanId, SpanKind, SpanStatus, TraceId};
 use urpo_lib::core::types::AttributeMap;
+use urpo_lib::core::{ServiceName, Span, SpanId, SpanKind, SpanStatus, TraceId};
 use urpo_lib::storage::{InMemoryStorage, StorageBackend};
 
 #[tokio::test]
@@ -55,7 +55,8 @@ async fn reality_check_spans_per_second() {
 
     // Memory check
     let stats = storage.get_stats().await.unwrap();
-    let mb_per_million = (stats.memory_bytes as f64 / 1024.0 / 1024.0) * (1_000_000.0 / num_spans as f64);
+    let mb_per_million =
+        (stats.memory_bytes as f64 / 1024.0 / 1024.0) * (1_000_000.0 / num_spans as f64);
     println!("Memory per 1M spans: {:.1}MB", mb_per_million);
 
     // Query speed check
@@ -63,7 +64,10 @@ async fn reality_check_spans_per_second() {
     let start = Instant::now();
 
     for _ in 0..100 {
-        let _spans = storage.get_service_spans(&service_name, SystemTime::now() - Duration::from_secs(3600)).await.unwrap();
+        let _spans = storage
+            .get_service_spans(&service_name, SystemTime::now() - Duration::from_secs(3600))
+            .await
+            .unwrap();
     }
 
     let query_time = start.elapsed().as_millis() as f64 / 100.0;
@@ -71,9 +75,26 @@ async fn reality_check_spans_per_second() {
 
     // Reality check
     println!("\n=== CLAIMS CHECK ===");
-    println!("Target: >10,000 spans/sec -> {}", if spans_per_sec >= 10_000.0 { "PASS" } else { "FAIL" });
-    println!("Target: <10μs per span -> {}", if us_per_span <= 10.0 { "PASS" } else { "FAIL" });
-    println!("Target: <100MB for 1M spans -> {}", if mb_per_million <= 100.0 { "PASS" } else { "FAIL" });
+    println!(
+        "Target: >10,000 spans/sec -> {}",
+        if spans_per_sec >= 10_000.0 {
+            "PASS"
+        } else {
+            "FAIL"
+        }
+    );
+    println!(
+        "Target: <10μs per span -> {}",
+        if us_per_span <= 10.0 { "PASS" } else { "FAIL" }
+    );
+    println!(
+        "Target: <100MB for 1M spans -> {}",
+        if mb_per_million <= 100.0 {
+            "PASS"
+        } else {
+            "FAIL"
+        }
+    );
     println!("Target: <1ms query time -> {}", if query_time <= 1.0 { "PASS" } else { "FAIL" });
 
     // Always pass the test, we just want to see the numbers

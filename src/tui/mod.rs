@@ -8,9 +8,9 @@ mod fake_data;
 pub mod logs_view;
 pub mod service_health;
 mod span_details;
+pub mod ultimate_tui;
 pub mod ultra_fast_input;
 pub mod ultra_fast_renderer;
-pub mod ultimate_tui;
 mod widgets;
 
 // Re-export commonly used types

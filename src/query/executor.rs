@@ -57,19 +57,21 @@ impl QueryExecutor {
         match filter {
             QueryFilter::All => {
                 // Return all traces (up to limit)
-                let stats = storage.get_stats().await?;
+                let _stats = storage.get_stats().await?;
                 // We need to get all traces - this is inefficient but works for now
                 // In a real implementation, we'd have a method to list all trace IDs
                 Ok(vec![]) // TODO: Implement get_all_trace_ids in StorageBackend
-            }
+            },
 
             QueryFilter::Comparison { field, op, value } => {
-                self.execute_comparison(storage, field, op, value, limit).await
-            }
+                self.execute_comparison(storage, field, op, value, limit)
+                    .await
+            },
 
             QueryFilter::Logical { op, left, right } => {
                 let left_results = Box::pin(self.execute_filter(storage, left, limit * 2)).await?;
-                let right_results = Box::pin(self.execute_filter(storage, right, limit * 2)).await?;
+                let right_results =
+                    Box::pin(self.execute_filter(storage, right, limit * 2)).await?;
 
                 match op {
                     LogicalOp::And => {
@@ -81,7 +83,7 @@ impl QueryExecutor {
                             .take(limit)
                             .collect();
                         Ok(result)
-                    }
+                    },
                     LogicalOp::Or => {
                         // Union
                         let mut seen = HashSet::new();
@@ -96,9 +98,9 @@ impl QueryExecutor {
                             }
                         }
                         Ok(result)
-                    }
+                    },
                 }
-            }
+            },
 
             QueryFilter::Group(inner) => Box::pin(self.execute_filter(storage, inner, limit)).await,
         }
@@ -145,7 +147,7 @@ impl QueryExecutor {
                     }
                 }
                 Ok(vec![])
-            }
+            },
 
             Field::Status => {
                 // Status comparison
@@ -155,18 +157,18 @@ impl QueryExecutor {
                             // Get error traces
                             let error_traces = self.get_error_traces(storage, limit).await?;
                             Ok(error_traces)
-                        }
+                        },
                         Value::String(s) if s == "error" => {
                             // Get error traces
                             let error_traces = self.get_error_traces(storage, limit).await?;
                             Ok(error_traces)
-                        }
+                        },
                         _ => Ok(vec![]),
                     }
                 } else {
                     Ok(vec![])
                 }
-            }
+            },
 
             Field::Duration => {
                 // Duration comparison
@@ -206,13 +208,18 @@ impl QueryExecutor {
                 } else {
                     Ok(vec![])
                 }
-            }
+            },
 
-            Field::Name | Field::TraceId | Field::SpanId | Field::ParentSpanId | Field::SpanKind | Field::Attribute(_) => {
+            Field::Name
+            | Field::TraceId
+            | Field::SpanId
+            | Field::ParentSpanId
+            | Field::SpanKind
+            | Field::Attribute(_) => {
                 // For now, these require scanning all spans
                 // In a production system, we'd have proper indexing for these
                 Ok(vec![])
-            }
+            },
         }
     }
 
@@ -245,14 +252,14 @@ impl QueryExecutor {
     async fn get_recent_spans(
         &self,
         storage: &dyn StorageBackend,
-        limit: usize,
+        _limit: usize,
     ) -> Result<Vec<crate::core::Span>> {
         // This is a simplified implementation
         // In production, we'd have a more efficient way to get recent spans
 
         // Try to get spans from a known service (this is a hack)
         // In reality, we'd need a get_recent_spans method on StorageBackend
-        let stats = storage.get_stats().await?;
+        let _stats = storage.get_stats().await?;
 
         // For now, return empty - this needs proper implementation
         Ok(vec![])

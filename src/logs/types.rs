@@ -63,12 +63,7 @@ pub struct LogRecord {
 
 impl LogRecord {
     /// Create new log record
-    pub fn new(
-        timestamp: u64,
-        service_id: u16,
-        severity: LogSeverity,
-        body: String,
-    ) -> Self {
+    pub fn new(timestamp: u64, service_id: u16, severity: LogSeverity, body: String) -> Self {
         Self {
             timestamp,
             service_id,
@@ -102,7 +97,9 @@ impl LogRecord {
     pub fn memory_size(&self) -> usize {
         std::mem::size_of::<Self>()
             + self.body.len()
-            + self.attributes.iter()
+            + self
+                .attributes
+                .iter()
                 .map(|(k, v)| k.len() + v.len())
                 .sum::<usize>()
     }
@@ -137,12 +134,8 @@ mod tests {
 
     #[test]
     fn test_log_record_creation() {
-        let record = LogRecord::new(
-            1234567890,
-            42,
-            LogSeverity::Info,
-            "Test log message".to_string(),
-        );
+        let record =
+            LogRecord::new(1234567890, 42, LogSeverity::Info, "Test log message".to_string());
 
         assert_eq!(record.timestamp, 1234567890);
         assert_eq!(record.service_id, 42);
@@ -157,14 +150,10 @@ mod tests {
         let trace_id = TraceId::new("abcd1234".to_string()).unwrap();
         let span_id = SpanId::new("ef567890".to_string()).unwrap();
 
-        let record = LogRecord::new(
-            1234567890,
-            42,
-            LogSeverity::Error,
-            "Error occurred".to_string(),
-        )
-        .with_trace_id(trace_id.clone())
-        .with_span_id(span_id.clone());
+        let record =
+            LogRecord::new(1234567890, 42, LogSeverity::Error, "Error occurred".to_string())
+                .with_trace_id(trace_id.clone())
+                .with_span_id(span_id.clone());
 
         assert_eq!(record.trace_id, Some(trace_id));
         assert_eq!(record.span_id, Some(span_id));
@@ -172,14 +161,9 @@ mod tests {
 
     #[test]
     fn test_log_record_with_attributes() {
-        let record = LogRecord::new(
-            1234567890,
-            42,
-            LogSeverity::Info,
-            "Test".to_string(),
-        )
-        .with_attribute("http.method".to_string(), "GET".to_string())
-        .with_attribute("http.status".to_string(), "200".to_string());
+        let record = LogRecord::new(1234567890, 42, LogSeverity::Info, "Test".to_string())
+            .with_attribute("http.method".to_string(), "GET".to_string())
+            .with_attribute("http.status".to_string(), "200".to_string());
 
         assert_eq!(record.attributes.len(), 2);
         assert_eq!(record.attributes.get("http.method"), Some(&"GET".to_string()));

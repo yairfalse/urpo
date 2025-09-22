@@ -1,7 +1,9 @@
 //! Demo of smart trace sampling saving 90% storage while keeping critical data
 
 use urpo_lib::core::{Result, TraceId};
-use urpo_lib::sampling::{SmartSampler, SamplingDecision, TraceCharacteristics, SamplingPriority, SystemMetrics};
+use urpo_lib::sampling::{
+    SamplingDecision, SamplingPriority, SmartSampler, SystemMetrics, TraceCharacteristics,
+};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -13,13 +15,13 @@ async fn main() -> Result<()> {
 
     // Simulate different trace types
     let traces = vec![
-        ("normal_trace_1", false, 100, 10, 3),      // Normal
-        ("error_trace_1", true, 500, 20, 5),        // Error - KEEP
-        ("slow_trace_1", false, 2000, 50, 8),       // Slow - KEEP
-        ("normal_trace_2", false, 150, 12, 3),      // Normal
-        ("complex_trace_1", false, 300, 200, 15),   // Complex - KEEP
-        ("normal_trace_3", false, 80, 8, 2),        // Normal
-        ("anomaly_trace_1", false, 5000, 300, 20),  // Anomaly - KEEP
+        ("normal_trace_1", false, 100, 10, 3),     // Normal
+        ("error_trace_1", true, 500, 20, 5),       // Error - KEEP
+        ("slow_trace_1", false, 2000, 50, 8),      // Slow - KEEP
+        ("normal_trace_2", false, 150, 12, 3),     // Normal
+        ("complex_trace_1", false, 300, 200, 15),  // Complex - KEEP
+        ("normal_trace_3", false, 80, 8, 2),       // Normal
+        ("anomaly_trace_1", false, 5000, 300, 20), // Anomaly - KEEP
     ];
 
     println!("📊 HEAD SAMPLING (Fast Path <100ns):");
@@ -31,11 +33,7 @@ async fn main() -> Result<()> {
         let decision = sampler.should_sample_head(&trace_id);
         let elapsed = start.elapsed();
 
-        println!("  {} → {:?} ({}ns)", 
-            trace_name, 
-            decision,
-            elapsed.as_nanos()
-        );
+        println!("  {} → {:?} ({}ns)", trace_name, decision, elapsed.as_nanos());
     }
 
     println!("\n📈 TAIL-BASED SAMPLING (Complete Trace):");
@@ -46,7 +44,7 @@ async fn main() -> Result<()> {
 
     for (trace_name, has_error, duration_ms, span_count, service_count) in &traces {
         let trace_id = TraceId::new(trace_name.to_string()).unwrap();
-        
+
         let characteristics = TraceCharacteristics {
             trace_id: trace_id.clone(),
             has_error: *has_error,
@@ -66,23 +64,29 @@ async fn main() -> Result<()> {
         };
 
         let decision = sampler.should_sample_tail(&characteristics).await;
-        
+
         match decision {
             SamplingDecision::Keep => {
                 kept += 1;
-                println!("  ✅ {} - KEPT ({})", 
+                println!(
+                    "  ✅ {} - KEPT ({})",
                     trace_name,
-                    if *has_error { "ERROR" }
-                    else if *duration_ms > 1000 { "SLOW" }
-                    else if *span_count > 100 { "COMPLEX" }
-                    else { "ANOMALY" }
+                    if *has_error {
+                        "ERROR"
+                    } else if *duration_ms > 1000 {
+                        "SLOW"
+                    } else if *span_count > 100 {
+                        "COMPLEX"
+                    } else {
+                        "ANOMALY"
+                    }
                 );
-            }
+            },
             SamplingDecision::Drop => {
                 dropped += 1;
                 println!("  ❌ {} - DROPPED (normal)", trace_name);
-            }
-            _ => {}
+            },
+            _ => {},
         }
     }
 
@@ -90,7 +94,11 @@ async fn main() -> Result<()> {
     println!("------------------------");
     println!("  Total Traces: {}", traces.len());
     println!("  Kept: {} ({:.1}%)", kept, (kept as f64 / traces.len() as f64) * 100.0);
-    println!("  Dropped: {} ({:.1}%)", dropped, (dropped as f64 / traces.len() as f64) * 100.0);
+    println!(
+        "  Dropped: {} ({:.1}%)",
+        dropped,
+        (dropped as f64 / traces.len() as f64) * 100.0
+    );
 
     // Simulate system load adjustment
     println!("\n⚡ ADAPTIVE RATE ADJUSTMENT:");
@@ -121,11 +129,11 @@ async fn main() -> Result<()> {
     let mut sim_normal = 0;
 
     for i in 0..1_000_000 {
-        let is_error = i % 100 < 2;  // 2% errors
-        let is_slow = i % 100 < 5;   // 5% slow
-        
+        let is_error = i % 100 < 2; // 2% errors
+        let is_slow = i % 100 < 5; // 5% slow
+
         let trace_id = TraceId::new(format!("sim_{}", i)).unwrap();
-        
+
         // Fast head sampling
         if sampler.should_sample_head(&trace_id) == SamplingDecision::Drop {
             continue;
@@ -149,9 +157,13 @@ async fn main() -> Result<()> {
 
         if sampler.should_sample_tail(&characteristics).await == SamplingDecision::Keep {
             sim_kept += 1;
-            if is_error { sim_errors += 1; }
-            else if is_slow { sim_slow += 1; }
-            else { sim_normal += 1; }
+            if is_error {
+                sim_errors += 1;
+            } else if is_slow {
+                sim_slow += 1;
+            } else {
+                sim_normal += 1;
+            }
         }
     }
 
@@ -160,7 +172,7 @@ async fn main() -> Result<()> {
     println!("    • Errors: {} (100% retention)", sim_errors);
     println!("    • Slow: {} (~100% retention)", sim_slow);
     println!("    • Normal: {} (~1% retention)", sim_normal);
-    
+
     let storage_saved = 100.0 - ((sim_kept as f64 / 1_000_000.0) * 100.0);
     println!("\n💾 STORAGE SAVED: {:.1}%", storage_saved);
     println!("🎯 CRITICAL DATA RETAINED: 100%");

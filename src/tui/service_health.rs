@@ -56,7 +56,8 @@ impl ServiceHealthView {
 
         // Sort by request rate (highest first)
         services.sort_by(|a, b| {
-            b.request_rate.partial_cmp(&a.request_rate)
+            b.request_rate
+                .partial_cmp(&a.request_rate)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
 
@@ -87,7 +88,8 @@ impl ServiceHealthView {
         .height(1);
 
         // Create rows
-        let rows: Vec<Row> = self.services
+        let rows: Vec<Row> = self
+            .services
             .iter()
             .enumerate()
             .map(|(i, health)| {
@@ -128,15 +130,15 @@ impl ServiceHealthView {
                 Constraint::Percentage(15),
                 Constraint::Percentage(20),
                 Constraint::Percentage(20),
-            ]
+            ],
         )
-            .header(header)
-            .block(
-                Block::default()
-                    .title(" Service Health Dashboard ")
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::White)),
-            );
+        .header(header)
+        .block(
+            Block::default()
+                .title(" Service Health Dashboard ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::White)),
+        );
 
         f.render_widget(table, area);
 
@@ -169,7 +171,7 @@ impl ServiceHealthView {
             'k' | 'K' => self.move_up(),
             'g' => self.move_to_top(),
             'G' => self.move_to_bottom(),
-            _ => {}
+            _ => {},
         }
     }
 

@@ -653,6 +653,8 @@ server:
   bind_address: "127.0.0.1"
   grpc_port: 5317
   http_port: 5318
+  max_connections: 1000
+  connection_timeout: 30s
 storage:
   max_spans: 50000
   max_memory_mb: 512

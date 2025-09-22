@@ -19,12 +19,13 @@ use tauri::{Manager, State, Window};
 use tokio::sync::RwLock;
 
 use urpo_lib::{
-    core::{Config, ConfigBuilder, ServiceName, TraceId},
+    core::{Config, ConfigBuilder, ServiceName, TraceId, Result as UrpoResult, Span, SpanId, ServiceMetrics},
     monitoring::Monitor,
     receiver::OtelReceiver,
     service_map::ServiceMapBuilder,
-    storage::{StorageBackend, StorageManager},
+    storage::{StorageBackend, StorageManager, StorageHealth, StorageStats, TraceInfo as StorageTraceInfo},
 };
+use std::time::SystemTime;
 
 // Global telemetry system for ultra-high performance monitoring
 static TELEMETRY: Lazy<TelemetryState> = Lazy::new(|| TelemetryState::new());
@@ -183,6 +184,89 @@ async fn background_telemetry_task(window: Window) {
         if cold_fetch_latency > 100.0 {
             tracing::warn!("Slow cold fetch detected: {:.1}ms", cold_fetch_latency);
         }
+    }
+}
+
+/// Storage wrapper that delegates to the shared Arc<dyn StorageBackend>
+/// This ensures the OTEL receiver and app state use the same storage instance
+struct StorageWrapper {
+    inner: Arc<dyn StorageBackend>,
+}
+
+impl StorageWrapper {
+    fn new(storage: Arc<dyn StorageBackend>) -> Self {
+        Self { inner: storage }
+    }
+}
+
+#[async_trait::async_trait]
+impl StorageBackend for StorageWrapper {
+    async fn store_span(&self, span: Span) -> UrpoResult<()> {
+        self.inner.store_span(span).await
+    }
+
+    async fn get_span(&self, span_id: &SpanId) -> UrpoResult<Option<Span>> {
+        self.inner.get_span(span_id).await
+    }
+
+    async fn get_trace_spans(&self, trace_id: &TraceId) -> UrpoResult<Vec<Span>> {
+        self.inner.get_trace_spans(trace_id).await
+    }
+
+    async fn get_service_spans(
+        &self,
+        service: &ServiceName,
+        since: SystemTime,
+    ) -> UrpoResult<Vec<Span>> {
+        self.inner.get_service_spans(service, since).await
+    }
+
+    async fn get_service_metrics(&self) -> UrpoResult<Vec<ServiceMetrics>> {
+        self.inner.get_service_metrics().await
+    }
+
+    async fn get_span_count(&self) -> UrpoResult<usize> {
+        self.inner.get_span_count().await
+    }
+
+    async fn enforce_limits(&self) -> UrpoResult<usize> {
+        self.inner.enforce_limits().await
+    }
+
+    async fn list_services(&self) -> UrpoResult<Vec<ServiceName>> {
+        self.inner.list_services().await
+    }
+
+    async fn get_storage_stats(&self) -> UrpoResult<StorageStats> {
+        self.inner.get_storage_stats().await
+    }
+
+    async fn emergency_cleanup(&self) -> UrpoResult<usize> {
+        self.inner.emergency_cleanup().await
+    }
+
+    fn get_health(&self) -> StorageHealth {
+        self.inner.get_health()
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self.inner.as_any()
+    }
+
+    async fn list_recent_traces(
+        &self,
+        limit: usize,
+        service_filter: Option<&ServiceName>,
+    ) -> UrpoResult<Vec<StorageTraceInfo>> {
+        self.inner.list_recent_traces(limit, service_filter).await
+    }
+
+    async fn get_error_traces(&self, limit: usize) -> UrpoResult<Vec<StorageTraceInfo>> {
+        self.inner.get_error_traces(limit).await
+    }
+
+    async fn search_traces(&self, query: &str, limit: usize) -> UrpoResult<Vec<StorageTraceInfo>> {
+        self.inner.search_traces(query, limit).await
     }
 }
 
@@ -554,7 +638,7 @@ async fn get_system_metrics(state: State<'_, AppState>) -> Result<SystemMetrics,
 // Stream trace data for large datasets with adaptive performance
 #[tauri::command]
 async fn stream_trace_data(
-    window: tauri::Window,
+    window: Window,
     state: State<'_, AppState>,
     trace_id: String,
 ) -> Result<(), String> {
@@ -648,13 +732,12 @@ async fn start_receiver(state: State<'_, AppState>) -> Result<(), String> {
     }
 
     // Create receiver with standard OTEL ports
-    // Create a new storage backend specifically for the receiver
-    // This is a workaround for the type mismatch - OtelReceiver expects Arc<RwLock<dyn StorageBackend>>
-    // but our app uses Arc<dyn StorageBackend>
-    use urpo_lib::storage::InMemoryStorage;
-    let storage_impl = InMemoryStorage::new(state.config.storage.max_spans);
+    // CRITICAL FIX: Use the exact same storage instance for data sharing
+    let shared_storage = state.storage.clone();
+
+    // Wrap the shared storage in RwLock for the receiver
     let receiver_storage: Arc<tokio::sync::RwLock<dyn urpo_lib::storage::StorageBackend>> =
-        Arc::new(tokio::sync::RwLock::new(storage_impl));
+        Arc::new(tokio::sync::RwLock::new(StorageWrapper::new(shared_storage)));
 
     let receiver = Arc::new(OtelReceiver::new(
         4317, // GRPC port

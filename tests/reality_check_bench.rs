@@ -2,8 +2,8 @@
 
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
-use urpo_lib::core::{ServiceName, Span, SpanId, SpanKind, SpanStatus, TraceId};
 use urpo_lib::core::types::AttributeMap;
+use urpo_lib::core::{ServiceName, Span, SpanId, SpanKind, SpanStatus, TraceId};
 use urpo_lib::storage::{InMemoryStorage, StorageBackend};
 
 const NUM_SPANS: usize = 10_000;
@@ -91,7 +91,8 @@ async fn reality_check_performance_claims() {
     println!("----------------------");
 
     let stats = storage.get_stats().await.unwrap();
-    let mb_per_million = (stats.memory_bytes as f64 / 1024.0 / 1024.0) * (1_000_000.0 / NUM_SPANS as f64);
+    let mb_per_million =
+        (stats.memory_bytes as f64 / 1024.0 / 1024.0) * (1_000_000.0 / NUM_SPANS as f64);
 
     println!("Current memory: {:.2}MB for {} spans", stats.memory_mb, NUM_SPANS);
     println!("Projected: {:.1}MB for 1M spans", mb_per_million);
@@ -110,7 +111,10 @@ async fn reality_check_performance_claims() {
     let start = Instant::now();
 
     for _ in 0..1000 {
-        let _spans = storage.get_service_spans(&service_name, SystemTime::now() - Duration::from_secs(3600)).await.unwrap();
+        let _spans = storage
+            .get_service_spans(&service_name, SystemTime::now() - Duration::from_secs(3600))
+            .await
+            .unwrap();
     }
 
     let query_duration = start.elapsed();
@@ -131,10 +135,10 @@ async fn reality_check_performance_claims() {
     println!("\nFINAL VERDICT");
     println!("=============");
 
-    let claims_verified = (spans_per_sec >= 10_000.0) as i32 +
-                         (ns_per_span <= 10_000.0) as i32 +
-                         (mb_per_million <= 100.0) as i32 +
-                         (ms_per_query <= 1.0) as i32;
+    let claims_verified = (spans_per_sec >= 10_000.0) as i32
+        + (ns_per_span <= 10_000.0) as i32
+        + (mb_per_million <= 100.0) as i32
+        + (ms_per_query <= 1.0) as i32;
 
     match claims_verified {
         4 => println!("ALL CLAIMS VERIFIED! Urpo is indeed fast!"),

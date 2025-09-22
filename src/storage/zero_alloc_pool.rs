@@ -6,12 +6,10 @@
 //! - Cache-line aligned for optimal CPU cache usage
 //! - Pre-warmed pools to avoid cold starts
 
-use crate::core::{Result, Span, SpanBuilder, UrpoError};
-use crate::storage::ultra_fast::CompactSpan;
+use crate::core::{Span, SpanBuilder};
 use crossbeam::queue::ArrayQueue;
-use parking_lot::Mutex;
 use std::mem::MaybeUninit;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 /// Statistics for pool performance monitoring
@@ -67,11 +65,11 @@ impl ZeroAllocSpanPool {
                     pool: Arc::clone(&self.pool),
                     returns: unsafe { std::mem::transmute(&self.returns) },
                 })
-            }
+            },
             None => {
                 self.misses.fetch_add(1, Ordering::Relaxed);
                 None // NEVER allocate - let caller handle
-            }
+            },
         }
     }
 
@@ -82,9 +80,7 @@ impl ZeroAllocSpanPool {
             // Only allocate as last resort
             self.misses.fetch_add(1, Ordering::Relaxed);
             // Leak the reference to make it 'static (safe for long-lived pools)
-            let returns_ref: &'static AtomicU64 = unsafe { 
-                std::mem::transmute(&self.returns)
-            };
+            let returns_ref: &'static AtomicU64 = unsafe { std::mem::transmute(&self.returns) };
             PooledSpan {
                 span: Some(Box::new(SpanBuilder::default().build_default())),
                 pool: Arc::clone(&self.pool),
@@ -253,9 +249,7 @@ impl CompactSpanHandle {
     /// Read the CompactSpan from this slot
     #[inline]
     pub fn read(&self) -> &CompactSpan {
-        unsafe {
-            (*self.pool).read(self.index)
-        }
+        unsafe { (*self.pool).read(self.index) }
     }
 }
 

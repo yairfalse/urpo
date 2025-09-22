@@ -4,7 +4,7 @@
 
 use std::time::{Duration, Instant, SystemTime};
 use urpo_lib::core::{ServiceName, Span, SpanId, SpanKind, SpanStatus, TraceId};
-use urpo_lib::storage::{InMemoryStorage, UltraCompactStorage, StorageBackend};
+use urpo_lib::storage::{InMemoryStorage, StorageBackend, UltraCompactStorage};
 
 fn generate_realistic_span(i: usize) -> Span {
     let trace_id = TraceId::new(format!("trace_{:08x}", i / 100)).unwrap();

@@ -4,7 +4,10 @@
 //! following the OTLP specification.
 
 use crate::core::{otel_compliance, Result, SpanId, TraceId};
-use crate::logs::{storage::LogStorage, types::{LogRecord, LogSeverity}};
+use crate::logs::{
+    storage::LogStorage,
+    types::{LogRecord, LogSeverity},
+};
 use crate::metrics::string_pool::StringPool;
 use opentelemetry_proto::tonic::collector::logs::v1::{
     logs_service_server::{LogsService, LogsServiceServer},
@@ -75,10 +78,8 @@ impl OtelLogsReceiver {
         // Add attributes
         for attribute in &log.attributes {
             if let Some(value) = &attribute.value {
-                log_record = log_record.with_attribute(
-                    attribute.key.clone(),
-                    extract_string_value(value),
-                );
+                log_record =
+                    log_record.with_attribute(attribute.key.clone(), extract_string_value(value));
             }
         }
 
@@ -86,7 +87,10 @@ impl OtelLogsReceiver {
     }
 
     /// Extract service ID from resource attributes
-    fn extract_service_id(&self, resource: &opentelemetry_proto::tonic::resource::v1::Resource) -> u16 {
+    fn extract_service_id(
+        &self,
+        resource: &opentelemetry_proto::tonic::resource::v1::Resource,
+    ) -> u16 {
         // Look for service.name attribute
         for attribute in &resource.attributes {
             if attribute.key == otel_compliance::attributes::SERVICE_NAME {
@@ -116,15 +120,17 @@ fn extract_string_value(value: &opentelemetry_proto::tonic::common::v1::AnyValue
         Some(Value::DoubleValue(d)) => d.to_string(),
         Some(Value::BytesValue(bytes)) => format!("bytes({})", bytes.len()),
         Some(Value::ArrayValue(arr)) => {
-            let values: Vec<String> = arr.values.iter()
-                .map(extract_string_value)
-                .collect();
+            let values: Vec<String> = arr.values.iter().map(extract_string_value).collect();
             format!("[{}]", values.join(", "))
         },
         Some(Value::KvlistValue(kv)) => {
-            let pairs: Vec<String> = kv.values.iter()
+            let pairs: Vec<String> = kv
+                .values
+                .iter()
                 .map(|kv| {
-                    let val = kv.value.as_ref()
+                    let val = kv
+                        .value
+                        .as_ref()
                         .map(extract_string_value)
                         .unwrap_or_default();
                     format!("{}={}", kv.key, val)
@@ -163,10 +169,10 @@ impl LogsService for OtelLogsReceiver {
                             if storage.store_log(converted_log).is_ok() {
                                 processed_logs += 1;
                             }
-                        }
+                        },
                         Err(e) => {
                             tracing::warn!("Failed to convert log record: {}", e);
-                        }
+                        },
                     }
                 }
             }
@@ -276,14 +282,12 @@ mod tests {
             body: Some(AnyValue {
                 value: Some(Value::StringValue("Error occurred".to_string())),
             }),
-            attributes: vec![
-                KeyValue {
-                    key: "http.method".to_string(),
-                    value: Some(AnyValue {
-                        value: Some(Value::StringValue("GET".to_string())),
-                    }),
-                },
-            ],
+            attributes: vec![KeyValue {
+                key: "http.method".to_string(),
+                value: Some(AnyValue {
+                    value: Some(Value::StringValue("GET".to_string())),
+                }),
+            }],
             trace_id: hex::decode("4bf92f3577b34da6a3ce929d0e0e4736").unwrap(),
             span_id: hex::decode("00f067aa0ba902b7").unwrap(),
             ..Default::default()
@@ -305,7 +309,7 @@ mod tests {
         let receiver = OtelLogsReceiver::new(storage);
 
         let otlp_log = OtelLogRecord {
-            time_unix_nano: 0, // Will use current time
+            time_unix_nano: 0,  // Will use current time
             severity_number: 0, // Will default to INFO
             body: Some(AnyValue {
                 value: Some(Value::StringValue("Simple log".to_string())),

@@ -19,16 +19,19 @@ static DEFAULT_SERVICE_NAME: Lazy<Arc<str>> = Lazy::new(|| Arc::from("unknown"))
 pub struct AttributeMap(pub SmallVec<[(Arc<str>, Arc<str>); 5]>);
 
 impl AttributeMap {
+    /// Creates a new empty attribute map
     #[inline(always)]
     pub fn new() -> Self {
         AttributeMap(SmallVec::new())
     }
 
+    /// Adds a key-value pair to the attribute map
     #[inline]
     pub fn push(&mut self, key: Arc<str>, value: Arc<str>) {
         self.0.push((key, value));
     }
 
+    /// Gets an attribute value by key
     #[inline]
     pub fn get(&self, key: &str) -> Option<&str> {
         self.0
@@ -37,21 +40,25 @@ impl AttributeMap {
             .map(|(_, v)| v.as_ref())
     }
 
+    /// Returns an iterator over all key-value pairs
     #[inline]
     pub fn iter(&self) -> impl Iterator<Item = (&str, &str)> + '_ {
         self.0.iter().map(|(k, v)| (k.as_ref(), v.as_ref()))
     }
 
+    /// Returns the number of attributes in the map
     #[inline]
     pub fn len(&self) -> usize {
         self.0.len()
     }
 
+    /// Returns true if the attribute map is empty
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 
+    /// Returns true if the map contains the given key
     #[inline]
     pub fn contains_key(&self, key: &str) -> bool {
         self.0.iter().any(|(k, _)| k.as_ref() == key)

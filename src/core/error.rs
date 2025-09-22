@@ -1,16 +1,25 @@
 use thiserror::Error;
 
+/// Core error types for Urpo operations.
+///
+/// This enum represents all possible errors that can occur during Urpo execution,
+/// from OTEL protocol issues to storage failures and UI rendering problems.
+/// Each error variant provides structured error information for debugging and recovery.
 #[derive(Error, Debug)]
 pub enum UrpoError {
+    /// OTEL protocol-related errors (invalid traces, malformed requests, etc.)
     #[error("OTEL protocol error: {0}")]
     Protocol(String),
 
+    /// Storage backend errors (disk full, corruption, index failures, etc.)
     #[error("Storage error: {0}")]
     Storage(String),
 
+    /// Configuration validation errors (invalid ports, malformed YAML, etc.)
     #[error("Configuration error: {0}")]
     Config(String),
 
+    /// Terminal UI rendering errors (display failures, terminal compatibility, etc.)
     #[error("UI rendering error: {0}")]
     Render(String),
 
@@ -23,8 +32,14 @@ pub enum UrpoError {
     #[error("Invalid span data: {0}")]
     InvalidSpan(String),
 
+    /// Memory usage exceeded configured limits
     #[error("Memory limit exceeded: current {current}MB, limit {limit}MB")]
-    MemoryLimitExceeded { current: usize, limit: usize },
+    MemoryLimitExceeded {
+        /// Current memory usage in MB
+        current: usize,
+        /// Configured memory limit in MB
+        limit: usize
+    },
 
     #[error("Sampling rate must be between 0.0 and 1.0, got {0}")]
     InvalidSamplingRate(f64),
@@ -56,11 +71,19 @@ pub enum UrpoError {
     #[error("Channel receive error")]
     ChannelReceive,
 
+    /// Operation timeout exceeded
     #[error("Timeout error: operation took longer than {timeout_ms}ms")]
-    Timeout { timeout_ms: u64 },
+    Timeout {
+        /// Timeout duration in milliseconds
+        timeout_ms: u64
+    },
 
+    /// Data parsing errors (malformed JSON, invalid trace IDs, etc.)
     #[error("Parse error: {message}")]
-    Parse { message: String },
+    Parse {
+        /// Detailed parsing error message
+        message: String
+    },
 
     #[error("Network error: {0}")]
     Network(String),

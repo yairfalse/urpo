@@ -96,10 +96,10 @@ struct SearchQuery {
     limit: Option<usize>,
 }
 
-/// Query parameters for TraceQL queries.
+/// Query parameters for `TraceQL` queries.
 #[derive(Debug, Deserialize)]
 struct TraceQLQuery {
-    /// TraceQL query string
+    /// `TraceQL` query `string`
     q: String,
     /// Maximum results
     limit: Option<usize>,
@@ -158,9 +158,9 @@ pub async fn start_server(
 }
 
 /// GET /health - System health and statistics
-async fn health_handler(State(state): State<ApiState>) -> impl IntoResponse {
+async fn health_handler(State(api_state): State<ApiState>) -> impl IntoResponse {
     // Get storage statistics
-    let stats = match state.storage.read().await.get_stats().await {
+    let storage_stats = match api_state.storage.read().await.get_stats().await {
         Ok(s) => s,
         Err(_) => {
             return (
@@ -177,9 +177,9 @@ async fn health_handler(State(state): State<ApiState>) -> impl IntoResponse {
     let response = HealthResponse {
         status: "healthy".to_string(),
         version: env!("CARGO_PKG_VERSION").to_string(),
-        uptime_seconds: stats.uptime_seconds,
-        trace_count: stats.trace_count,
-        service_count: stats.service_count,
+        uptime_seconds: storage_stats.uptime_seconds,
+        trace_count: storage_stats.trace_count,
+        service_count: storage_stats.service_count,
     };
 
     Json(response).into_response()
@@ -303,16 +303,15 @@ async fn get_trace_handler(
                     }),
                 )
                     .into_response();
-            } else {
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ErrorResponse {
-                        error: format!("Failed to get trace: {}", e),
-                        code: 500,
-                    }),
-                )
-                    .into_response();
             }
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: format!("Failed to get trace: {}", e),
+                    code: 500,
+                }),
+            )
+                .into_response();
         },
     };
 
@@ -468,7 +467,7 @@ async fn query_handler(
                 )
                     .into_response()
             }
-        }
+        },
     }
 }
 
