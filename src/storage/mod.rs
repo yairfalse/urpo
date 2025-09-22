@@ -35,7 +35,7 @@ pub use zero_alloc_pool::{PoolStats, ZeroAllocSpanPool};
 
 /// Unified storage interface that wraps the actual implementation
 pub struct UnifiedStorage {
-    inner: Arc<RwLock<Box<dyn StorageBackend>>>,
+    inner: Arc<RwLock<dyn StorageBackend>>,
 }
 
 impl UnifiedStorage {
@@ -46,12 +46,17 @@ impl UnifiedStorage {
         let storage = InMemoryStorage::new(config.storage.max_spans);
 
         Self {
-            inner: Arc::new(RwLock::new(Box::new(storage))),
+            inner: Arc::new(RwLock::new(storage)),
         }
     }
 
     /// Get the inner storage backend
-    pub fn inner(&self) -> Arc<RwLock<Box<dyn StorageBackend>>> {
+    pub fn inner(&self) -> Arc<RwLock<dyn StorageBackend>> {
+        self.inner.clone()
+    }
+
+    /// Get the storage backend for API usage
+    pub fn as_backend(&self) -> Arc<RwLock<dyn StorageBackend>> {
         self.inner.clone()
     }
 }
