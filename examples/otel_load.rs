@@ -2,16 +2,16 @@
 //!
 //! Usage: cargo run --example otel_load -- --rate 10000
 
+use clap::Parser;
 use opentelemetry_proto::tonic::collector::trace::v1::{
     trace_service_client::TraceServiceClient, ExportTraceServiceRequest,
 };
-use opentelemetry_proto::tonic::trace::v1::{ResourceSpans, ScopeSpans, Span, Status};
-use opentelemetry_proto::tonic::common::v1::{AnyValue, KeyValue, InstrumentationScope};
+use opentelemetry_proto::tonic::common::v1::{AnyValue, InstrumentationScope, KeyValue};
 use opentelemetry_proto::tonic::resource::v1::Resource;
-use std::time::{SystemTime, UNIX_EPOCH, Duration, Instant};
-use clap::Parser;
-use tonic::Request;
+use opentelemetry_proto::tonic::trace::v1::{ResourceSpans, ScopeSpans, Span, Status};
 use rand::Rng;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use tonic::Request;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -72,18 +72,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let resource_spans = group_spans_by_service(spans);
 
         // Send to OTLP endpoint
-        let request = Request::new(ExportTraceServiceRequest {
-            resource_spans,
-        });
+        let request = Request::new(ExportTraceServiceRequest { resource_spans });
 
         match client.export(request).await {
             Ok(_) => {
                 total_sent += args.batch as u64;
-            }
+            },
             Err(e) => {
                 total_errors += 1;
                 eprintln!("❌ Error sending: {}", e);
-            }
+            },
         }
 
         // Report progress every second
@@ -131,8 +129,14 @@ fn generate_span(rng: &mut impl Rng, num_services: u32) -> (String, Span) {
     let service_name = format!("service-{}", service_id);
 
     // Random operation names
-    let operations = ["GET /api/users", "POST /api/orders", "SELECT * FROM users",
-                     "cache.get", "queue.publish", "http.request"];
+    let operations = [
+        "GET /api/users",
+        "POST /api/orders",
+        "SELECT * FROM users",
+        "cache.get",
+        "queue.publish",
+        "http.request",
+    ];
     let operation = operations[rng.gen_range(0..operations.len())];
 
     // Random duration between 1ms and 500ms
@@ -157,7 +161,7 @@ fn generate_span(rng: &mut impl Rng, num_services: u32) -> (String, Span) {
         trace_state: String::new(),
         parent_span_id: vec![],
         name: operation.to_string(),
-        kind: 2, // SERVER
+        kind: 2,  // SERVER
         flags: 0, // Not sampled
         start_time_unix_nano: now.as_nanos() as u64 - duration_ns,
         end_time_unix_nano: now.as_nanos() as u64,
@@ -165,13 +169,19 @@ fn generate_span(rng: &mut impl Rng, num_services: u32) -> (String, Span) {
             KeyValue {
                 key: "http.method".to_string(),
                 value: Some(AnyValue {
-                    value: Some(opentelemetry_proto::tonic::common::v1::any_value::Value::StringValue("GET".to_string())),
+                    value: Some(
+                        opentelemetry_proto::tonic::common::v1::any_value::Value::StringValue(
+                            "GET".to_string(),
+                        ),
+                    ),
                 }),
             },
             KeyValue {
                 key: "http.status_code".to_string(),
                 value: Some(AnyValue {
-                    value: Some(opentelemetry_proto::tonic::common::v1::any_value::Value::IntValue(200)),
+                    value: Some(
+                        opentelemetry_proto::tonic::common::v1::any_value::Value::IntValue(200),
+                    ),
                 }),
             },
         ],
@@ -195,32 +205,33 @@ fn group_spans_by_service(spans: Vec<(String, Span)>) -> Vec<ResourceSpans> {
         services.entry(service).or_default().push(span);
     }
 
-    services.into_iter().map(|(service_name, spans)| {
-        ResourceSpans {
+    services
+        .into_iter()
+        .map(|(service_name, spans)| ResourceSpans {
             resource: Some(Resource {
-                attributes: vec![
-                    KeyValue {
-                        key: "service.name".to_string(),
-                        value: Some(AnyValue {
-                            value: Some(opentelemetry_proto::tonic::common::v1::any_value::Value::StringValue(service_name)),
-                        }),
-                    },
-                ],
+                attributes: vec![KeyValue {
+                    key: "service.name".to_string(),
+                    value: Some(AnyValue {
+                        value: Some(
+                            opentelemetry_proto::tonic::common::v1::any_value::Value::StringValue(
+                                service_name,
+                            ),
+                        ),
+                    }),
+                }],
                 dropped_attributes_count: 0,
             }),
-            scope_spans: vec![
-                ScopeSpans {
-                    scope: Some(InstrumentationScope {
-                        name: "otel-load-generator".to_string(),
-                        version: "1.0.0".to_string(),
-                        attributes: vec![],
-                        dropped_attributes_count: 0,
-                    }),
-                    spans,
-                    schema_url: String::new(),
-                },
-            ],
+            scope_spans: vec![ScopeSpans {
+                scope: Some(InstrumentationScope {
+                    name: "otel-load-generator".to_string(),
+                    version: "1.0.0".to_string(),
+                    attributes: vec![],
+                    dropped_attributes_count: 0,
+                }),
+                spans,
+                schema_url: String::new(),
+            }],
             schema_url: String::new(),
-        }
-    }).collect()
+        })
+        .collect()
 }

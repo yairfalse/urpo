@@ -1,7 +1,7 @@
 //! Visual performance benchmark - SEE the speed difference!
 
-use std::time::{Duration, Instant};
 use colored::*;
+use std::time::{Duration, Instant};
 
 #[tokio::main]
 async fn main() {
@@ -13,7 +13,12 @@ async fn main() {
     let test_sizes = vec![100, 1_000, 10_000, 50_000, 100_000];
 
     for size in test_sizes {
-        println!("\n{}", format!("Testing with {} spans:", size).bright_white().bold());
+        println!(
+            "\n{}",
+            format!("Testing with {} spans:", size)
+                .bright_white()
+                .bold()
+        );
         run_visual_benchmark(size).await;
     }
 
@@ -54,7 +59,8 @@ async fn run_visual_benchmark(num_spans: usize) {
     let spans_per_sec = num_spans as f64 / ingestion_time.as_secs_f64();
     let us_per_span = ingestion_time.as_micros() as f64 / num_spans as f64;
 
-    println!("{} {}",
+    println!(
+        "{} {}",
         "✓".green(),
         format!("({:.0} spans/sec, {:.1}μs per span)", spans_per_sec, us_per_span).bright_green()
     );
@@ -75,7 +81,8 @@ async fn run_visual_benchmark(num_spans: usize) {
     let total_bytes = num_spans as f64 * bytes_per_span;
     let mb_per_million = (total_bytes / 1024.0 / 1024.0) * (1_000_000.0 / num_spans as f64);
 
-    println!("{} {}",
+    println!(
+        "{} {}",
         "✓".green(),
         format!("{:.1}MB for 1M spans", mb_per_million).bright_green()
     );
@@ -93,10 +100,7 @@ async fn run_visual_benchmark(num_spans: usize) {
 
     let query_time = query_start.elapsed().as_millis() as f64;
 
-    println!("{} {}",
-        "✓".green(),
-        format!("{:.2}ms per query", query_time).bright_green()
-    );
+    println!("{} {}", "✓".green(), format!("{:.2}ms per query", query_time).bright_green());
 
     // Show query speed bar
     print!("  Query: ");
@@ -152,7 +156,12 @@ fn draw_query_bar(query_ms: f64) {
 }
 
 fn show_comparison() {
-    println!("\n{}", "Metric              Urpo         Jaeger       Tempo        Winner".bright_white().bold());
+    println!(
+        "\n{}",
+        "Metric              Urpo         Jaeger       Tempo        Winner"
+            .bright_white()
+            .bold()
+    );
     println!("{}", "-".repeat(70).dark_gray());
 
     // Ingestion speed
@@ -163,7 +172,8 @@ fn show_comparison() {
     print_comparison("Startup", "<200ms", "~5s", "~10s", "Urpo");
 
     println!("{}", "-".repeat(70).dark_gray());
-    println!("\n{} {}",
+    println!(
+        "\n{} {}",
         "VERDICT:".bright_yellow().bold(),
         "URPO IS 10-50X FASTER! 🚀".bright_green().bold()
     );
@@ -175,7 +185,12 @@ fn show_comparison() {
     println!("  {} 10x memory efficiency", "✓".green());
     println!("  {} SIMD acceleration active", "✓".green());
 
-    println!("\n{}", "Ready to replace Jaeger? The numbers speak for themselves!".bright_yellow().italic());
+    println!(
+        "\n{}",
+        "Ready to replace Jaeger? The numbers speak for themselves!"
+            .bright_yellow()
+            .italic()
+    );
 }
 
 fn print_comparison(metric: &str, urpo: &str, jaeger: &str, tempo: &str, winner: &str) {
@@ -185,7 +200,8 @@ fn print_comparison(metric: &str, urpo: &str, jaeger: &str, tempo: &str, winner:
         winner.normal()
     };
 
-    println!("{:<15} {:>10} {:>13} {:>12}    {}",
+    println!(
+        "{:<15} {:>10} {:>13} {:>12}    {}",
         metric,
         urpo.bright_green(),
         jaeger.yellow(),
@@ -193,4 +209,3 @@ fn print_comparison(metric: &str, urpo: &str, jaeger: &str, tempo: &str, winner:
         winner_color
     );
 }
-

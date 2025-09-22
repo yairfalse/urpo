@@ -7,9 +7,7 @@ pub mod http;
 pub mod logs;
 pub mod metrics;
 
-use crate::core::{
-    Result, ServiceName, Span as UrpoSpan, SpanId, SpanStatus, TraceId, UrpoError,
-};
+use crate::core::{Result, ServiceName, Span as UrpoSpan, SpanId, SpanStatus, TraceId, UrpoError};
 use crate::storage::UnifiedStorage;
 use chrono::{DateTime, Utc};
 use opentelemetry_proto::tonic::collector::trace::v1::{
@@ -21,7 +19,14 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use tonic::{transport::Server, Request, Response, Status};
 
-/// OTEL receiver for collecting trace data.
+/// OpenTelemetry trace receiver supporting both GRPC and HTTP protocols.
+///
+/// This receiver implements the OTLP specification for collecting trace data
+/// from instrumented applications. It supports:
+/// - GRPC on the configured port (standard: 4317)
+/// - HTTP/JSON on the configured port (standard: 4318)
+/// - Real-time span processing and storage
+/// - Health monitoring and metrics collection
 pub struct OtelReceiver {
     /// GRPC port
     grpc_port: u16,

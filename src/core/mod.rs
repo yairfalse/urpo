@@ -3,6 +3,8 @@
 //! This module contains the fundamental types and logic that power
 //! the OTEL trace exploration functionality.
 
+#![warn(missing_docs)]
+
 pub mod config;
 pub mod diagnostics;
 pub mod error;

@@ -180,10 +180,10 @@ impl fmt::Display for QueryFilter {
         match self {
             QueryFilter::Comparison { field, op, value } => {
                 write!(f, "{} {} {}", field, op, value)
-            }
+            },
             QueryFilter::Logical { op, left, right } => {
                 write!(f, "{} {} {}", left, op, right)
-            }
+            },
             QueryFilter::Group(inner) => write!(f, "({})", inner),
             QueryFilter::All => write!(f, "*"),
         }

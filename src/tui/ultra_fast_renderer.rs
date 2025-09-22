@@ -6,6 +6,8 @@
 //! - Zero allocations in render loop
 //! - Cache-friendly memory access patterns
 
+use super::ultra_fast_input::FastCommand;
+use crate::core::{ServiceMetrics, ServiceName};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
     style::{Color, Modifier, Style},
@@ -14,8 +16,6 @@ use ratatui::{
     Frame,
 };
 use std::time::Instant;
-use crate::core::{ServiceMetrics, ServiceName};
-use super::ultra_fast_input::FastCommand;
 
 /// Pre-calculated layout cache for zero-allocation rendering
 #[derive(Debug, Clone)]
@@ -24,7 +24,7 @@ pub struct LayoutCache {
     pub content: Rect,
     /// Header area
     pub header: Rect,
-    /// Footer/status area 
+    /// Footer/status area
     pub footer: Rect,
     /// Sidebar area
     pub sidebar: Rect,
@@ -41,17 +41,17 @@ impl LayoutCache {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(3),    // Header
-                Constraint::Min(0),       // Content
-                Constraint::Length(2),    // Footer
+                Constraint::Length(3), // Header
+                Constraint::Min(0),    // Content
+                Constraint::Length(2), // Footer
             ])
             .split(terminal_area);
 
         let content_chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
-                Constraint::Percentage(75),  // Main content
-                Constraint::Percentage(25),  // Sidebar
+                Constraint::Percentage(75), // Main content
+                Constraint::Percentage(25), // Sidebar
             ])
             .split(chunks[1]);
 
@@ -122,13 +122,17 @@ impl UltraFastRenderer {
 
         // Update layout cache if needed (fast path check)
         let terminal_area = f.area();
-        if self.layout_cache.as_ref().map_or(true, |cache| !cache.is_valid(terminal_area)) {
+        if self
+            .layout_cache
+            .as_ref()
+            .map_or(true, |cache| !cache.is_valid(terminal_area))
+        {
             self.layout_cache = Some(LayoutCache::new(terminal_area));
         }
 
-        // Handle view switching commands first  
+        // Handle view switching commands first
         self.handle_view_command(command);
-        
+
         let layout = self.layout_cache.as_ref().unwrap();
 
         // Render components based on current view
@@ -174,45 +178,51 @@ impl UltraFastRenderer {
             0.0
         };
 
-        let header_text = vec![
-            Line::from(vec![
-                Span::styled(" URPO ", Style::default()
+        let header_text = vec![Line::from(vec![
+            Span::styled(
+                " URPO ",
+                Style::default()
                     .fg(Color::Black)
                     .bg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD)),
-                Span::raw(" Ultra-Fast OTEL Explorer "),
-                Span::styled(
-                    format!("│ {} ", match self.current_view {
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(" Ultra-Fast OTEL Explorer "),
+            Span::styled(
+                format!(
+                    "│ {} ",
+                    match self.current_view {
                         ViewMode::Services => "SERVICES",
-                        ViewMode::Traces => "TRACES", 
+                        ViewMode::Traces => "TRACES",
                         ViewMode::Logs => "LOGS",
                         ViewMode::Metrics => "METRICS",
                         ViewMode::Graph => "GRAPH",
-                    }),
-                    Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
-                ),
-                Span::styled(
-                    format!("│ {:.1} FPS ", fps),
-                    if fps >= 60.0 {
-                        Style::default().fg(Color::Green)
-                    } else if fps >= 30.0 {
-                        Style::default().fg(Color::Yellow)
-                    } else {
-                        Style::default().fg(Color::Red)
                     }
                 ),
-                Span::styled(
-                    format!("│ {} frames ", self.render_count),
-                    Style::default().fg(Color::Gray)
-                ),
-            ])
-        ];
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                format!("│ {:.1} FPS ", fps),
+                if fps >= 60.0 {
+                    Style::default().fg(Color::Green)
+                } else if fps >= 30.0 {
+                    Style::default().fg(Color::Yellow)
+                } else {
+                    Style::default().fg(Color::Red)
+                },
+            ),
+            Span::styled(
+                format!("│ {} frames ", self.render_count),
+                Style::default().fg(Color::Gray),
+            ),
+        ])];
 
         let header = Paragraph::new(header_text)
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::White))
+                    .border_style(Style::default().fg(Color::White)),
             )
             .alignment(Alignment::Left);
 
@@ -283,7 +293,11 @@ impl UltraFastRenderer {
         }
 
         let header = Row::new(vec!["Service", "RPS", "Error%", "P50", "P95", "P99"])
-            .style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
+            .style(
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            )
             .height(1);
 
         let table = Table::new(
@@ -295,15 +309,15 @@ impl UltraFastRenderer {
                 Constraint::Percentage(15),
                 Constraint::Percentage(15),
                 Constraint::Percentage(15),
-            ]
+            ],
         )
-            .header(header)
-            .block(
-                Block::default()
-                    .title(format!(" Services ({}) ", services.len()))
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::White))
-            );
+        .header(header)
+        .block(
+            Block::default()
+                .title(format!(" Services ({}) ", services.len()))
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::White)),
+        );
 
         f.render_widget(table, area);
 
@@ -341,7 +355,7 @@ impl UltraFastRenderer {
             Block::default()
                 .title(" Traces ")
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Cyan))
+                .border_style(Style::default().fg(Color::Cyan)),
         )
         .alignment(Alignment::Center)
         .style(Style::default().fg(Color::Gray));
@@ -365,7 +379,7 @@ impl UltraFastRenderer {
             Block::default()
                 .title(" Logs ")
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Green))
+                .border_style(Style::default().fg(Color::Green)),
         )
         .alignment(Alignment::Center)
         .style(Style::default().fg(Color::Gray));
@@ -392,18 +406,21 @@ impl UltraFastRenderer {
 
         let metrics_text = vec![
             Line::from(""),
-            Line::from(vec![
-                Span::styled("📊 SYSTEM METRICS", Style::default()
+            Line::from(vec![Span::styled(
+                "📊 SYSTEM METRICS",
+                Style::default()
                     .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD))
-            ]),
+                    .add_modifier(Modifier::BOLD),
+            )]),
             Line::from(""),
             Line::from(vec![
                 Span::raw("Total RPS: "),
                 Span::styled(
                     format!("{:.1}", total_rps),
-                    Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
-                )
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
             ]),
             Line::from(vec![
                 Span::raw("Avg Error Rate: "),
@@ -415,15 +432,17 @@ impl UltraFastRenderer {
                         Style::default().fg(Color::Yellow)
                     } else {
                         Style::default().fg(Color::Green)
-                    }
-                )
+                    },
+                ),
             ]),
             Line::from(vec![
                 Span::raw("Active Services: "),
                 Span::styled(
                     format!("{}", services.len()),
-                    Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)
-                )
+                    Style::default()
+                        .fg(Color::Magenta)
+                        .add_modifier(Modifier::BOLD),
+                ),
             ]),
             Line::from(""),
             Line::from(vec![
@@ -434,8 +453,8 @@ impl UltraFastRenderer {
                         Style::default().fg(Color::Green)
                     } else {
                         Style::default().fg(Color::Red)
-                    }
-                )
+                    },
+                ),
             ]),
             Line::from(""),
             Line::from("Press 's' to return to services"),
@@ -446,7 +465,7 @@ impl UltraFastRenderer {
                 Block::default()
                     .title(" System Metrics ")
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Yellow))
+                    .border_style(Style::default().fg(Color::Yellow)),
             )
             .alignment(Alignment::Left);
 
@@ -469,7 +488,7 @@ impl UltraFastRenderer {
             Block::default()
                 .title(" Service Graph ")
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Magenta))
+                .border_style(Style::default().fg(Color::Magenta)),
         )
         .alignment(Alignment::Center)
         .style(Style::default().fg(Color::Gray));
@@ -488,45 +507,45 @@ impl UltraFastRenderer {
     ) -> crate::core::Result<()> {
         // Quick stats calculation
         let healthy_services = services.iter().filter(|s| s.error_rate < 1.0).count();
-        let warning_services = services.iter().filter(|s| s.error_rate >= 1.0 && s.error_rate < 5.0).count();
+        let warning_services = services
+            .iter()
+            .filter(|s| s.error_rate >= 1.0 && s.error_rate < 5.0)
+            .count();
         let critical_services = services.iter().filter(|s| s.error_rate >= 5.0).count();
 
         let sidebar_items = vec![
-            ListItem::new(vec![
-                Line::from(vec![
-                    Span::styled("🟢 Healthy: ", Style::default().fg(Color::Green)),
-                    Span::styled(
-                        format!("{}", healthy_services),
-                        Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
-                    )
-                ])
-            ]),
-            ListItem::new(vec![
-                Line::from(vec![
-                    Span::styled("🟡 Warning: ", Style::default().fg(Color::Yellow)),
-                    Span::styled(
-                        format!("{}", warning_services),
-                        Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
-                    )
-                ])
-            ]),
-            ListItem::new(vec![
-                Line::from(vec![
-                    Span::styled("🔴 Critical: ", Style::default().fg(Color::Red)),
-                    Span::styled(
-                        format!("{}", critical_services),
-                        Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
-                    )
-                ])
-            ]),
+            ListItem::new(vec![Line::from(vec![
+                Span::styled("🟢 Healthy: ", Style::default().fg(Color::Green)),
+                Span::styled(
+                    format!("{}", healthy_services),
+                    Style::default()
+                        .fg(Color::Green)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ])]),
+            ListItem::new(vec![Line::from(vec![
+                Span::styled("🟡 Warning: ", Style::default().fg(Color::Yellow)),
+                Span::styled(
+                    format!("{}", warning_services),
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ])]),
+            ListItem::new(vec![Line::from(vec![
+                Span::styled("🔴 Critical: ", Style::default().fg(Color::Red)),
+                Span::styled(
+                    format!("{}", critical_services),
+                    Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+                ),
+            ])]),
             ListItem::new(vec![Line::from("")]),
-            ListItem::new(vec![
-                Line::from(vec![
-                    Span::styled("Controls:", Style::default()
-                        .fg(Color::Cyan)
-                        .add_modifier(Modifier::BOLD))
-                ])
-            ]),
+            ListItem::new(vec![Line::from(vec![Span::styled(
+                "Controls:",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            )])]),
             ListItem::new(vec![Line::from("s - Services")]),
             ListItem::new(vec![Line::from("t - Traces")]),
             ListItem::new(vec![Line::from("L - Logs")]),
@@ -536,13 +555,12 @@ impl UltraFastRenderer {
             ListItem::new(vec![Line::from("q - Quit")]),
         ];
 
-        let sidebar = List::new(sidebar_items)
-            .block(
-                Block::default()
-                    .title(" Quick Stats ")
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Gray))
-            );
+        let sidebar = List::new(sidebar_items).block(
+            Block::default()
+                .title(" Quick Stats ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Gray)),
+        );
 
         f.render_widget(sidebar, area);
         Ok(())
@@ -551,24 +569,25 @@ impl UltraFastRenderer {
     /// Render footer with status
     #[inline]
     fn render_footer(&self, f: &mut Frame, area: Rect) -> crate::core::Result<()> {
-        let footer_text = vec![
-            Line::from(vec![
-                Span::styled("URPO", Style::default()
+        let footer_text = vec![Line::from(vec![
+            Span::styled(
+                "URPO",
+                Style::default()
                     .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD)),
-                Span::raw(" - Ultra-Fast OTEL Explorer │ "),
-                Span::styled("Press ? for help", Style::default().fg(Color::Gray)),
-                Span::raw(" │ "),
-                Span::styled(
-                    format!("Render: {:.1}ms", self.avg_frame_time_ns as f64 / 1_000_000.0),
-                    if self.avg_frame_time_ns < 16_000_000 {
-                        Style::default().fg(Color::Green)
-                    } else {
-                        Style::default().fg(Color::Red)
-                    }
-                ),
-            ])
-        ];
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(" - Ultra-Fast OTEL Explorer │ "),
+            Span::styled("Press ? for help", Style::default().fg(Color::Gray)),
+            Span::raw(" │ "),
+            Span::styled(
+                format!("Render: {:.1}ms", self.avg_frame_time_ns as f64 / 1_000_000.0),
+                if self.avg_frame_time_ns < 16_000_000 {
+                    Style::default().fg(Color::Green)
+                } else {
+                    Style::default().fg(Color::Red)
+                },
+            ),
+        ])];
 
         let footer = Paragraph::new(footer_text)
             .alignment(Alignment::Center)
@@ -617,7 +636,7 @@ mod tests {
     fn test_layout_cache_validity() {
         let area = Rect::new(0, 0, 100, 50);
         let cache = LayoutCache::new(area);
-        
+
         assert!(cache.is_valid(area));
         assert!(!cache.is_valid(Rect::new(0, 0, 200, 50)));
     }
@@ -626,10 +645,10 @@ mod tests {
     fn test_view_mode_switching() {
         let mut renderer = UltraFastRenderer::new();
         assert_eq!(renderer.current_view, ViewMode::Services);
-        
+
         renderer.handle_view_command(FastCommand::Traces);
         assert_eq!(renderer.current_view, ViewMode::Traces);
-        
+
         renderer.handle_view_command(FastCommand::Metrics);
         assert_eq!(renderer.current_view, ViewMode::Metrics);
     }
@@ -637,11 +656,11 @@ mod tests {
     #[test]
     fn test_frame_metrics_calculation() {
         let mut renderer = UltraFastRenderer::new();
-        
+
         // First frame
         renderer.update_frame_metrics(16_000_000); // 16ms
         assert_eq!(renderer.avg_frame_time_ns, 16_000_000);
-        
+
         // Second frame - should use exponential moving average
         renderer.update_frame_metrics(8_000_000); // 8ms
         assert!(renderer.avg_frame_time_ns < 16_000_000);

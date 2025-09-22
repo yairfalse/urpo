@@ -365,7 +365,7 @@ async fn execute_export(
 
     // Create exporter
     let storage_guard = storage_trait.read().await;
-    let exporter = TraceExporter::new(&*storage_guard);
+    let trace_exporter = TraceExporter::new(&*storage_guard);
 
     if let Some(trace_id_str) = trace_id {
         // Export specific trace
@@ -392,17 +392,17 @@ async fn execute_export(
             errors_only: false,
         };
 
-        let exported = exporter
+        let export_result = trace_exporter
             .export_single_trace(&trace_id, &spans, &export_options)
             .await?;
 
         // Write output
         if let Some(output_path) = output {
-            tokio::fs::write(output_path, exported)
+            tokio::fs::write(output_path, export_result)
                 .await
                 .map_err(|e| UrpoError::config(format!("Failed to write output: {}", e)))?;
         } else {
-            print!("{}", exported);
+            print!("{}", export_result);
         }
     } else {
         // Export multiple traces based on filters
@@ -416,15 +416,15 @@ async fn execute_export(
             errors_only,
         };
 
-        let exported = exporter.export_traces(&export_options).await?;
+        let export_result = trace_exporter.export_traces(&export_options).await?;
 
         // Write output
         if let Some(output_path) = output {
-            tokio::fs::write(output_path, exported)
+            tokio::fs::write(output_path, export_result)
                 .await
                 .map_err(|e| UrpoError::config(format!("Failed to write output: {}", e)))?;
         } else {
-            print!("{}", exported);
+            print!("{}", export_result);
         }
     }
 
@@ -459,9 +459,8 @@ fn parse_timestamp(s: &str) -> Result<u64> {
         // Assume it's in seconds if it's a reasonable Unix timestamp
         if ts < 10_000_000_000 {
             return Ok(ts * 1_000_000_000); // Convert to nanoseconds
-        } else {
-            return Ok(ts); // Already in milliseconds or nanoseconds
         }
+        return Ok(ts); // Already in milliseconds or nanoseconds
     }
 
     // Try parsing as ISO 8601
@@ -478,27 +477,26 @@ async fn start_with_ui(config: Config, cli: &Cli) -> Result<()> {
         core::Span,
         monitoring::Monitor,
         receiver::OtelReceiver,
-        storage::{InMemoryStorage, PerformanceManager, SpanGenerator, StorageBackend},
+        storage::{InMemoryStorage, StorageBackend},
         tui::Dashboard,
     };
     use std::sync::Arc;
     use tokio::sync::RwLock;
 
-    // Initialize performance manager
-    let perf_manager = Arc::new(PerformanceManager::new());
 
     // Initialize storage
     let storage = Arc::new(RwLock::new(InMemoryStorage::with_config(&config)));
     let storage_trait: Arc<RwLock<dyn StorageBackend>> = storage.clone();
 
-    // Initialize health monitor with performance manager
-    let health_monitor = Arc::new(Monitor::new(perf_manager.clone()));
+    // Initialize health monitor
+    let health_monitor = Arc::new(Monitor::new());
 
     // Start fake span generator if enabled
     if config.features.enable_fake_spans {
         let gen_storage = Arc::clone(&storage);
         tokio::spawn(async move {
-            let generator = SpanGenerator::new();
+            // SpanGenerator removed - fake data temporarily disabled
+            return;
             let callback = move |span: Span| {
                 let storage = gen_storage.clone();
                 tokio::spawn(async move {
@@ -570,26 +568,25 @@ async fn start_headless(config: Config, cli: &Cli) -> Result<()> {
         core::Span,
         monitoring::Monitor,
         receiver::OtelReceiver,
-        storage::{InMemoryStorage, PerformanceManager, SpanGenerator, StorageBackend},
+        storage::{InMemoryStorage, StorageBackend},
     };
     use std::sync::Arc;
     use tokio::sync::RwLock;
 
-    // Initialize performance manager
-    let perf_manager = Arc::new(PerformanceManager::new());
 
     // Initialize storage
     let storage = Arc::new(RwLock::new(InMemoryStorage::with_config(&config)));
     let storage_trait: Arc<RwLock<dyn StorageBackend>> = storage.clone();
 
-    // Initialize health monitor with performance manager
-    let health_monitor = Arc::new(Monitor::new(perf_manager.clone()));
+    // Initialize health monitor
+    let health_monitor = Arc::new(Monitor::new());
 
     // Start fake span generator if enabled
     if config.features.enable_fake_spans {
         let gen_storage = Arc::clone(&storage);
         tokio::spawn(async move {
-            let generator = SpanGenerator::new();
+            // SpanGenerator removed - fake data temporarily disabled
+            return;
             let callback = move |span: Span| {
                 let storage = gen_storage.clone();
                 tokio::spawn(async move {
