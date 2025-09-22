@@ -62,7 +62,7 @@ impl LogStorage {
     }
 
     /// Store a log record
-    pub fn store_log(&self, mut log: LogRecord) -> Result<()> {
+    pub fn store_log(&self, log: LogRecord) -> Result<()> {
         let mut logs = self.logs.write();
         let mut counter = self.log_counter.write();
 
@@ -210,11 +210,7 @@ impl LogStorage {
     /// Get recent logs
     pub fn get_recent_logs(&self, limit: usize) -> Vec<LogRecord> {
         let logs = self.logs.read();
-        logs.iter()
-            .rev()
-            .take(limit)
-            .cloned()
-            .collect()
+        logs.iter().rev().take(limit).cloned().collect()
     }
 
     /// Get storage statistics
@@ -330,9 +326,15 @@ mod tests {
     fn test_search_logs() {
         let storage = create_test_storage();
 
-        storage.store_log(create_test_log("Error in database connection", LogSeverity::Error)).unwrap();
-        storage.store_log(create_test_log("Successfully connected to database", LogSeverity::Info)).unwrap();
-        storage.store_log(create_test_log("Network timeout occurred", LogSeverity::Warn)).unwrap();
+        storage
+            .store_log(create_test_log("Error in database connection", LogSeverity::Error))
+            .unwrap();
+        storage
+            .store_log(create_test_log("Successfully connected to database", LogSeverity::Info))
+            .unwrap();
+        storage
+            .store_log(create_test_log("Network timeout occurred", LogSeverity::Warn))
+            .unwrap();
 
         let results = storage.search_logs("database", 10);
         assert_eq!(results.len(), 2);
@@ -346,10 +348,18 @@ mod tests {
     fn test_filter_by_severity() {
         let storage = create_test_storage();
 
-        storage.store_log(create_test_log("Debug message", LogSeverity::Debug)).unwrap();
-        storage.store_log(create_test_log("Info message", LogSeverity::Info)).unwrap();
-        storage.store_log(create_test_log("Warning message", LogSeverity::Warn)).unwrap();
-        storage.store_log(create_test_log("Error message", LogSeverity::Error)).unwrap();
+        storage
+            .store_log(create_test_log("Debug message", LogSeverity::Debug))
+            .unwrap();
+        storage
+            .store_log(create_test_log("Info message", LogSeverity::Info))
+            .unwrap();
+        storage
+            .store_log(create_test_log("Warning message", LogSeverity::Warn))
+            .unwrap();
+        storage
+            .store_log(create_test_log("Error message", LogSeverity::Error))
+            .unwrap();
 
         let results = storage.filter_by_severity(LogSeverity::Warn, 10);
         assert_eq!(results.len(), 2); // Warn and Error
@@ -363,10 +373,10 @@ mod tests {
         let storage = create_test_storage();
         let trace_id = TraceId::new("abc123".to_string()).unwrap();
 
-        let log1 = create_test_log("Request started", LogSeverity::Info)
-            .with_trace_id(trace_id.clone());
-        let log2 = create_test_log("Processing data", LogSeverity::Debug)
-            .with_trace_id(trace_id.clone());
+        let log1 =
+            create_test_log("Request started", LogSeverity::Info).with_trace_id(trace_id.clone());
+        let log2 =
+            create_test_log("Processing data", LogSeverity::Debug).with_trace_id(trace_id.clone());
         let log3 = create_test_log("Unrelated log", LogSeverity::Info);
 
         storage.store_log(log1).unwrap();
@@ -425,10 +435,18 @@ mod tests {
     fn test_storage_stats() {
         let storage = create_test_storage();
 
-        storage.store_log(create_test_log("Error", LogSeverity::Error)).unwrap();
-        storage.store_log(create_test_log("Warning", LogSeverity::Warn)).unwrap();
-        storage.store_log(create_test_log("Info 1", LogSeverity::Info)).unwrap();
-        storage.store_log(create_test_log("Info 2", LogSeverity::Info)).unwrap();
+        storage
+            .store_log(create_test_log("Error", LogSeverity::Error))
+            .unwrap();
+        storage
+            .store_log(create_test_log("Warning", LogSeverity::Warn))
+            .unwrap();
+        storage
+            .store_log(create_test_log("Info 1", LogSeverity::Info))
+            .unwrap();
+        storage
+            .store_log(create_test_log("Info 2", LogSeverity::Info))
+            .unwrap();
 
         let stats = storage.get_stats();
         assert_eq!(stats.total_logs, 4);
@@ -442,7 +460,9 @@ mod tests {
     fn test_clear_storage() {
         let storage = create_test_storage();
 
-        storage.store_log(create_test_log("Test", LogSeverity::Info)).unwrap();
+        storage
+            .store_log(create_test_log("Test", LogSeverity::Info))
+            .unwrap();
         assert_eq!(storage.get_recent_logs(10).len(), 1);
 
         storage.clear();

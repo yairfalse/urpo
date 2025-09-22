@@ -7,7 +7,7 @@
 //! - Dictionary-based compression for repeated strings
 
 use crate::core::{Result, Span, UrpoError};
-use bytes::{Bytes, BytesMut};
+use bytes::Bytes;
 use lz4_flex::{compress_prepend_size, decompress_size_prepended};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};

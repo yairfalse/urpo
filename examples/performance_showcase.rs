@@ -3,15 +3,20 @@
 //! This demo shows exactly why Urpo is the FASTEST trace explorer
 //! Compare our numbers with Jaeger, Tempo, and others - we WIN!
 
-use std::time::{Duration, Instant};
 use colored::*;
+use std::time::{Duration, Instant};
 
 fn main() {
     println!("\n{}", "=".repeat(80).bright_cyan());
     println!("{}", "🚀 URPO PERFORMANCE SHOWCASE 🚀".bright_yellow().bold());
     println!("{}", "=".repeat(80).bright_cyan());
 
-    println!("\n{}", "Watch Urpo DESTROY the competition in real-time!".bright_white().bold());
+    println!(
+        "\n{}",
+        "Watch Urpo DESTROY the competition in real-time!"
+            .bright_white()
+            .bold()
+    );
 
     // Test configurations showing realistic Urpo performance
     let test_sizes = vec![
@@ -23,7 +28,12 @@ fn main() {
     ];
 
     for (size, description) in test_sizes {
-        println!("\n{}", format!("🔥 {} ({} spans):", description, size).bright_white().bold());
+        println!(
+            "\n{}",
+            format!("🔥 {} ({} spans):", description, size)
+                .bright_white()
+                .bold()
+        );
         run_performance_demo(size);
     }
 
@@ -33,7 +43,12 @@ fn main() {
     show_competition_comparison();
 
     println!("\n{}", "🏆 URPO WINS! 🏆".bright_green().bold());
-    println!("{}", "Ready to replace Jaeger? The numbers don't lie!".bright_yellow().italic());
+    println!(
+        "{}",
+        "Ready to replace Jaeger? The numbers don't lie!"
+            .bright_yellow()
+            .italic()
+    );
 }
 
 fn run_performance_demo(num_spans: usize) {
@@ -47,7 +62,8 @@ fn run_performance_demo(num_spans: usize) {
     let spans_per_sec = num_spans as f64 / ingestion_time.as_secs_f64();
     let us_per_span = ingestion_time.as_micros() as f64 / num_spans as f64;
 
-    println!("{} {}",
+    println!(
+        "{} {}",
         "✓".green(),
         format!("{:.0}/s ({:.1}μs/span)", spans_per_sec, us_per_span).bright_green()
     );
@@ -64,7 +80,8 @@ fn run_performance_demo(num_spans: usize) {
     let total_mb = (num_spans as f64 * bytes_per_span) / (1024.0 * 1024.0);
     let mb_per_million = (total_mb * 1_000_000.0) / num_spans as f64;
 
-    println!("{} {}",
+    println!(
+        "{} {}",
         "✓".green(),
         format!("{:.1}MB total ({:.1}MB/1M spans)", total_mb, mb_per_million).bright_green()
     );
@@ -82,10 +99,7 @@ fn run_performance_demo(num_spans: usize) {
 
     let query_time = query_start.elapsed().as_micros() as f64 / 1000.0;
 
-    println!("{} {}",
-        "✓".green(),
-        format!("{:.2}ms per query", query_time).bright_green()
-    );
+    println!("{} {}", "✓".green(), format!("{:.2}ms per query", query_time).bright_green());
 
     // Visual query speed
     print!("    Query: ");
@@ -166,7 +180,8 @@ fn draw_query_speed_bar(query_ms: f64) {
 }
 
 fn show_competition_comparison() {
-    println!("\n{:<20} {:<12} {:<12} {:<12} {:<10}",
+    println!(
+        "\n{:<20} {:<12} {:<12} {:<12} {:<10}",
         "Metric".bright_white().bold(),
         "🚀 Urpo".bright_green().bold(),
         "Jaeger".yellow(),
@@ -183,7 +198,8 @@ fn show_competition_comparison() {
     print_comparison_row("Resource Usage", "Minimal", "Heavy", "Moderate", "🚀 URPO");
 
     println!("{}", "-".repeat(70).dark_gray());
-    println!("\n{} {}",
+    println!(
+        "\n{} {}",
         "🏆 VERDICT:".bright_yellow().bold(),
         "URPO IS 10-40X FASTER! 🚀".bright_green().bold()
     );
@@ -205,7 +221,8 @@ fn show_competition_comparison() {
 }
 
 fn print_comparison_row(metric: &str, urpo: &str, jaeger: &str, tempo: &str, winner: &str) {
-    println!("{:<20} {:<12} {:<12} {:<12} {}",
+    println!(
+        "{:<20} {:<12} {:<12} {:<12} {}",
         metric,
         urpo.bright_green(),
         jaeger.yellow(),

@@ -6,18 +6,17 @@
 //! - 90% storage reduction while keeping 100% critical traces
 
 pub mod adaptive;
-pub mod tail_based;
 pub mod budget;
 pub mod pattern;
+pub mod tail_based;
 
 pub use adaptive::AdaptiveSampler;
-pub use tail_based::TailBasedSampler;
 pub use budget::BudgetAwareSampler;
 pub use pattern::PatternDetector;
+pub use tail_based::TailBasedSampler;
 
-use crate::core::{Result, SpanStatus, TraceId};
+use crate::core::TraceId;
 use std::sync::Arc;
-use std::time::Duration;
 
 /// Sampling decision result
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -85,7 +84,7 @@ impl SmartSampler {
     pub fn should_sample_head(&self, trace_id: &TraceId) -> SamplingDecision {
         // Fast hash-based probabilistic sampling
         let hash = fast_hash(trace_id);
-        
+
         // Always sample if under 1% baseline
         if hash < u64::MAX / 100 {
             return SamplingDecision::Keep;
@@ -100,7 +99,10 @@ impl SmartSampler {
     }
 
     /// Make tail-based sampling decision (complete trace available)
-    pub async fn should_sample_tail(&self, characteristics: &TraceCharacteristics) -> SamplingDecision {
+    pub async fn should_sample_tail(
+        &self,
+        characteristics: &TraceCharacteristics,
+    ) -> SamplingDecision {
         // Priority 1: Always keep errors
         if characteristics.has_error {
             return SamplingDecision::Keep;
@@ -155,7 +157,7 @@ fn fast_hash(trace_id: &TraceId) -> u64 {
     // Use FxHash for speed (not cryptographic)
     use rustc_hash::FxHasher;
     use std::hash::{Hash, Hasher};
-    
+
     let mut hasher = FxHasher::default();
     trace_id.hash(&mut hasher);
     hasher.finish()
@@ -169,13 +171,13 @@ mod tests {
     fn test_head_sampling_speed() {
         let sampler = SmartSampler::new(100);
         let trace_id = TraceId::new("test123".to_string()).unwrap();
-        
+
         let start = std::time::Instant::now();
         for _ in 0..1_000_000 {
             let _ = sampler.should_sample_head(&trace_id);
         }
         let elapsed = start.elapsed();
-        
+
         let ns_per_decision = elapsed.as_nanos() / 1_000_000;
         assert!(ns_per_decision < 100, "Head sampling too slow: {}ns", ns_per_decision);
     }
@@ -183,7 +185,7 @@ mod tests {
     #[tokio::test]
     async fn test_error_traces_always_kept() {
         let sampler = SmartSampler::new(100);
-        
+
         let characteristics = TraceCharacteristics {
             trace_id: TraceId::new("error_trace".to_string()).unwrap(),
             has_error: true,
@@ -193,7 +195,7 @@ mod tests {
             is_anomalous: false,
             priority: SamplingPriority::Critical,
         };
-        
+
         let decision = sampler.should_sample_tail(&characteristics).await;
         assert_eq!(decision, SamplingDecision::Keep);
     }

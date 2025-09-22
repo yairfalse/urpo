@@ -2,8 +2,8 @@
 //!
 //! PERFORMANCE: Deferred decisions with bounded memory usage
 
-use super::{SamplingDecision, TraceCharacteristics};
-use crate::core::{Result, TraceId};
+use super::SamplingDecision;
+use crate::core::TraceId;
 use dashmap::DashMap;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
@@ -43,25 +43,36 @@ impl TailBasedSampler {
     }
 
     /// Register a span for tail-based evaluation
-    pub fn register_span(&self, trace_id: TraceId, has_error: bool, duration_ns: u64, service: String) {
+    pub fn register_span(
+        &self,
+        trace_id: TraceId,
+        has_error: bool,
+        duration_ns: u64,
+        service: String,
+    ) {
         // Enforce memory limit
         if self.pending.len() >= self.max_pending.load(Ordering::Relaxed) {
             self.cleanup_old_traces();
         }
 
-        let pending = self.pending.entry(trace_id).or_insert_with(|| PendingTrace {
-            start_time: Instant::now(),
-            span_count: AtomicUsize::new(0),
-            has_error: AtomicU64::new(0),
-            max_duration_ns: AtomicU64::new(0),
-            services_seen: DashMap::new(),
-        });
+        let pending = self
+            .pending
+            .entry(trace_id)
+            .or_insert_with(|| PendingTrace {
+                start_time: Instant::now(),
+                span_count: AtomicUsize::new(0),
+                has_error: AtomicU64::new(0),
+                max_duration_ns: AtomicU64::new(0),
+                services_seen: DashMap::new(),
+            });
 
         pending.span_count.fetch_add(1, Ordering::Relaxed);
         if has_error {
             pending.has_error.store(1, Ordering::Relaxed);
         }
-        pending.max_duration_ns.fetch_max(duration_ns, Ordering::Relaxed);
+        pending
+            .max_duration_ns
+            .fetch_max(duration_ns, Ordering::Relaxed);
         pending.services_seen.insert(service, ());
     }
 
@@ -124,11 +135,15 @@ impl TailBasedSampler {
     pub fn get_stats(&self) -> TailSamplingStats {
         let total = self.total_evaluated.load(Ordering::Relaxed);
         let kept = self.total_kept.load(Ordering::Relaxed);
-        
+
         TailSamplingStats {
             total_evaluated: total,
             total_kept: kept,
-            keep_ratio: if total > 0 { kept as f64 / total as f64 } else { 0.0 },
+            keep_ratio: if total > 0 {
+                kept as f64 / total as f64
+            } else {
+                0.0
+            },
             pending_count: self.pending.len(),
         }
     }
@@ -154,11 +169,11 @@ pub struct TailSamplingStats {
 fn fast_probability(trace_id: &TraceId, per_10000: u64) -> bool {
     use rustc_hash::FxHasher;
     use std::hash::{Hash, Hasher};
-    
+
     let mut hasher = FxHasher::default();
     trace_id.hash(&mut hasher);
     let hash = hasher.finish();
-    
+
     let threshold = (u64::MAX / 10000) * per_10000;
     hash < threshold
 }
@@ -171,14 +186,14 @@ mod tests {
     fn test_error_traces_kept() {
         let sampler = TailBasedSampler::new();
         let trace_id = TraceId::new("error_trace".to_string()).unwrap();
-        
+
         sampler.register_span(
             trace_id.clone(),
             true, // has error
             100_000_000,
             "service1".to_string(),
         );
-        
+
         let decision = sampler.evaluate(&trace_id);
         assert_eq!(decision, SamplingDecision::Keep);
     }
@@ -187,14 +202,14 @@ mod tests {
     fn test_slow_traces_kept() {
         let sampler = TailBasedSampler::new();
         let trace_id = TraceId::new("slow_trace".to_string()).unwrap();
-        
+
         sampler.register_span(
             trace_id.clone(),
             false,
             2_000_000_000, // 2 seconds
             "service1".to_string(),
         );
-        
+
         let decision = sampler.evaluate(&trace_id);
         assert_eq!(decision, SamplingDecision::Keep);
     }
@@ -203,17 +218,12 @@ mod tests {
     fn test_complex_traces_kept() {
         let sampler = TailBasedSampler::new();
         let trace_id = TraceId::new("complex_trace".to_string()).unwrap();
-        
+
         // Register many spans
         for i in 0..150 {
-            sampler.register_span(
-                trace_id.clone(),
-                false,
-                10_000_000,
-                format!("service{}", i % 3),
-            );
+            sampler.register_span(trace_id.clone(), false, 10_000_000, format!("service{}", i % 3));
         }
-        
+
         let decision = sampler.evaluate(&trace_id);
         assert_eq!(decision, SamplingDecision::Keep);
     }
@@ -223,23 +233,18 @@ mod tests {
         let sampler = TailBasedSampler::new();
         let mut kept = 0;
         let mut dropped = 0;
-        
+
         for i in 0..1000 {
             let trace_id = TraceId::new(format!("normal_{}", i)).unwrap();
-            sampler.register_span(
-                trace_id.clone(),
-                false,
-                10_000_000,
-                "service1".to_string(),
-            );
-            
+            sampler.register_span(trace_id.clone(), false, 10_000_000, "service1".to_string());
+
             match sampler.evaluate(&trace_id) {
                 SamplingDecision::Keep => kept += 1,
                 SamplingDecision::Drop => dropped += 1,
-                _ => {}
+                _ => {},
             }
         }
-        
+
         // Should keep roughly 1%
         assert!(kept > 0 && kept < 50);
         assert!(dropped > 950);

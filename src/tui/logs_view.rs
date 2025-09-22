@@ -2,7 +2,10 @@
 //!
 //! Interactive logs viewer with search, filtering, and trace correlation.
 
-use crate::logs::{storage::LogStorage, types::{LogRecord, LogSeverity}};
+use crate::logs::{
+    storage::LogStorage,
+    types::{LogRecord, LogSeverity},
+};
 use ratatui::{
     layout::{Constraint, Rect},
     style::{Color, Modifier, Style},
@@ -101,7 +104,9 @@ impl LogsView {
         };
 
         let search_style = if self.search_active {
-            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD)
         } else {
             Style::default().fg(Color::Gray)
         };
@@ -144,7 +149,8 @@ impl LogsView {
         .height(1);
 
         // Create rows
-        let rows: Vec<Row> = self.logs
+        let rows: Vec<Row> = self
+            .logs
             .iter()
             .enumerate()
             .map(|(i, log)| {
@@ -164,7 +170,8 @@ impl LogsView {
 
                 let time_str = format_timestamp(log.timestamp);
                 let service_str = format!("service-{}", log.service_id);
-                let trace_str = log.trace_id
+                let trace_str = log
+                    .trace_id
                     .as_ref()
                     .map(|t| t.as_str()[..8.min(t.as_str().len())].to_string())
                     .unwrap_or_else(|| "-".to_string());
@@ -180,7 +187,9 @@ impl LogsView {
                     Cell::from(time_str),
                     Cell::from(Span::styled(
                         log.severity.as_str(),
-                        Style::default().fg(severity_color).add_modifier(Modifier::BOLD),
+                        Style::default()
+                            .fg(severity_color)
+                            .add_modifier(Modifier::BOLD),
                     )),
                     Cell::from(service_str),
                     Cell::from(message),
@@ -199,15 +208,15 @@ impl LogsView {
                 Constraint::Length(15), // Service
                 Constraint::Min(30),    // Message
                 Constraint::Length(10), // Trace
-            ]
+            ],
         )
-            .header(header)
-            .block(
-                Block::default()
-                    .title(format!(" Logs ({}) ", self.logs.len()))
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::White)),
-            );
+        .header(header)
+        .block(
+            Block::default()
+                .title(format!(" Logs ({}) ", self.logs.len()))
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::White)),
+        );
 
         f.render_widget(table, area);
 
@@ -230,11 +239,7 @@ impl LogsView {
             };
 
             let paragraph = Paragraph::new(empty_msg)
-                .block(
-                    Block::default()
-                        .title(" Logs ")
-                        .borders(Borders::ALL),
-                )
+                .block(Block::default().title(" Logs ").borders(Borders::ALL))
                 .style(Style::default().fg(Color::Gray))
                 .alignment(ratatui::layout::Alignment::Center);
 
@@ -261,13 +266,16 @@ impl LogsView {
     pub fn handle_key(&mut self, key: char) {
         if self.search_active {
             match key {
-                '\x1b' => { // Escape
+                '\x1b' => {
+                    // Escape
                     self.search_active = false;
                 },
-                '\n' => { // Enter
+                '\n' => {
+                    // Enter
                     self.search_active = false;
                 },
-                '\x08' => { // Backspace
+                '\x08' => {
+                    // Backspace
                     self.search_query.pop();
                 },
                 c if c.is_ascii() && !c.is_control() => {
@@ -380,8 +388,18 @@ mod tests {
         // Add test logs
         {
             let mut storage_guard = storage.lock().await;
-            let log1 = LogRecord::new(1234567890, 1, LogSeverity::Info, "User login successful".to_string());
-            let log2 = LogRecord::new(1234567891, 1, LogSeverity::Error, "Database connection failed".to_string());
+            let log1 = LogRecord::new(
+                1234567890,
+                1,
+                LogSeverity::Info,
+                "User login successful".to_string(),
+            );
+            let log2 = LogRecord::new(
+                1234567891,
+                1,
+                LogSeverity::Error,
+                "Database connection failed".to_string(),
+            );
             storage_guard.store_log(log1).unwrap();
             storage_guard.store_log(log2).unwrap();
         }

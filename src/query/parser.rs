@@ -1,7 +1,7 @@
 //! Query language parser using nom.
 
-use crate::core::{Result, UrpoError};
 use super::ast::*;
+use crate::core::{Result, UrpoError};
 use nom::{
     branch::alt,
     bytes::complete::{tag, tag_no_case, take_while1},
@@ -31,7 +31,7 @@ pub fn parse_query(input: &str) -> Result<Query> {
             } else {
                 Ok(Query { filter })
             }
-        }
+        },
         Err(e) => Err(UrpoError::Parse {
             message: format!("Failed to parse query: {}", e),
         }),
@@ -54,13 +54,12 @@ fn logical_or(input: &str) -> IResult<&str, QueryFilter> {
 
     Ok((
         input,
-        rest.into_iter().fold(first, |acc, (_, right)| {
-            QueryFilter::Logical {
+        rest.into_iter()
+            .fold(first, |acc, (_, right)| QueryFilter::Logical {
                 op: LogicalOp::Or,
                 left: Box::new(acc),
                 right: Box::new(right),
-            }
-        }),
+            }),
     ))
 }
 
@@ -75,35 +74,24 @@ fn logical_and(input: &str) -> IResult<&str, QueryFilter> {
 
     Ok((
         input,
-        rest.into_iter().fold(first, |acc, (_, right)| {
-            QueryFilter::Logical {
+        rest.into_iter()
+            .fold(first, |acc, (_, right)| QueryFilter::Logical {
                 op: LogicalOp::And,
                 left: Box::new(acc),
                 right: Box::new(right),
-            }
-        }),
+            }),
     ))
 }
 
 /// Parse primary filter expressions
 fn primary_filter(input: &str) -> IResult<&str, QueryFilter> {
-    preceded(
-        multispace0,
-        alt((
-            grouped_filter,
-            comparison_filter,
-        )),
-    )(input)
+    preceded(multispace0, alt((grouped_filter, comparison_filter)))(input)
 }
 
 /// Parse grouped (parenthesized) filters
 fn grouped_filter(input: &str) -> IResult<&str, QueryFilter> {
     map(
-        delimited(
-            char('('),
-            preceded(multispace0, query_filter),
-            preceded(multispace0, char(')')),
-        ),
+        delimited(char('('), preceded(multispace0, query_filter), preceded(multispace0, char(')'))),
         |filter| QueryFilter::Group(Box::new(filter)),
     )(input)
 }
@@ -111,11 +99,7 @@ fn grouped_filter(input: &str) -> IResult<&str, QueryFilter> {
 /// Parse comparison filters
 fn comparison_filter(input: &str) -> IResult<&str, QueryFilter> {
     map(
-        tuple((
-            field,
-            preceded(multispace0, operator),
-            preceded(multispace0, field_value),
-        )),
+        tuple((field, preceded(multispace0, operator), preceded(multispace0, field_value))),
         |(field, op, value)| QueryFilter::Comparison { field, op, value },
     )(input)
 }
@@ -129,7 +113,10 @@ fn field(input: &str) -> IResult<&str, Field> {
         nom_value(Field::Status, tag_no_case("status")),
         nom_value(Field::TraceId, alt((tag_no_case("trace_id"), tag_no_case("traceid")))),
         nom_value(Field::SpanId, alt((tag_no_case("span_id"), tag_no_case("spanid")))),
-        nom_value(Field::ParentSpanId, alt((tag_no_case("parent_span_id"), tag_no_case("parentspanid")))),
+        nom_value(
+            Field::ParentSpanId,
+            alt((tag_no_case("parent_span_id"), tag_no_case("parentspanid"))),
+        ),
         nom_value(Field::SpanKind, tag_no_case("span.kind")),
         map(attribute_name, Field::Attribute),
     ))(input)
@@ -140,10 +127,7 @@ fn attribute_name(input: &str) -> IResult<&str, String> {
     map(
         recognize(pair(
             take_while1(|c: char| c.is_alphanumeric() || c == '_'),
-            many0(pair(
-                char('.'),
-                take_while1(|c: char| c.is_alphanumeric() || c == '_'),
-            )),
+            many0(pair(char('.'), take_while1(|c: char| c.is_alphanumeric() || c == '_'))),
         )),
         |s: &str| s.to_string(),
     )(input)
@@ -166,11 +150,11 @@ fn operator(input: &str) -> IResult<&str, Operator> {
 /// Parse field values
 fn field_value(input: &str) -> IResult<&str, Value> {
     alt((
-        map(string_literal, Value::String),
         map(duration_value, Value::Duration),
         map(status_value, Value::Status),
         map(boolean_value, Value::Boolean),
         map(integer_value, Value::Integer),
+        map(string_literal, Value::String),
     ))(input)
 }
 
@@ -178,17 +162,14 @@ fn field_value(input: &str) -> IResult<&str, Value> {
 fn string_literal(input: &str) -> IResult<&str, String> {
     alt((
         // Quoted string
-        map(
-            delimited(
-                char('"'),
-                take_while1(|c| c != '"'),
-                char('"'),
-            ),
-            |s: &str| s.to_string(),
-        ),
+        map(delimited(char('"'), take_while1(|c| c != '"'), char('"')), |s: &str| {
+            s.to_string()
+        }),
         // Unquoted identifier
         map(
-            take_while1(|c: char| c.is_alphanumeric() || c == '_' || c == '-' || c == '/' || c == '.'),
+            take_while1(|c: char| {
+                c.is_alphanumeric() || c == '_' || c == '-' || c == '/' || c == '.'
+            }),
             |s: &str| s.to_string(),
         ),
     ))(input)
@@ -196,13 +177,10 @@ fn string_literal(input: &str) -> IResult<&str, String> {
 
 /// Parse duration values (e.g., 100ms, 1s, 5m)
 fn duration_value(input: &str) -> IResult<&str, DurationValue> {
-    map(
-        pair(digit1, duration_unit),
-        |(num_str, unit)| DurationValue {
-            value: num_str.parse().unwrap_or(0),
-            unit,
-        },
-    )(input)
+    map(pair(digit1, duration_unit), |(num_str, unit)| DurationValue {
+        value: num_str.parse().unwrap_or(0),
+        unit,
+    })(input)
 }
 
 /// Parse duration units
@@ -227,10 +205,7 @@ fn status_value(input: &str) -> IResult<&str, StatusValue> {
 
 /// Parse boolean values
 fn boolean_value(input: &str) -> IResult<&str, bool> {
-    alt((
-        nom_value(true, tag_no_case("true")),
-        nom_value(false, tag_no_case("false")),
-    ))(input)
+    alt((nom_value(true, tag_no_case("true")), nom_value(false, tag_no_case("false"))))(input)
 }
 
 /// Parse integer values
@@ -250,7 +225,7 @@ mod tests {
                 assert_eq!(field, Field::Service);
                 assert_eq!(op, Operator::Eq);
                 assert_eq!(value, Value::String("api".to_string()));
-            }
+            },
             _ => panic!("Expected comparison filter"),
         }
     }
@@ -266,10 +241,10 @@ mod tests {
                     Value::Duration(d) => {
                         assert_eq!(d.value, 100);
                         assert_eq!(d.unit, DurationUnit::Milliseconds);
-                    }
+                    },
                     _ => panic!("Expected duration value"),
                 }
-            }
+            },
             _ => panic!("Expected comparison filter"),
         }
     }
@@ -280,7 +255,7 @@ mod tests {
         match query.filter {
             QueryFilter::Logical { op, .. } => {
                 assert_eq!(op, LogicalOp::And);
-            }
+            },
             _ => panic!("Expected logical filter"),
         }
     }
@@ -300,7 +275,7 @@ mod tests {
                 assert_eq!(field, Field::Attribute("http.status_code".to_string()));
                 assert_eq!(op, Operator::Eq);
                 assert_eq!(value, Value::Integer(500));
-            }
+            },
             _ => panic!("Expected comparison filter"),
         }
     }

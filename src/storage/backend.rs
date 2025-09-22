@@ -5,7 +5,11 @@ use crate::core::{Result, ServiceMetrics, ServiceName, Span, SpanId, TraceId};
 use std::collections::HashMap;
 use std::time::{Duration, SystemTime};
 
-/// Trait for storage backend implementations.
+/// Core storage backend trait for trace data persistence.
+///
+/// This trait defines the interface for all storage implementations in Urpo,
+/// from in-memory caches to persistent disk storage. Implementations must
+/// provide efficient span storage, retrieval, and aggregation capabilities.
 #[async_trait::async_trait]
 pub trait StorageBackend: Send + Sync {
     /// Store a span.

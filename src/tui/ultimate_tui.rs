@@ -7,7 +7,7 @@
 //! - Real-time metrics streaming
 
 use super::{
-    ultra_fast_input::{UltraFastInput, FastCommand},
+    ultra_fast_input::{FastCommand, UltraFastInput},
     ultra_fast_renderer::UltraFastRenderer,
 };
 use crate::{
@@ -18,10 +18,7 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
 };
-use ratatui::{
-    backend::CrosstermBackend,
-    Terminal,
-};
+use ratatui::{backend::CrosstermBackend, Terminal};
 use std::{
     io::{self, Stdout},
     sync::Arc,
@@ -70,8 +67,10 @@ impl UltimateTui {
         // Initialize terminal with raw mode
         enable_raw_mode().map_err(|e| UrpoError::terminal(e.to_string()))?;
         let mut stdout = io::stdout();
-        stdout.execute(EnterAlternateScreen).map_err(|e| UrpoError::terminal(e.to_string()))?;
-        
+        stdout
+            .execute(EnterAlternateScreen)
+            .map_err(|e| UrpoError::terminal(e.to_string()))?;
+
         let backend = CrosstermBackend::new(stdout);
         let terminal = Terminal::new(backend).map_err(|e| UrpoError::terminal(e.to_string()))?;
 
@@ -114,7 +113,7 @@ impl UltimateTui {
             // Poll input with minimal timeout for responsiveness
             if let Some(command) = self.input.poll_input(Duration::from_micros(100))? {
                 let command_start = Instant::now();
-                
+
                 // Handle command immediately
                 if self.handle_command(command).await? {
                     break; // Quit requested
@@ -122,10 +121,7 @@ impl UltimateTui {
 
                 let command_time = command_start.elapsed();
                 if command_time > Duration::from_millis(1) {
-                    tracing::warn!(
-                        "Command handling exceeded 1ms: {:?}",
-                        command_time
-                    );
+                    tracing::warn!("Command handling exceeded 1ms: {:?}", command_time);
                 }
             }
 
@@ -165,7 +161,7 @@ impl UltimateTui {
                 tracing::info!("Quit command received");
                 return Ok(true);
             },
-            
+
             FastCommand::Refresh => {
                 tracing::debug!("Refreshing data");
                 self.fetch_services().await?;
@@ -174,9 +170,12 @@ impl UltimateTui {
             FastCommand::Up => {
                 if let Some(selected) = &self.selected_service {
                     // Find current index and move up
-                    if let Some(current_idx) = self.services.iter().position(|s| &s.name == selected) {
+                    if let Some(current_idx) =
+                        self.services.iter().position(|s| &s.name == selected)
+                    {
                         if current_idx > 0 {
-                            self.selected_service = Some(self.services[current_idx - 1].name.clone());
+                            self.selected_service =
+                                Some(self.services[current_idx - 1].name.clone());
                         }
                     }
                 } else if !self.services.is_empty() {
@@ -187,9 +186,12 @@ impl UltimateTui {
             FastCommand::Down => {
                 if let Some(selected) = &self.selected_service {
                     // Find current index and move down
-                    if let Some(current_idx) = self.services.iter().position(|s| &s.name == selected) {
+                    if let Some(current_idx) =
+                        self.services.iter().position(|s| &s.name == selected)
+                    {
                         if current_idx < self.services.len() - 1 {
-                            self.selected_service = Some(self.services[current_idx + 1].name.clone());
+                            self.selected_service =
+                                Some(self.services[current_idx + 1].name.clone());
                         }
                     }
                 } else if !self.services.is_empty() {
@@ -205,13 +207,17 @@ impl UltimateTui {
 
             FastCommand::End => {
                 if !self.services.is_empty() {
-                    self.selected_service = Some(self.services[self.services.len() - 1].name.clone());
+                    self.selected_service =
+                        Some(self.services[self.services.len() - 1].name.clone());
                 }
             },
 
             // View switching is handled by renderer
-            FastCommand::Services | FastCommand::Traces | FastCommand::Logs | 
-            FastCommand::Metrics | FastCommand::Graph => {
+            FastCommand::Services
+            | FastCommand::Traces
+            | FastCommand::Logs
+            | FastCommand::Metrics
+            | FastCommand::Graph => {
                 tracing::debug!("View switched: {:?}", command);
             },
 
@@ -233,7 +239,7 @@ impl UltimateTui {
 
             _ => {
                 // No action needed for other commands
-            }
+            },
         }
 
         Ok(false)
@@ -262,21 +268,23 @@ impl UltimateTui {
     /// Render frame with ultra-fast performance
     fn render_frame(&mut self) -> Result<()> {
         let current_command = self.input.current_command();
-        
-        self.terminal.draw(|f| {
-            // Render main UI
-            if let Err(e) = self.renderer.render(
-                f,
-                &self.services,
-                self.selected_service.as_ref(),
-                current_command,
-            ) {
-                tracing::error!("Render error: {}", e);
-            }
 
-            // Render help overlay if active
-            self.input.render_help_overlay(f, f.area());
-        }).map_err(|e| UrpoError::terminal(e.to_string()))?;
+        self.terminal
+            .draw(|f| {
+                // Render main UI
+                if let Err(e) = self.renderer.render(
+                    f,
+                    &self.services,
+                    self.selected_service.as_ref(),
+                    current_command,
+                ) {
+                    tracing::error!("Render error: {}", e);
+                }
+
+                // Render help overlay if active
+                self.input.render_help_overlay(f, f.area());
+            })
+            .map_err(|e| UrpoError::terminal(e.to_string()))?;
 
         // Clear the command after rendering
         self.input.clear_command();
@@ -302,8 +310,9 @@ impl UltimateTui {
                         let _ = message_tx.send(TuiMessage::ServicesUpdated(metrics));
                     },
                     Err(e) => {
-                        let _ = message_tx.send(TuiMessage::Error(format!("Failed to fetch metrics: {}", e)));
-                    }
+                        let _ = message_tx
+                            .send(TuiMessage::Error(format!("Failed to fetch metrics: {}", e)));
+                    },
                 }
             }
         });
@@ -324,7 +333,7 @@ impl UltimateTui {
             Err(e) => {
                 tracing::error!("Failed to fetch services: {}", e);
                 // Keep existing data on error
-            }
+            },
         }
         Ok(())
     }
@@ -332,14 +341,14 @@ impl UltimateTui {
     /// Update frame time metrics
     fn update_frame_metrics(&mut self, frame_time: Duration) {
         let frame_time_ms = frame_time.as_secs_f64() * 1000.0;
-        
+
         if self.frame_count == 0 {
             self.avg_frame_time_ms = frame_time_ms;
         } else {
             // Exponential moving average
             self.avg_frame_time_ms = self.avg_frame_time_ms * 0.9 + frame_time_ms * 0.1;
         }
-        
+
         self.frame_count += 1;
         self.last_frame = Instant::now();
     }
@@ -351,27 +360,33 @@ impl UltimateTui {
         } else {
             0.0
         };
-        
+
         let (input_latency_ns, _input_samples) = self.input.get_latency_metrics();
         let input_latency_us = input_latency_ns / 1000;
-        
+
         (fps, input_latency_us, self.avg_frame_time_ms)
     }
 
     /// Cleanup terminal state
     fn cleanup(&mut self) -> Result<()> {
         disable_raw_mode().map_err(|e| UrpoError::terminal(e.to_string()))?;
-        self.terminal.backend_mut().execute(LeaveAlternateScreen)
+        self.terminal
+            .backend_mut()
+            .execute(LeaveAlternateScreen)
             .map_err(|e| UrpoError::terminal(e.to_string()))?;
-        self.terminal.show_cursor().map_err(|e| UrpoError::terminal(e.to_string()))?;
-        
+        self.terminal
+            .show_cursor()
+            .map_err(|e| UrpoError::terminal(e.to_string()))?;
+
         // Log final performance metrics
         let (fps, input_latency_us, avg_frame_ms) = self.get_performance_metrics();
         tracing::info!(
             "TUI shutdown - Performance: {:.1} FPS, {:.1}ms frames, {}μs input latency",
-            fps, avg_frame_ms, input_latency_us
+            fps,
+            avg_frame_ms,
+            input_latency_us
         );
-        
+
         Ok(())
     }
 }
@@ -396,7 +411,7 @@ mod tests {
     #[tokio::test]
     async fn test_ultimate_tui_creation() {
         let storage = Arc::new(InMemoryStorage::new(1000));
-        
+
         // This test may fail in CI environment without proper terminal
         // but it's useful for local development
         if std::env::var("CI").is_err() {
@@ -409,11 +424,11 @@ mod tests {
     #[test]
     fn test_frame_metrics_calculation() {
         let storage = Arc::new(InMemoryStorage::new(1000));
-        
+
         // Test with mock TUI (no terminal required)
         if let Ok(mut tui) = UltimateTui::new(storage) {
             let initial_count = tui.frame_count;
-            
+
             tui.update_frame_metrics(Duration::from_millis(16));
             assert_eq!(tui.frame_count, initial_count + 1);
             assert!((tui.avg_frame_time_ms - 16.0).abs() < 0.1);

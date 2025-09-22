@@ -3,6 +3,7 @@
 //! PERFORMANCE TARGET: <1ms keypress to screen update
 //! Optimized for real-time observability workflows
 
+use crate::core::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -12,7 +13,6 @@ use ratatui::{
     Frame,
 };
 use std::time::{Duration, Instant};
-use crate::core::Result;
 
 /// Ultra-fast input command for zero-allocation processing
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -20,30 +20,30 @@ pub enum FastCommand {
     // Navigation (vim-style for speed)
     Up,
     Down,
-    Left, 
+    Left,
     Right,
     PageUp,
     PageDown,
     Home,
     End,
-    
+
     // View switching (single key for speed)
-    Services,       // 's'
-    Traces,         // 't' 
-    Logs,           // 'l'
-    Metrics,        // 'm'
-    Graph,          // 'g'
-    
+    Services, // 's'
+    Traces,   // 't'
+    Logs,     // 'l'
+    Metrics,  // 'm'
+    Graph,    // 'g'
+
     // Actions
-    Search,         // '/'
-    Filter,         // 'f'
-    Refresh,        // 'r'
-    Export,         // 'e'
-    
+    Search,  // '/'
+    Filter,  // 'f'
+    Refresh, // 'r'
+    Export,  // 'e'
+
     // System
-    Quit,           // 'q'
-    Help,           // '?'
-    
+    Quit, // 'q'
+    Help, // '?'
+
     // Special
     None,
 }
@@ -74,9 +74,9 @@ impl UltraFastInput {
             sample_count: 0,
         }
     }
-    
+
     /// Poll for input with zero-allocation hot path
-    /// 
+    ///
     /// PERFORMANCE: Target <100μs for this function
     #[inline(always)]
     pub fn poll_input(&mut self, timeout: Duration) -> Result<Option<FastCommand>> {
@@ -84,15 +84,15 @@ impl UltraFastInput {
         if !event::poll(timeout)? {
             return Ok(None);
         }
-        
+
         let start = Instant::now();
-        
+
         if let Ok(Event::Key(key)) = event::read() {
             self.last_keypress = start;
-            
+
             let command = self.key_to_command_zero_copy(key);
             self.current_command = command;
-            
+
             // Track latency for optimization (exponential moving average)
             let latency_ns = start.elapsed().as_nanos() as u64;
             if self.sample_count == 0 {
@@ -102,23 +102,20 @@ impl UltraFastInput {
                 self.avg_latency_ns = (self.avg_latency_ns * 9 + latency_ns) / 10;
             }
             self.sample_count += 1;
-            
+
             // Log if we exceed 100μs target
             if latency_ns > 100_000 {
-                tracing::warn!(
-                    "Input processing exceeded 100μs: {}μs", 
-                    latency_ns / 1000
-                );
+                tracing::warn!("Input processing exceeded 100μs: {}μs", latency_ns / 1000);
             }
-            
+
             return Ok(Some(command));
         }
-        
+
         Ok(None)
     }
-    
+
     /// Convert keypress to command with zero allocations
-    /// 
+    ///
     /// PERFORMANCE: This function must be <10μs
     #[inline(always)]
     fn key_to_command_zero_copy(&mut self, key: KeyEvent) -> FastCommand {
@@ -130,7 +127,7 @@ impl UltraFastInput {
                 _ => FastCommand::None,
             };
         }
-        
+
         // Handle special keys
         match key.code {
             // Navigation (optimized order by frequency)
@@ -142,147 +139,163 @@ impl UltraFastInput {
             KeyCode::PageUp | KeyCode::Char('u') => FastCommand::PageUp,
             KeyCode::Home | KeyCode::Char('g') => FastCommand::Home,
             KeyCode::End | KeyCode::Char('G') => FastCommand::End,
-            
+
             // View switching (single key for max speed)
             KeyCode::Char('s') => FastCommand::Services,
             KeyCode::Char('t') => FastCommand::Traces,
-            KeyCode::Char('L') => FastCommand::Logs,  // Capital L to avoid conflict
+            KeyCode::Char('L') => FastCommand::Logs, // Capital L to avoid conflict
             KeyCode::Char('m') => FastCommand::Metrics,
-            KeyCode::Char('v') => FastCommand::Graph,  // 'v' for view
-            
+            KeyCode::Char('v') => FastCommand::Graph, // 'v' for view
+
             // Actions
             KeyCode::Char('/') => FastCommand::Search,
             KeyCode::Char('f') => FastCommand::Filter,
             KeyCode::Char('r') => FastCommand::Refresh,
             KeyCode::Char('e') => FastCommand::Export,
-            
+
             // System
             KeyCode::Char('q') | KeyCode::Esc => FastCommand::Quit,
             KeyCode::Char('?') => {
                 self.help_active = !self.help_active;
                 FastCommand::Help
             },
-            
+
             _ => FastCommand::None,
         }
     }
-    
+
     /// Get current command without polling
     #[inline(always)]
     pub fn current_command(&self) -> FastCommand {
         self.current_command
     }
-    
+
     /// Clear current command
     #[inline(always)]
     pub fn clear_command(&mut self) {
         self.current_command = FastCommand::None;
     }
-    
+
     /// Get input latency metrics
     #[inline(always)]
     pub fn get_latency_metrics(&self) -> (u64, u64) {
         (self.avg_latency_ns, self.sample_count)
     }
-    
+
     /// Render help overlay if active
     pub fn render_help_overlay(&self, f: &mut Frame, area: Rect) {
         if !self.help_active {
             return;
         }
-        
+
         // Center the help overlay
         let help_area = centered_rect(60, 80, area);
-        
+
         // Clear the background
         f.render_widget(Clear, help_area);
-        
+
         let help_text = vec![
             Line::from(""),
-            Line::from(vec![
-                Span::styled(" URPO Ultra-Fast Controls ", Style::default()
+            Line::from(vec![Span::styled(
+                " URPO Ultra-Fast Controls ",
+                Style::default()
                     .fg(Color::Black)
                     .bg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD))
-            ]),
+                    .add_modifier(Modifier::BOLD),
+            )]),
             Line::from(""),
-            Line::from(vec![
-                Span::styled("NAVIGATION", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
-            ]),
+            Line::from(vec![Span::styled(
+                "NAVIGATION",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            )]),
             Line::from(vec![
                 Span::styled("  j/↓  ", Style::default().fg(Color::Green)),
                 Span::raw("Down     "),
                 Span::styled("  k/↑  ", Style::default().fg(Color::Green)),
-                Span::raw("Up")
+                Span::raw("Up"),
             ]),
             Line::from(vec![
                 Span::styled("  h/←  ", Style::default().fg(Color::Green)),
                 Span::raw("Left     "),
                 Span::styled("  l/→  ", Style::default().fg(Color::Green)),
-                Span::raw("Right")
+                Span::raw("Right"),
             ]),
             Line::from(vec![
                 Span::styled("  d/PgDn ", Style::default().fg(Color::Green)),
                 Span::raw("Page Down  "),
                 Span::styled("  u/PgUp ", Style::default().fg(Color::Green)),
-                Span::raw("Page Up")
+                Span::raw("Page Up"),
             ]),
             Line::from(vec![
                 Span::styled("  g/Home ", Style::default().fg(Color::Green)),
                 Span::raw("Top      "),
                 Span::styled("  G/End  ", Style::default().fg(Color::Green)),
-                Span::raw("Bottom")
+                Span::raw("Bottom"),
             ]),
             Line::from(""),
-            Line::from(vec![
-                Span::styled("VIEWS", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
-            ]),
+            Line::from(vec![Span::styled(
+                "VIEWS",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            )]),
             Line::from(vec![
                 Span::styled("  s  ", Style::default().fg(Color::Yellow)),
                 Span::raw("Services   "),
                 Span::styled("  t  ", Style::default().fg(Color::Yellow)),
-                Span::raw("Traces")
+                Span::raw("Traces"),
             ]),
             Line::from(vec![
                 Span::styled("  L  ", Style::default().fg(Color::Yellow)),
                 Span::raw("Logs       "),
                 Span::styled("  m  ", Style::default().fg(Color::Yellow)),
-                Span::raw("Metrics")
+                Span::raw("Metrics"),
             ]),
             Line::from(vec![
                 Span::styled("  v  ", Style::default().fg(Color::Yellow)),
-                Span::raw("Graph View")
+                Span::raw("Graph View"),
             ]),
             Line::from(""),
-            Line::from(vec![
-                Span::styled("ACTIONS", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
-            ]),
+            Line::from(vec![Span::styled(
+                "ACTIONS",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            )]),
             Line::from(vec![
                 Span::styled("  /  ", Style::default().fg(Color::Magenta)),
                 Span::raw("Search     "),
                 Span::styled("  f  ", Style::default().fg(Color::Magenta)),
-                Span::raw("Filter")
+                Span::raw("Filter"),
             ]),
             Line::from(vec![
                 Span::styled("  r  ", Style::default().fg(Color::Magenta)),
                 Span::raw("Refresh    "),
                 Span::styled("  e  ", Style::default().fg(Color::Magenta)),
-                Span::raw("Export")
+                Span::raw("Export"),
             ]),
             Line::from(""),
-            Line::from(vec![
-                Span::styled("SYSTEM", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
-            ]),
+            Line::from(vec![Span::styled(
+                "SYSTEM",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            )]),
             Line::from(vec![
                 Span::styled("  q/Esc ", Style::default().fg(Color::Red)),
                 Span::raw("Quit      "),
                 Span::styled("  ?  ", Style::default().fg(Color::Blue)),
-                Span::raw("Help")
+                Span::raw("Help"),
             ]),
             Line::from(""),
-            Line::from(vec![
-                Span::styled("PERFORMANCE", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD))
-            ]),
+            Line::from(vec![Span::styled(
+                "PERFORMANCE",
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            )]),
             Line::from(vec![
                 Span::raw("Input Latency: "),
                 Span::styled(
@@ -291,35 +304,33 @@ impl UltraFastInput {
                         Style::default().fg(Color::Green)
                     } else {
                         Style::default().fg(Color::Red)
-                    }
-                )
+                    },
+                ),
             ]),
             Line::from(vec![
                 Span::raw("Samples: "),
-                Span::styled(
-                    format!("{}", self.sample_count),
-                    Style::default().fg(Color::Cyan)
-                )
+                Span::styled(format!("{}", self.sample_count), Style::default().fg(Color::Cyan)),
             ]),
             Line::from(""),
-            Line::from(vec![
-                Span::styled("Press ? to close help", Style::default()
+            Line::from(vec![Span::styled(
+                "Press ? to close help",
+                Style::default()
                     .fg(Color::Gray)
-                    .add_modifier(Modifier::ITALIC))
-            ]),
+                    .add_modifier(Modifier::ITALIC),
+            )]),
             Line::from(""),
         ];
-        
+
         let help_block = Paragraph::new(help_text)
             .block(
                 Block::default()
                     .title(" Help - Ultra-Fast Controls ")
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Yellow))
+                    .border_style(Style::default().fg(Color::Yellow)),
             )
             .wrap(ratatui::widgets::Wrap { trim: true })
             .alignment(Alignment::Left);
-        
+
         f.render_widget(help_block, help_area);
     }
 }
@@ -359,7 +370,7 @@ mod tests {
     #[test]
     fn test_key_to_command_navigation() {
         let mut input = UltraFastInput::new();
-        
+
         // Test vim navigation
         assert_eq!(
             input.key_to_command_zero_copy(KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE)),
@@ -382,7 +393,7 @@ mod tests {
     #[test]
     fn test_key_to_command_views() {
         let mut input = UltraFastInput::new();
-        
+
         assert_eq!(
             input.key_to_command_zero_copy(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::NONE)),
             FastCommand::Services
@@ -400,7 +411,7 @@ mod tests {
     #[test]
     fn test_key_to_command_system() {
         let mut input = UltraFastInput::new();
-        
+
         assert_eq!(
             input.key_to_command_zero_copy(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE)),
             FastCommand::Quit
@@ -414,13 +425,15 @@ mod tests {
     #[test]
     fn test_ctrl_commands() {
         let mut input = UltraFastInput::new();
-        
+
         assert_eq!(
-            input.key_to_command_zero_copy(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL)),
+            input
+                .key_to_command_zero_copy(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL)),
             FastCommand::Quit
         );
         assert_eq!(
-            input.key_to_command_zero_copy(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::CONTROL)),
+            input
+                .key_to_command_zero_copy(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::CONTROL)),
             FastCommand::Refresh
         );
     }
@@ -428,12 +441,12 @@ mod tests {
     #[test]
     fn test_help_toggle() {
         let mut input = UltraFastInput::new();
-        
+
         assert!(!input.help_active);
-        
+
         input.key_to_command_zero_copy(KeyEvent::new(KeyCode::Char('?'), KeyModifiers::NONE));
         assert!(input.help_active);
-        
+
         input.key_to_command_zero_copy(KeyEvent::new(KeyCode::Char('?'), KeyModifiers::NONE));
         assert!(!input.help_active);
     }
