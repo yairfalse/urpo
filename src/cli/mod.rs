@@ -495,20 +495,8 @@ async fn start_with_ui(config: Config, cli: &Cli) -> Result<()> {
     if config.features.enable_fake_spans {
         let gen_storage = Arc::clone(&storage);
         tokio::spawn(async move {
-            // SpanGenerator removed - fake data temporarily disabled
-            return;
-            let callback = move |span: Span| {
-                let storage = gen_storage.clone();
-                tokio::spawn(async move {
-                    if let Err(e) = storage.write().await.store_span(span).await {
-                        tracing::error!("Failed to store generated span: {}", e);
-                    }
-                });
-            };
-
-            if let Err(e) = generator.generate_spans_continuous(callback).await {
-                tracing::error!("Fake span generator error: {}", e);
-            }
+            // SpanGenerator removed - fake data disabled per user requirement
+            tracing::info!("Fake span generator disabled - using real OTEL data only");
         });
     }
 
@@ -585,20 +573,8 @@ async fn start_headless(config: Config, cli: &Cli) -> Result<()> {
     if config.features.enable_fake_spans {
         let gen_storage = Arc::clone(&storage);
         tokio::spawn(async move {
-            // SpanGenerator removed - fake data temporarily disabled
-            return;
-            let callback = move |span: Span| {
-                let storage = gen_storage.clone();
-                tokio::spawn(async move {
-                    if let Err(e) = storage.write().await.store_span(span).await {
-                        tracing::error!("Failed to store generated span: {}", e);
-                    }
-                });
-            };
-
-            if let Err(e) = generator.generate_spans_continuous(callback).await {
-                tracing::error!("Fake span generator error: {}", e);
-            }
+            // SpanGenerator removed - fake data disabled per user requirement
+            tracing::info!("Fake span generator disabled - using real OTEL data only");
         });
     }
 

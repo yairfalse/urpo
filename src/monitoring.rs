@@ -570,11 +570,11 @@ impl Monitor {
             severity = severity.max(25); // Degraded
         }
 
-        // Check performance
-        if performance.avg_latency_us > 100_000 {
+        // Check performance using query_latency_ms
+        if performance.query_latency_ms > 100.0 {
             // > 100ms
             severity = severity.max(75); // Unhealthy
-        } else if performance.avg_latency_us > 50_000 {
+        } else if performance.query_latency_ms > 50.0 {
             // > 50ms
             severity = severity.max(25); // Degraded
         }
@@ -703,7 +703,7 @@ impl HealthEndpoint {
             version: env!("CARGO_PKG_VERSION").to_string(),
             checks: health_checks,
             summary: HealthSummary {
-                spans_processed: metrics.performance.total_spans,
+                spans_processed: 0, // Field removed from PerformanceStats
                 memory_mb: metrics.resources.memory_mb,
                 cpu_percent: metrics.resources.cpu_percent,
                 error_rate: metrics.errors.error_rate,

@@ -160,124 +160,19 @@ impl Drop for PooledSpan {
     }
 }
 
-/// Ultra-fast pool for CompactSpan (no allocations needed)
-pub struct CompactSpanPool {
-    /// Pre-allocated array of CompactSpans
-    spans: Box<[MaybeUninit<CompactSpan>]>,
-    /// Available span indices
-    available: Arc<ArrayQueue<usize>>,
-    /// Statistics
-    allocations: AtomicU64,
-    deallocations: AtomicU64,
-}
-
-impl CompactSpanPool {
-    /// Create pool with pre-allocated CompactSpans
-    pub fn new(capacity: usize) -> Self {
-        // Allocate uninitialized memory for CompactSpans
-        let mut spans = Vec::with_capacity(capacity);
-        spans.resize_with(capacity, MaybeUninit::uninit);
-        let spans = spans.into_boxed_slice();
-
-        // Initialize available indices
-        let available = Arc::new(ArrayQueue::new(capacity));
-        for i in 0..capacity {
-            let _ = available.push(i);
-        }
-
-        Self {
-            spans,
-            available,
-            allocations: AtomicU64::new(0),
-            deallocations: AtomicU64::new(0),
-        }
-    }
-
-    /// Get a CompactSpan slot (zero allocation)
-    #[inline(always)]
-    pub fn allocate(&self) -> Option<CompactSpanHandle> {
-        self.available.pop().map(|index| {
-            self.allocations.fetch_add(1, Ordering::Relaxed);
-            CompactSpanHandle {
-                index,
-                pool: self as *const Self,
-            }
-        })
-    }
-
-    /// Return a slot to the pool
-    #[inline(always)]
-    unsafe fn deallocate(&self, index: usize) {
-        if index < self.spans.len() {
-            let _ = self.available.push(index);
-            self.deallocations.fetch_add(1, Ordering::Relaxed);
-        }
-    }
-
-    /// Write data to a slot
-    #[inline(always)]
-    unsafe fn write(&self, index: usize, span: CompactSpan) {
-        if index < self.spans.len() {
-            // Cast away const for writing (safe because we have exclusive access to this index)
-            let ptr = self.spans[index].as_ptr() as *mut CompactSpan;
-            ptr.write(span);
-        }
-    }
-
-    /// Read data from a slot
-    #[inline(always)]
-    unsafe fn read(&self, index: usize) -> &CompactSpan {
-        &*self.spans[index].as_ptr()
-    }
-}
-
-/// Handle to a CompactSpan in the pool
-pub struct CompactSpanHandle {
-    index: usize,
-    pool: *const CompactSpanPool,
-}
-
-impl CompactSpanHandle {
-    /// Write a CompactSpan to this slot
-    #[inline]
-    pub fn write(&self, span: CompactSpan) {
-        unsafe {
-            (*self.pool).write(self.index, span);
-        }
-    }
-
-    /// Read the CompactSpan from this slot
-    #[inline]
-    pub fn read(&self) -> &CompactSpan {
-        unsafe { (*self.pool).read(self.index) }
-    }
-}
-
-impl Drop for CompactSpanHandle {
-    #[inline]
-    fn drop(&mut self) {
-        unsafe {
-            (*self.pool).deallocate(self.index);
-        }
-    }
-}
-
-// Mark as Send/Sync since we use proper synchronization
-unsafe impl Send for CompactSpanHandle {}
-unsafe impl Sync for CompactSpanHandle {}
+// CompactSpan functionality removed - was part of deleted ultra_fast.rs module
+// Only keeping the ZeroAllocSpanPool for regular Span objects
 
 /// Global pools for application-wide reuse
 pub struct GlobalPools {
     span_pool: ZeroAllocSpanPool,
-    compact_pool: CompactSpanPool,
 }
 
 impl GlobalPools {
     /// Initialize global pools with specified capacity
-    pub fn init(span_capacity: usize, compact_capacity: usize) -> Arc<Self> {
+    pub fn init(span_capacity: usize) -> Arc<Self> {
         Arc::new(Self {
             span_pool: ZeroAllocSpanPool::new(span_capacity),
-            compact_pool: CompactSpanPool::new(compact_capacity),
         })
     }
 
@@ -287,35 +182,20 @@ impl GlobalPools {
         self.span_pool.get()
     }
 
-    /// Get a compact span slot from the global pool
-    #[inline(always)]
-    pub fn get_compact_slot(&self) -> Option<CompactSpanHandle> {
-        self.compact_pool.allocate()
-    }
-
     /// Get statistics
-    pub fn stats(&self) -> (PoolStats, u64, u64) {
-        let span_stats = self.span_pool.stats();
-        let compact_allocs = self.compact_pool.allocations.load(Ordering::Relaxed);
-        let compact_deallocs = self.compact_pool.deallocations.load(Ordering::Relaxed);
-        (span_stats, compact_allocs, compact_deallocs)
+    pub fn stats(&self) -> PoolStats {
+        self.span_pool.stats()
     }
 }
 
 /// Global pool instance (lazy initialized)
 static GLOBAL_POOLS: once_cell::sync::Lazy<Arc<GlobalPools>> =
-    once_cell::sync::Lazy::new(|| GlobalPools::init(10_000, 100_000));
+    once_cell::sync::Lazy::new(|| GlobalPools::init(10_000));
 
 /// Get a span from the global pool
 #[inline(always)]
 pub fn get_pooled_span() -> Option<PooledSpan> {
     GLOBAL_POOLS.get_span()
-}
-
-/// Get a compact span slot from the global pool
-#[inline(always)]
-pub fn get_compact_slot() -> Option<CompactSpanHandle> {
-    GLOBAL_POOLS.get_compact_slot()
 }
 
 #[cfg(test)]
@@ -347,41 +227,12 @@ mod tests {
     }
 
     #[test]
-    fn test_compact_span_pool() {
-        let pool = CompactSpanPool::new(100);
-
-        // Allocate slots
-        let mut handles = Vec::new();
-        for _ in 0..100 {
-            handles.push(pool.allocate().expect("Should allocate"));
-        }
-
-        // Pool should be exhausted
-        assert!(pool.allocate().is_none());
-
-        // Write and read
-        let test_span = CompactSpan::default();
-        handles[0].write(test_span);
-        let read_span = handles[0].read();
-        assert_eq!(read_span.trace_id, 0);
-
-        // Return slots
-        handles.clear();
-
-        // Should be available again
-        assert!(pool.allocate().is_some());
-    }
-
-    #[test]
     fn test_global_pools() {
         // Test global pool access
         let span = get_pooled_span();
         assert!(span.is_some());
 
-        let slot = get_compact_slot();
-        assert!(slot.is_some());
-
-        let (stats, _, _) = GLOBAL_POOLS.stats();
+        let stats = GLOBAL_POOLS.stats();
         assert!(stats.available > 0);
     }
 }
