@@ -179,7 +179,7 @@ impl Cli {
             builder = builder.max_memory_mb(limit);
         }
 
-        builder = builder.enable_fake_spans(!self.no_fake).debug(self.debug);
+        builder = builder.debug(self.debug);
 
         builder.build()
     }
@@ -478,7 +478,6 @@ async fn start_with_ui(config: Config, cli: &Cli) -> Result<()> {
         monitoring::Monitor,
         receiver::OtelReceiver,
         storage::{InMemoryStorage, StorageBackend},
-        tui::Dashboard,
     };
     use std::sync::Arc;
     use tokio::sync::RwLock;
@@ -491,14 +490,7 @@ async fn start_with_ui(config: Config, cli: &Cli) -> Result<()> {
     // Initialize health monitor
     let health_monitor = Arc::new(Monitor::new());
 
-    // Start fake span generator if enabled
-    if config.features.enable_fake_spans {
-        let gen_storage = Arc::clone(&storage);
-        tokio::spawn(async move {
-            // SpanGenerator removed - fake data disabled per user requirement
-            tracing::info!("Fake span generator disabled - using real OTEL data only");
-        });
-    }
+    // Fake span generator completely removed - using real OTEL data only
 
     // Start OTEL receivers
     let receiver = Arc::new(OtelReceiver::new(
@@ -535,11 +527,8 @@ async fn start_with_ui(config: Config, cli: &Cli) -> Result<()> {
         None
     };
 
-    // Start the terminal UI
-    let mut dashboard = Dashboard::new(storage_trait, health_monitor)?;
-
-    // Run UI in the main async context
-    let ui_result = dashboard.run().await;
+    // Start the minimal terminal UI
+    let ui_result = crate::tui::run_tui(storage_trait).await;
 
     // Cleanup
     receiver_handle.abort();
@@ -569,14 +558,7 @@ async fn start_headless(config: Config, cli: &Cli) -> Result<()> {
     // Initialize health monitor
     let health_monitor = Arc::new(Monitor::new());
 
-    // Start fake span generator if enabled
-    if config.features.enable_fake_spans {
-        let gen_storage = Arc::clone(&storage);
-        tokio::spawn(async move {
-            // SpanGenerator removed - fake data disabled per user requirement
-            tracing::info!("Fake span generator disabled - using real OTEL data only");
-        });
-    }
+    // Fake span generator completely removed - using real OTEL data only
 
     // Start OTEL receivers
     let receiver = Arc::new(OtelReceiver::new(
