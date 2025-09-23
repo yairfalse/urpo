@@ -3,12 +3,14 @@ import ReactDOM from 'react-dom/client';
 
 console.log('main.tsx: Starting imports...');
 
-import App from './App';
+// import App from './App';
+import App from './AppPro';
 // import App from './TestApp';
 // import App from './AppDebug';
 // import App from './SimplestApp';
 // import App from './ProgressiveApp';
 import './index.css';
+import './styles/professional.css';
 
 console.log('main.tsx: Imports complete, App:', App);
 

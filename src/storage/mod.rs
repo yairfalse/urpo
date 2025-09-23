@@ -16,6 +16,7 @@ use tokio::sync::RwLock;
 
 // Core modules
 pub mod backend;
+pub mod cleanup_logic;
 pub mod memory;
 pub mod types;
 

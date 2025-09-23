@@ -752,7 +752,7 @@ mod tests {
 
         // Test healthy system
         let performance = PerformanceStats {
-            avg_latency_us: 5000, // 5ms
+            query_latency_ms: 5.0, // 5ms
             ..Default::default()
         };
         let resources = ResourceMetrics {

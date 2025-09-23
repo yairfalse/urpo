@@ -2,7 +2,7 @@
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use urpo_lib::core::{ServiceName, Span, SpanId, TraceId};
-use urpo_lib::storage::simple_pool::{get_span, SimpleSpanPool};
+use urpo_lib::storage::span_pool::{SpanPool, GLOBAL_SPAN_POOL};
 
 fn bench_allocation_vs_pool(c: &mut Criterion) {
     let mut group = c.benchmark_group("allocation_vs_pool");
@@ -22,24 +22,28 @@ fn bench_allocation_vs_pool(c: &mut Criterion) {
     });
 
     // Benchmark pool usage
-    let pool = SimpleSpanPool::new(1000);
+    let pool = SpanPool::new();
     group.bench_function("pool", |b| {
         b.iter(|| {
-            if let Some(pooled) = pool.get() {
-                let span = pooled.as_ref();
-                black_box(span);
-                // Automatic return to pool on drop
-            }
+            let mut span = pool.get();
+            span.trace_id = TraceId::new("trace_123".to_string()).unwrap();
+            span.span_id = SpanId::new("span_456".to_string()).unwrap();
+            span.service_name = ServiceName::new("test-service".to_string()).unwrap();
+            span.operation_name = "test-operation".to_string();
+            black_box(&*span);
+            // Automatic return to pool on drop
         })
     });
 
     // Benchmark global pool
     group.bench_function("global_pool", |b| {
         b.iter(|| {
-            if let Some(pooled) = get_span() {
-                let span = pooled.as_ref();
-                black_box(span);
-            }
+            let mut span = GLOBAL_SPAN_POOL.get();
+            span.trace_id = TraceId::new("trace_123".to_string()).unwrap();
+            span.span_id = SpanId::new("span_456".to_string()).unwrap();
+            span.service_name = ServiceName::new("test-service".to_string()).unwrap();
+            span.operation_name = "test-operation".to_string();
+            black_box(&*span);
         })
     });
 
