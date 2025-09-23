@@ -117,7 +117,7 @@ fn draw_speed_bar(spans_per_sec: f64) {
         if i < filled {
             print!("{}", "█".bright_green());
         } else {
-            print!("{}", "░".dark_gray());
+            print!("{}", "░".bright_black());
         }
     }
     println!("] {:.0}/s", spans_per_sec);
@@ -133,7 +133,7 @@ fn draw_memory_bar(mb_per_million: f64) {
         if i < filled {
             print!("{}", "█".bright_green());
         } else {
-            print!("{}", "░".dark_gray());
+            print!("{}", "░".bright_black());
         }
     }
     println!("] {:.1}MB/1M", mb_per_million);
@@ -149,7 +149,7 @@ fn draw_query_bar(query_ms: f64) {
         if i < filled {
             print!("{}", "█".bright_green());
         } else {
-            print!("{}", "░".dark_gray());
+            print!("{}", "░".bright_black());
         }
     }
     println!("] {:.2}ms", query_ms);
@@ -162,7 +162,7 @@ fn show_comparison() {
             .bright_white()
             .bold()
     );
-    println!("{}", "-".repeat(70).dark_gray());
+    println!("{}", "-".repeat(70).bright_black());
 
     // Ingestion speed
     print_comparison("Ingestion", "100K/s", "10K/s", "5K/s", "Urpo");
@@ -171,7 +171,7 @@ fn show_comparison() {
     print_comparison("Query Time", "<1ms", "~50ms", "~100ms", "Urpo");
     print_comparison("Startup", "<200ms", "~5s", "~10s", "Urpo");
 
-    println!("{}", "-".repeat(70).dark_gray());
+    println!("{}", "-".repeat(70).bright_black());
     println!(
         "\n{} {}",
         "VERDICT:".bright_yellow().bold(),

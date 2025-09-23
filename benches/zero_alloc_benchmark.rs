@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use urpo_lib::core::{ServiceName, Span, SpanId, SpanKind, SpanStatus, TraceId};
 use urpo_lib::storage::zero_alloc_pool::{
-    get_compact_slot, get_pooled_span, CompactSpanPool, GlobalPools, ZeroAllocSpanPool,
+    get_pooled_span, GlobalPools, ZeroAllocSpanPool,
 };
 
 fn bench_with_allocation(c: &mut Criterion) {
@@ -15,7 +15,7 @@ fn bench_with_allocation(c: &mut Criterion) {
             let span = Span::builder()
                 .trace_id(TraceId::new("trace_123").unwrap())
                 .span_id(SpanId::new("span_456").unwrap())
-                .service_name(ServiceName::new("test-service").unwrap())
+                .service_name(ServiceName::new("test-service".to_string()).unwrap())
                 .operation_name("test-operation")
                 .build()
                 .unwrap();
@@ -42,25 +42,26 @@ fn bench_with_pool(c: &mut Criterion) {
     });
 }
 
-fn bench_compact_pool(c: &mut Criterion) {
-    let pool = CompactSpanPool::new(10000);
-
-    c.bench_function("compact_span_pool", |b| {
-        b.iter(|| {
-            // Allocate slot (just index manipulation - ULTRA FAST)
-            let handle = pool.allocate().expect("Pool not exhausted");
-
-            // Write to slot
-            handle.write(Default::default());
-
-            // Read from slot
-            let span = handle.read();
-            black_box(span);
-
-            // Automatic return on drop
-        })
-    });
-}
+// Compact pool functionality was removed
+// fn bench_compact_pool(c: &mut Criterion) {
+//     let pool = CompactSpanPool::new(10000);
+//
+//     c.bench_function("compact_span_pool", |b| {
+//         b.iter(|| {
+//             // Allocate slot (just index manipulation - ULTRA FAST)
+//             let handle = pool.allocate().expect("Pool not exhausted");
+//
+//             // Write to slot
+//             handle.write(Default::default());
+//
+//             // Read from slot
+//             let span = handle.read();
+//             black_box(span);
+//
+//             // Automatic return on drop
+//         })
+//     });
+// }
 
 fn bench_allocation_comparison(c: &mut Criterion) {
     let mut group = c.benchmark_group("allocation_comparison");
@@ -75,7 +76,7 @@ fn bench_allocation_comparison(c: &mut Criterion) {
                     let span = Span::builder()
                         .trace_id(TraceId::new(format!("trace_{}", i)).unwrap())
                         .span_id(SpanId::new(format!("span_{}", i)).unwrap())
-                        .service_name(ServiceName::new("service").unwrap())
+                        .service_name(ServiceName::new("service".to_string()).unwrap())
                         .operation_name("operation")
                         .build()
                         .unwrap();
@@ -114,15 +115,16 @@ fn bench_global_pool(c: &mut Criterion) {
         })
     });
 
-    c.bench_function("global_compact_pool", |b| {
-        b.iter(|| {
-            // Use global compact pool
-            if let Some(slot) = get_compact_slot() {
-                slot.write(Default::default());
-                black_box(slot.read());
-            }
-        })
-    });
+    // Compact pool functionality was removed
+    // c.bench_function("global_compact_pool", |b| {
+    //     b.iter(|| {
+    //         // Use global compact pool
+    //         if let Some(slot) = get_compact_slot() {
+    //             slot.write(Default::default());
+    //             black_box(slot.read());
+    //         }
+    //     })
+    // });
 }
 
 fn bench_pool_contention(c: &mut Criterion) {
@@ -167,7 +169,7 @@ criterion_group!(
     benches,
     bench_with_allocation,
     bench_with_pool,
-    bench_compact_pool,
+    // bench_compact_pool, // Removed functionality
     bench_allocation_comparison,
     bench_global_pool,
     bench_pool_contention

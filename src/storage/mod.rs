@@ -16,6 +16,7 @@ use tokio::sync::RwLock;
 
 // Core modules
 pub mod backend;
+pub mod cleanup_logic;
 pub mod memory;
 pub mod types;
 
@@ -30,7 +31,8 @@ pub use backend::StorageBackend;
 pub use compression::{CompressedSpanBatch, CompressionEngine, CompressionLevel, CompressionStats};
 pub use memory::InMemoryStorage;
 pub use span_pool::{PooledSpan, SpanPool, GLOBAL_SPAN_POOL};
-pub use types::{CleanupConfig, StorageHealth, StorageStats, TraceInfo};
+pub use cleanup_logic::CleanupConfig;
+pub use types::{StorageHealth, StorageStats, TraceInfo};
 pub use zero_alloc_pool::{PoolStats, ZeroAllocSpanPool};
 
 /// Unified storage interface that wraps the actual implementation

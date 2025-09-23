@@ -151,8 +151,6 @@ pub struct LoggingConfig {
 /// Feature configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FeatureConfig {
-    /// Enable fake span generation for demo
-    pub enable_fake_spans: bool,
     /// Enable experimental features
     pub experimental: bool,
     /// Enable performance profiling
@@ -301,7 +299,6 @@ impl Default for LoggingConfig {
 impl Default for FeatureConfig {
     fn default() -> Self {
         FeatureConfig {
-            enable_fake_spans: true,
             experimental: false,
             profiling: false,
         }
@@ -482,12 +479,6 @@ impl ConfigBuilder {
     /// Set sampling rate
     pub fn sampling_rate(mut self, rate: f64) -> Self {
         self.config.sampling.default_rate = rate;
-        self
-    }
-
-    /// Enable/disable fake spans
-    pub fn enable_fake_spans(mut self, enable: bool) -> Self {
-        self.config.features.enable_fake_spans = enable;
         self
     }
 
