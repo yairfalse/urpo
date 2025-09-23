@@ -56,11 +56,19 @@ impl QueryExecutor {
     ) -> Result<Vec<u128>> {
         match filter {
             QueryFilter::All => {
-                // Return all traces (up to limit)
-                let _stats = storage.get_stats().await?;
-                // We need to get all traces - this is inefficient but works for now
-                // In a real implementation, we'd have a method to list all trace IDs
-                Ok(vec![]) // TODO: Implement get_all_trace_ids in StorageBackend
+                // Return all recent traces (up to limit)
+                // Use list_recent_traces to get trace IDs
+                let trace_infos = storage.list_recent_traces(limit, None).await?;
+
+                // Convert trace IDs to u128 for consistency
+                let mut trace_ids = Vec::with_capacity(trace_infos.len());
+                for info in trace_infos {
+                    if let Ok(trace_id) = u128::from_str_radix(info.trace_id.as_str(), 16) {
+                        trace_ids.push(trace_id);
+                    }
+                }
+
+                Ok(trace_ids)
             },
 
             QueryFilter::Comparison { field, op, value } => {
