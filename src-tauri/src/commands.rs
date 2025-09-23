@@ -228,18 +228,15 @@ pub async fn start_receiver(state: State<'_, AppState>) -> Result<(), String> {
         let mut receiver_guard = state.receiver.write().await;
 
         if receiver_guard.is_none() {
-            let config = urpo_lib::core::ConfigBuilder::default()
-                .receiver_port(4317)
-                .build()
-                .map_err(|e| e.to_string())?;
+            let storage_lock = tokio::sync::RwLock::new(state.storage.clone());
 
             let receiver = urpo_lib::receiver::OtelReceiver::new(
-                config,
-                state.storage.clone(),
-                None,
+                4317, // gRPC port
+                4318, // HTTP port
+                Arc::new(storage_lock),
+                state.monitor.clone(),
             );
 
-            receiver.start().await.map_err(|e| e.to_string())?;
             *receiver_guard = Some(receiver);
         }
 
@@ -253,9 +250,8 @@ pub async fn stop_receiver(state: State<'_, AppState>) -> Result<(), String> {
     timed_command!("stop_receiver", {
         let mut receiver_guard = state.receiver.write().await;
 
-        if let Some(receiver) = receiver_guard.take() {
-            receiver.stop().await.map_err(|e| e.to_string())?;
-        }
+        // Simply drop the receiver to stop it
+        *receiver_guard = None;
 
         Ok(())
     })
