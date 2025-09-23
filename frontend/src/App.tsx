@@ -5,7 +5,7 @@ import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { ServiceHealthDashboard } from './components/tables/ServiceHealthDashboard';
 import { TraceExplorer } from './components/tables/TraceExplorer';
 import { SystemMetrics } from './components/panels/SystemMetrics';
-import { ServiceGraph } from './components/charts/ServiceGraph';
+import { ServiceGraphPro } from './components/charts/ServiceGraphPro';
 import { ServiceMap } from './components/tables/ServiceMap';
 import { FlowTable } from './components/tables/FlowTable';
 import { VirtualizedFlowTable } from './components/tables/VirtualizedFlowTable';
@@ -329,9 +329,9 @@ const App = memo(() => {
         <main className="flex-1 overflow-hidden bg-dark-50">
           <div className="h-full">
             {activeView === 'graph' && (
-              <ErrorBoundary componentName="ServiceGraph" isolate>
+              <ErrorBoundary componentName="ServiceGraphPro" isolate>
                 <div className="h-full p-4">
-                  <ServiceGraph services={services} traces={traces} />
+                  <ServiceGraphPro services={services} traces={traces} />
                 </div>
               </ErrorBoundary>
             )}
