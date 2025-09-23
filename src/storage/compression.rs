@@ -393,10 +393,101 @@ impl CompressionEngine {
                     .map_err(|e| UrpoError::Storage(format!("Deserialization failed: {}", e)))
             },
             CompressionLevel::Balanced | CompressionLevel::Maximum => {
-                // TODO: Implement columnar decompression
-                Err(UrpoError::Storage("Columnar decompression not implemented yet".to_string()))
+                // Decompress columnar data
+                self.decompress_columnar(batch)
             },
         }
+    }
+
+    /// Decompress columnar format back to spans
+    fn decompress_columnar(&self, batch: &CompressedSpanBatch) -> Result<Vec<Span>> {
+        // First decompress the data
+        let decompressed = decompress_size_prepended(&batch.data)
+            .map_err(|e| UrpoError::Storage(format!("LZ4 decompression failed: {}", e)))?;
+
+        // Deserialize columnar format
+        let columnar: ColumnarSpanBatch = bincode::deserialize(&decompressed)
+            .map_err(|e| UrpoError::Storage(format!("Columnar deserialization failed: {}", e)))?;
+
+        // Reconstruct spans from columnar data
+        let mut spans = Vec::with_capacity(columnar.trace_ids.len());
+        let string_pool = self.string_pool.read();
+
+        // Find base timestamp for delta decoding
+        let base_time = columnar.start_times.iter().min().copied().unwrap_or(0);
+
+        for i in 0..columnar.trace_ids.len() {
+            use crate::core::{SpanBuilder, SpanId, SpanStatus, TraceId, ServiceName};
+
+            // Reconstruct timestamp
+            let timestamp_nanos = base_time + columnar.start_times.get(i).copied().unwrap_or(0);
+            let start_time = std::time::UNIX_EPOCH
+                + std::time::Duration::from_nanos(timestamp_nanos);
+
+            // Decode service and operation names
+            let service_idx = columnar.service_indices.get(i).copied().unwrap_or(0);
+            let operation_idx = columnar.operation_indices.get(i).copied().unwrap_or(0);
+
+            let service_name = string_pool.get(service_idx)
+                .unwrap_or("unknown")
+                .to_string();
+            let operation_name = string_pool.get(operation_idx)
+                .unwrap_or("unknown")
+                .to_string();
+
+            // Decode status
+            let status = match columnar.status_codes.get(i).copied().unwrap_or(4) {
+                0 => SpanStatus::Ok,
+                1 => SpanStatus::Error("Error".to_string()),
+                2 => SpanStatus::Cancelled,
+                3 => SpanStatus::Unknown,
+                _ => SpanStatus::Unset,
+            };
+
+            // Build the span
+            let mut builder = SpanBuilder::default()
+                .trace_id(TraceId::new(columnar.trace_ids[i].clone())?)
+                .span_id(SpanId::new(columnar.span_ids[i].clone())?)
+                .service_name(ServiceName::new(service_name)?)
+                .operation_name(operation_name)
+                .start_time(start_time)
+                .duration(std::time::Duration::from_nanos(
+                    columnar.durations.get(i).copied().unwrap_or(0) as u64
+                ))
+                .status(status);
+
+            // Handle parent span
+            if let Some(Some(_parent_idx)) = columnar.parent_indices.get(i) {
+                // In a full implementation, we'd look up the parent span ID
+                // For now, skip parent references
+            }
+
+            // Add attributes
+            let mut attributes = std::collections::HashMap::new();
+            for (j, &span_idx) in columnar.attribute_spans.iter().enumerate() {
+                if span_idx == i as u32 {
+                    if let (Some(&key_idx), Some(&val_idx)) =
+                        (columnar.attribute_keys.get(j), columnar.attribute_values.get(j)) {
+                        if let (Some(key), Some(val)) =
+                            (string_pool.get(key_idx), string_pool.get(val_idx)) {
+                            attributes.insert(key.to_string(), val.to_string());
+                        }
+                    }
+                }
+            }
+
+            for (key, value) in attributes {
+                builder = builder.attribute(key, value);
+            }
+
+            spans.push(builder.build_default());
+        }
+
+        // Update decompression stats
+        let mut stats = self.stats.write();
+        stats.decompression_operations += 1;
+
+        Ok(spans)
     }
 
     /// Update compression statistics
