@@ -223,7 +223,7 @@ fn bench_memory_usage(c: &mut Criterion) {
 /// TARGET: <200ms
 fn bench_startup_time(c: &mut Criterion) {
     use urpo_lib::core::{Config, ConfigBuilder};
-    use urpo_lib::storage::StorageManager;
+    use urpo_lib::storage::UnifiedStorage;
 
     c.bench_function("startup_time", |b| {
         b.iter_custom(|iters| {
@@ -235,7 +235,7 @@ fn bench_startup_time(c: &mut Criterion) {
                 // Simulate full application startup
                 let config = ConfigBuilder::new().max_spans(100_000).build().unwrap();
 
-                let _storage = StorageManager::new_in_memory(config.storage.max_spans);
+                let _storage = UnifiedStorage::from_config(&config);
 
                 let elapsed = start.elapsed();
                 total_duration += elapsed;

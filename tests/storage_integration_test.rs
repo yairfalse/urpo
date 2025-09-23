@@ -1,18 +1,28 @@
-//! Integration tests for storage backend with fake spans and metrics aggregation.
+//! Integration tests for storage backend with real test spans.
 
 use std::time::Duration;
-use urpo_lib::core::{ServiceMetrics, ServiceName};
-use urpo_lib::storage::{fake_spans::FakeSpanGenerator, StorageManager};
+use urpo_lib::core::{ServiceMetrics, ServiceName, Span, SpanBuilder, SpanId, SpanStatus, TraceId};
+use urpo_lib::storage::{InMemoryStorage, StorageBackend};
 
 #[tokio::test]
-async fn test_storage_with_fake_spans() {
-    // Create storage manager
-    let storage_manager = StorageManager::new_in_memory(1000);
-    let storage = storage_manager.backend();
+async fn test_storage_with_real_spans() {
+    // Create storage backend
+    let storage = InMemoryStorage::new(1000);
 
-    // Generate fake spans
-    let generator = FakeSpanGenerator::new();
-    let spans = generator.generate_batch(100).await.unwrap();
+    // Create real test spans
+    let mut spans = Vec::new();
+    for i in 0..100 {
+        let span = SpanBuilder::default()
+            .trace_id(TraceId::new(format!("trace_{:04}", i / 10)).unwrap())
+            .span_id(SpanId::new(format!("span_{:04}", i)).unwrap())
+            .service_name(ServiceName::new(format!("service_{}", i % 5)).unwrap())
+            .operation_name(format!("operation_{}", i % 3))
+            .start_time(std::time::SystemTime::now())
+            .duration(Duration::from_millis(i as u64 * 10))
+            .status(if i % 10 == 0 { SpanStatus::Error("test error".to_string()) } else { SpanStatus::Ok })
+            .build_default();
+        spans.push(span);
+    }
 
     // Store all spans
     for span in spans {
