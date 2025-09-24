@@ -167,43 +167,44 @@ const App = memo(() => {
 
   return (
     <ErrorBoundary componentName="App">
-      <div className="h-screen bg-dark-50 text-light-100 flex flex-col">
-        {/* Modern Observability Header */}
-        <header className="bg-dark-100 border-b border-dark-300">
-          <div className="px-4 py-3">
+      <div className="h-screen bg-dark-0 text-light-50 flex flex-col">
+        {/* Ultra-polished header */}
+        <header className="sharp-panel bg-dark-50 border-b shadow-lg relative overflow-hidden">
+          {/* Gradient accent line */}
+          <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-data-blue to-transparent opacity-80"></div>
+
+          <div className="px-6 py-4">
             <div className="flex items-center justify-between">
               {/* Logo and Brand */}
               <div className="flex items-center gap-8">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-gradient-to-br from-data-blue to-data-cyan rounded-lg flex items-center justify-center">
-                    <Activity className="w-5 h-5 text-white" />
+                <div className="flex items-center gap-4">
+                  <div className="relative">
+                    <div className="absolute inset-0 bg-gradient-to-br from-data-blue to-data-cyan rounded-xl blur-md opacity-50"></div>
+                    <div className="relative w-12 h-12 bg-gradient-to-br from-data-blue to-data-cyan rounded-xl flex items-center justify-center shadow-glow-sm">
+                      <Activity className="w-7 h-7 text-white" />
+                    </div>
                   </div>
                   <div>
-                    <h1 className="text-lg font-semibold text-light-50">URPO</h1>
-                    <p className="text-[10px] text-light-500 uppercase tracking-wider">
-                      Trace Explorer
+                    <h1 className="text-2xl font-bold text-glow bg-gradient-to-r from-white to-light-200 bg-clip-text text-transparent">
+                      URPO
+                    </h1>
+                    <p className="text-xs text-light-400 uppercase tracking-widest font-medium">
+                      Professional Trace Explorer
                     </p>
                   </div>
                 </div>
 
-                {/* Navigation */}
-                <nav className="flex items-center gap-1">
+                {/* Navigation with sharp styling */}
+                <nav className="flex items-center gap-2">
                   {navigationItems.map(({ key, icon: Icon, label, shortcut }) => (
                     <button
                       key={key}
                       onClick={() => setActiveView(key)}
-                      className={`
-                        px-3 py-2 rounded-md flex items-center gap-2 text-sm font-medium
-                        transition-all duration-150
-                        ${activeView === key
-                          ? 'bg-dark-200 text-data-blue'
-                          : 'text-light-300 hover:text-light-100 hover:bg-dark-200'
-                        }
-                      `}
+                      className={`nav-item-sharp ${activeView === key ? 'active' : ''}`}
                     >
                       <Icon className="w-4 h-4" />
-                      <span>{label}</span>
-                      <kbd className="hidden lg:inline-block px-1.5 py-0.5 text-[10px] bg-dark-300 text-light-500 rounded">
+                      <span className="font-medium">{label}</span>
+                      <kbd className="hidden lg:inline-block badge-sharp bg-dark-300 text-light-500 text-[10px] px-2 py-0.5">
                         {shortcut}
                       </kbd>
                     </button>

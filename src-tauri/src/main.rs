@@ -20,7 +20,6 @@ use tokio::sync::RwLock;
 use telemetry::TelemetryState;
 use types::{AppState, SystemMetrics};
 use urpo_lib::{
-    core::ConfigBuilder,
     monitoring::Monitor,
     storage::{InMemoryStorage, StorageBackend},
 };
@@ -38,7 +37,7 @@ async fn init_app_state() -> AppState {
     let storage: Arc<dyn StorageBackend> = Arc::new(InMemoryStorage::new(100_000));
 
     // Create monitor
-    let monitor = Arc::new(Monitor::new(storage.clone()));
+    let monitor = Arc::new(Monitor::new());
 
     // Spawn background monitoring task
     let monitor_clone = monitor.clone();
