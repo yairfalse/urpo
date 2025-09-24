@@ -255,3 +255,35 @@
 .transition-fast {
   @apply transition-all duration-150 ease-out;
 }
+
+/* Button styles */
+.btn-ghost {
+  @apply inline-flex items-center justify-center;
+  @apply px-3 py-2 rounded-md;
+  @apply text-light-400 hover:text-light-200;
+  @apply hover:bg-dark-200;
+  @apply transition-all duration-150;
+  @apply border border-transparent;
+  @apply focus:outline-none focus:ring-2 focus:ring-data-blue/50;
+}
+
+.btn-ghost:hover {
+  @apply border-dark-300/50;
+  @apply shadow-md;
+  transform: translateY(-1px);
+}
+
+/* Search input */
+.search-input {
+  @apply w-full px-4 py-2 rounded-lg;
+  @apply bg-dark-100/80 border border-dark-300/50;
+  @apply text-light-200 placeholder-light-500;
+  @apply focus:outline-none focus:ring-2 focus:ring-data-blue/50 focus:border-data-blue/50;
+  @apply transition-all duration-200;
+  backdrop-filter: blur(10px);
+}
+
+.search-input:focus {
+  @apply bg-dark-100;
+  @apply shadow-lg;
+}
