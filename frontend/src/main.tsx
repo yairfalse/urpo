@@ -11,6 +11,7 @@ import App from './App';
 // import App from './ProgressiveApp';
 import './index.css';
 import './styles/professional.css';
+import './styles/sharp.css';
 
 console.log('main.tsx: Imports complete, App:', App);
 

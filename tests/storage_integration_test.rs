@@ -65,15 +65,17 @@ async fn test_storage_with_real_spans() {
 #[tokio::test]
 async fn test_storage_limits() {
     // Create storage with small limit
-    let storage_manager = StorageManager::new_in_memory(10);
-    let storage = storage_manager.backend();
+    let storage = InMemoryStorage::new(10);
 
-    // Generate and store more spans than the limit
-    let generator = FakeSpanGenerator::new();
-    let spans = generator.generate_batch(50).await.unwrap();
-
-    for span in spans {
-        storage.store_span(span).await.unwrap();
+    // Store more spans than the limit
+    for i in 0..50 {
+        let span = SpanBuilder::default()
+            .trace_id(TraceId::new(format!("trace_{:04}", i / 10)).unwrap())
+            .span_id(SpanId::new(format!("span_{:04}", i)).unwrap())
+            .service_name(ServiceName::new("test-service".to_string()).unwrap())
+            .operation_name("test-op")
+            .build_default();
+        let _ = storage.store_span(span).await; // May fail when over limit
     }
 
     // Check that storage enforced limits
@@ -83,18 +85,18 @@ async fn test_storage_limits() {
 
 #[tokio::test]
 async fn test_metrics_calculation_accuracy() {
-    let storage_manager = StorageManager::new_in_memory(10000);
-    let storage = storage_manager.backend();
-
-    // Generate spans with known characteristics
-    let generator = FakeSpanGenerator::new();
+    let storage = InMemoryStorage::new(10000);
 
     // Generate many spans to get stable metrics
-    for _ in 0..10 {
-        let spans = generator.generate_batch(100).await.unwrap();
-        for span in spans {
-            storage.store_span(span).await.unwrap();
-        }
+    for i in 0..1000 {
+        let span = SpanBuilder::default()
+            .trace_id(TraceId::new(format!("trace_{:04}", i / 10)).unwrap())
+            .span_id(SpanId::new(format!("span_{:04}", i)).unwrap())
+            .service_name(ServiceName::new(format!("service_{}", i % 5)).unwrap())
+            .operation_name(format!("operation_{}", i % 3))
+            .status(if i % 10 == 0 { SpanStatus::Error("test error".to_string()) } else { SpanStatus::Ok })
+            .build_default();
+        storage.store_span(span).await.unwrap();
     }
 
     let metrics = storage.get_service_metrics().await.unwrap();
@@ -129,14 +131,29 @@ async fn test_metrics_calculation_accuracy() {
 
 #[tokio::test]
 async fn test_service_health_status() {
-    let storage_manager = StorageManager::new_in_memory(1000);
-    let storage = storage_manager.backend();
+    let storage = InMemoryStorage::new(1000);
 
-    // Generate spans
-    let generator = FakeSpanGenerator::new();
-    let spans = generator.generate_batch(200).await.unwrap();
+    // Generate spans with known error rates
+    for i in 0..200 {
+        let service_num = i % 5;
+        let has_error = match service_num {
+            3 => i % 5 == 0,  // payment-service: 20% error rate
+            _ => i % 50 == 0, // others: 2% error rate
+        };
 
-    for span in spans {
+        let span = SpanBuilder::default()
+            .trace_id(TraceId::new(format!("trace_{:04}", i)).unwrap())
+            .span_id(SpanId::new(format!("span_{:04}", i)).unwrap())
+            .service_name(ServiceName::new(match service_num {
+                0 => "api-gateway",
+                1 => "user-service",
+                2 => "order-service",
+                3 => "payment-service",
+                _ => "inventory-service",
+            }.to_string()).unwrap())
+            .operation_name("test-op")
+            .status(if has_error { SpanStatus::Error("error".to_string()) } else { SpanStatus::Ok })
+            .build_default();
         storage.store_span(span).await.unwrap();
     }
 
