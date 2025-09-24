@@ -66,6 +66,16 @@ src-tauri/target/
 *.trace
 /urpo_data/
 
+# Binary executables (never commit these!)
+/simple_sender
+/urpo_perf_demo
+/urpo
+*.exe
+
+# Frontend build caches
+frontend/.vite/
+.vite/
+
 # Test artifacts
 tests/test_archive*
 tests/archive_integration

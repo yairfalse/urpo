@@ -8,15 +8,15 @@ export default {
     extend: {
       // Professional observability platform colors inspired by Grafana, Datadog, Hubble
       colors: {
-        // Dark mode first - like modern observability tools
+        // Sharp, high-contrast dark palette
         'dark': {
-          0: '#0B0E14',      // Deepest background
-          50: '#111923',     // Main background
-          100: '#1A2332',    // Card background
-          150: '#212D40',    // Elevated cards
-          200: '#2A3649',    // Hover states
-          300: '#374151',    // Borders
-          400: '#4B5563',    // Muted borders
+          0: '#0a0a0a',      // Pure black - maximum contrast
+          50: '#0f0f0f',     // Near black - main background
+          100: '#141414',    // Slightly lighter - card background
+          150: '#1a1a1a',    // Elevated surfaces
+          200: '#242424',    // Hover states
+          300: '#2e2e2e',    // Active states
+          400: '#383838',    // Borders
         },
         // Light accents on dark
         'light': {
@@ -83,17 +83,18 @@ export default {
         '0.5': '0.5px',
         '1.5': '1.5px',
       },
-      // Subtle shadows for depth in dark UI
+      // Sharp shadows for crisp depth
       boxShadow: {
-        'xs': '0 1px 2px 0 rgba(0, 0, 0, 0.3)',
-        'sm': '0 2px 4px 0 rgba(0, 0, 0, 0.3)',
-        'md': '0 4px 8px 0 rgba(0, 0, 0, 0.3)',
-        'lg': '0 8px 16px 0 rgba(0, 0, 0, 0.3)',
-        'xl': '0 12px 24px 0 rgba(0, 0, 0, 0.3)',
-        // Card depth
-        'card': '0 0 0 1px rgba(255, 255, 255, 0.1)',
-        'card-hover': '0 0 0 1px rgba(255, 255, 255, 0.2)',
-        'glow': '0 0 20px rgba(91, 143, 249, 0.25)',
+        'xs': '0 1px 2px 0 rgba(0, 0, 0, 0.8)',
+        'sm': '0 2px 4px 0 rgba(0, 0, 0, 0.7)',
+        'md': '0 4px 6px -1px rgba(0, 0, 0, 0.6)',
+        'lg': '0 10px 15px -3px rgba(0, 0, 0, 0.5)',
+        'xl': '0 20px 25px -5px rgba(0, 0, 0, 0.4)',
+        // Sharp card borders
+        'card': 'inset 0 0 0 1px rgba(255, 255, 255, 0.08)',
+        'card-hover': 'inset 0 0 0 1px rgba(255, 255, 255, 0.15)',
+        'glow': '0 0 30px rgba(14, 165, 233, 0.2)',
+        'glow-sm': '0 0 10px rgba(14, 165, 233, 0.3)',
       },
       // Smooth animations for data updates
       animation: {

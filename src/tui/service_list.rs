@@ -17,15 +17,30 @@ pub fn draw_service_table(
     services: &[ServiceMetrics],
     selected: Option<usize>,
 ) {
+    // If no services, show empty state
+    if services.is_empty() {
+        let empty = ratatui::widgets::Paragraph::new("No services detected yet...")
+            .style(Style::default().fg(Color::DarkGray))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(" Services ")
+                    .border_style(Style::default().fg(Color::Cyan)),
+            );
+        frame.render_widget(empty, area);
+        return;
+    }
+
     // Header
     let header = Row::new(vec!["Service", "RPS", "Error%", "P50", "P95", "P99"])
-        .style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD));
+        .style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
+        .height(1);
 
     // Rows
-    let rows = services.iter().enumerate().map(|(idx, service)| {
+    let rows: Vec<Row> = services.iter().enumerate().map(|(idx, service)| {
         let is_selected = selected == Some(idx);
         let style = if is_selected {
-            Style::default().bg(Color::DarkGray)
+            Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD)
         } else {
             Style::default()
         };
@@ -40,26 +55,28 @@ pub fn draw_service_table(
             Cell::from(format_duration(service.latency_p99)),
         ])
         .style(style)
-    });
+        .height(1)
+    }).collect();
 
     let table = Table::new(
         rows,
         [
-            ratatui::layout::Constraint::Percentage(30),
-            ratatui::layout::Constraint::Length(8),
-            ratatui::layout::Constraint::Length(8),
-            ratatui::layout::Constraint::Length(8),
-            ratatui::layout::Constraint::Length(8),
-            ratatui::layout::Constraint::Length(8),
+            ratatui::layout::Constraint::Min(20),        // Service name
+            ratatui::layout::Constraint::Length(10),     // RPS
+            ratatui::layout::Constraint::Length(10),     // Error%
+            ratatui::layout::Constraint::Length(10),     // P50
+            ratatui::layout::Constraint::Length(10),     // P95
+            ratatui::layout::Constraint::Length(10),     // P99
         ],
     )
     .header(header)
     .block(
         Block::default()
             .borders(Borders::ALL)
-            .title(" Services ")
+            .title(format!(" Services ({}) ", services.len()))
             .border_style(Style::default().fg(Color::Cyan)),
-    );
+    )
+    .highlight_style(Style::default().bg(Color::DarkGray));
 
     frame.render_widget(table, area);
 }
