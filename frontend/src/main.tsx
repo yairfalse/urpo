@@ -3,8 +3,8 @@ import ReactDOM from 'react-dom/client';
 
 console.log('main.tsx: Starting imports...');
 
-// import App from './App';
-import App from './AppPro';
+import App from './App';
+// import App from './AppPro';
 // import App from './TestApp';
 // import App from './AppDebug';
 // import App from './SimplestApp';
