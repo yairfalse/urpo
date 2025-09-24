@@ -34,6 +34,10 @@ const App = memo(() => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
 
   const updateMetrics = useCallback(async () => {
     try {
@@ -103,7 +107,14 @@ const App = memo(() => {
     { key: '5', handler: () => setActiveView('servicemap'), description: 'Dependencies' },
     { key: 'r', handler: updateMetrics, description: 'Refresh', ctrl: true },
     { key: 't', handler: loadTraces, description: 'Reload traces', ctrl: true },
-    { key: '/', handler: () => document.getElementById('global-search')?.focus(), description: 'Search' },
+    { key: '/', handler: () => {
+      document.getElementById('global-search')?.focus();
+      // Close any open dropdowns when focusing search
+      setShowFilters(false);
+      setShowNotifications(false);
+      setShowSettings(false);
+      setShowUserMenu(false);
+    }, description: 'Search' },
   ]);
 
   useEffect(() => {
@@ -228,28 +239,47 @@ const App = memo(() => {
 
                 {/* Action Buttons */}
                 <div className="flex items-center gap-2">
-                  <button className="btn-ghost p-2">
+                  <button
+                    onClick={() => setShowFilters(!showFilters)}
+                    className={`btn-ghost p-2 ${showFilters ? 'bg-dark-200 text-data-blue' : ''}`}
+                    title="Toggle Filters"
+                  >
                     <Filter className="w-4 h-4" />
                   </button>
                   <button
                     onClick={updateMetrics}
                     className="btn-ghost p-2"
+                    title="Refresh Data"
                   >
                     <RefreshCw className="w-4 h-4" />
                   </button>
-                  <button className="btn-ghost p-2">
+                  <button
+                    onClick={() => setShowNotifications(!showNotifications)}
+                    className={`btn-ghost p-2 relative ${showNotifications ? 'bg-dark-200 text-data-blue' : ''}`}
+                    title="Notifications"
+                  >
                     <Bell className="w-4 h-4" />
+                    <span className="absolute -top-1 -right-1 w-2 h-2 bg-semantic-error rounded-full"></span>
                   </button>
-                  <button className="btn-ghost p-2">
+                  <button
+                    onClick={() => setShowSettings(!showSettings)}
+                    className={`btn-ghost p-2 ${showSettings ? 'bg-dark-200 text-data-blue' : ''}`}
+                    title="Settings"
+                  >
                     <Settings className="w-4 h-4" />
                   </button>
                 </div>
 
                 {/* User Menu */}
-                <div className="flex items-center gap-2 pl-4 border-l border-dark-300">
-                  <div className="w-8 h-8 bg-gradient-to-br from-data-purple to-data-pink rounded-full"></div>
-                  <ChevronDown className="w-4 h-4 text-light-500" />
-                </div>
+                <button
+                  onClick={() => setShowUserMenu(!showUserMenu)}
+                  className="flex items-center gap-2 pl-4 border-l border-dark-300 hover:bg-dark-200 rounded-r-lg px-2 py-1 transition-colors"
+                >
+                  <div className="w-8 h-8 bg-gradient-to-br from-data-purple to-data-pink rounded-full flex items-center justify-center text-white font-semibold text-sm">
+                    U
+                  </div>
+                  <ChevronDown className={`w-4 h-4 text-light-500 transition-transform ${showUserMenu ? 'rotate-180' : ''}`} />
+                </button>
               </div>
             </div>
           </div>
@@ -314,6 +344,137 @@ const App = memo(() => {
             </div>
           )}
         </header>
+
+        {/* Filter Panel */}
+        {showFilters && (
+          <div className="bg-dark-100 border-b border-dark-300 px-4 py-3">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-light-300">Service:</label>
+                <select className="bg-dark-200 border border-dark-400 rounded px-3 py-1 text-sm text-light-200">
+                  <option>All Services</option>
+                  {services.map(service => (
+                    <option key={service.service_name} value={service.service_name}>
+                      {service.service_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-light-300">Status:</label>
+                <select className="bg-dark-200 border border-dark-400 rounded px-3 py-1 text-sm text-light-200">
+                  <option>All Status</option>
+                  <option>Healthy</option>
+                  <option>Warning</option>
+                  <option>Error</option>
+                </select>
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-light-300">Time Range:</label>
+                <select className="bg-dark-200 border border-dark-400 rounded px-3 py-1 text-sm text-light-200">
+                  <option>Last 15 minutes</option>
+                  <option>Last 1 hour</option>
+                  <option>Last 6 hours</option>
+                  <option>Last 24 hours</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Notifications Dropdown */}
+        {showNotifications && (
+          <div className="absolute top-16 right-4 w-80 bg-dark-100 border border-dark-300 rounded-lg shadow-xl z-50">
+            <div className="p-4">
+              <h3 className="text-sm font-semibold text-light-200 mb-3">Recent Notifications</h3>
+              <div className="space-y-3">
+                <div className="flex items-start gap-3 p-3 bg-dark-200 rounded-lg">
+                  <div className="w-2 h-2 bg-semantic-error rounded-full mt-2 flex-shrink-0"></div>
+                  <div>
+                    <p className="text-sm text-light-200">High error rate detected</p>
+                    <p className="text-xs text-light-500">payment-service - 5 minutes ago</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 p-3 bg-dark-200 rounded-lg">
+                  <div className="w-2 h-2 bg-semantic-warning rounded-full mt-2 flex-shrink-0"></div>
+                  <div>
+                    <p className="text-sm text-light-200">Latency spike observed</p>
+                    <p className="text-xs text-light-500">auth-service - 12 minutes ago</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 p-3 bg-dark-200 rounded-lg">
+                  <div className="w-2 h-2 bg-semantic-success rounded-full mt-2 flex-shrink-0"></div>
+                  <div>
+                    <p className="text-sm text-light-200">Service recovered</p>
+                    <p className="text-xs text-light-500">notification-service - 1 hour ago</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Settings Dropdown */}
+        {showSettings && (
+          <div className="absolute top-16 right-4 w-64 bg-dark-100 border border-dark-300 rounded-lg shadow-xl z-50">
+            <div className="p-4">
+              <h3 className="text-sm font-semibold text-light-200 mb-3">Settings</h3>
+              <div className="space-y-2">
+                <button className="w-full text-left px-3 py-2 text-sm text-light-300 hover:bg-dark-200 rounded">
+                  Theme Settings
+                </button>
+                <button className="w-full text-left px-3 py-2 text-sm text-light-300 hover:bg-dark-200 rounded">
+                  Data Refresh Rate
+                </button>
+                <button className="w-full text-left px-3 py-2 text-sm text-light-300 hover:bg-dark-200 rounded">
+                  Export Settings
+                </button>
+                <button className="w-full text-left px-3 py-2 text-sm text-light-300 hover:bg-dark-200 rounded">
+                  Keyboard Shortcuts
+                </button>
+                <hr className="border-dark-300 my-2" />
+                <button className="w-full text-left px-3 py-2 text-sm text-light-300 hover:bg-dark-200 rounded">
+                  About URPO
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* User Menu Dropdown */}
+        {showUserMenu && (
+          <div className="absolute top-16 right-4 w-56 bg-dark-100 border border-dark-300 rounded-lg shadow-xl z-50">
+            <div className="p-4">
+              <div className="flex items-center gap-3 mb-4 pb-3 border-b border-dark-300">
+                <div className="w-10 h-10 bg-gradient-to-br from-data-purple to-data-pink rounded-full flex items-center justify-center text-white font-semibold">
+                  U
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-light-200">Admin User</p>
+                  <p className="text-xs text-light-500">admin@urpo.dev</p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <button className="w-full text-left px-3 py-2 text-sm text-light-300 hover:bg-dark-200 rounded">
+                  Profile Settings
+                </button>
+                <button className="w-full text-left px-3 py-2 text-sm text-light-300 hover:bg-dark-200 rounded">
+                  API Keys
+                </button>
+                <button className="w-full text-left px-3 py-2 text-sm text-light-300 hover:bg-dark-200 rounded">
+                  Preferences
+                </button>
+                <hr className="border-dark-300 my-2" />
+                <button className="w-full text-left px-3 py-2 text-sm text-light-300 hover:bg-dark-200 rounded">
+                  Help & Support
+                </button>
+                <button className="w-full text-left px-3 py-2 text-sm text-semantic-error hover:bg-semantic-error hover:bg-opacity-10 rounded">
+                  Sign Out
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Error Banner */}
         {error && (
