@@ -167,43 +167,44 @@ const App = memo(() => {
 
   return (
     <ErrorBoundary componentName="App">
-      <div className="h-screen bg-dark-50 text-light-100 flex flex-col">
-        {/* Modern Observability Header */}
-        <header className="bg-dark-100 border-b border-dark-300">
-          <div className="px-4 py-3">
+      <div className="h-screen bg-dark-0 text-light-50 flex flex-col">
+        {/* Ultra-polished header */}
+        <header className="sharp-panel bg-dark-50 border-b shadow-lg relative overflow-hidden">
+          {/* Gradient accent line */}
+          <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-data-blue to-transparent opacity-80"></div>
+
+          <div className="px-6 py-4">
             <div className="flex items-center justify-between">
               {/* Logo and Brand */}
               <div className="flex items-center gap-8">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-gradient-to-br from-data-blue to-data-cyan rounded-lg flex items-center justify-center">
-                    <Activity className="w-5 h-5 text-white" />
+                <div className="flex items-center gap-4">
+                  <div className="relative">
+                    <div className="absolute inset-0 bg-gradient-to-br from-data-blue to-data-cyan rounded-xl blur-md opacity-50"></div>
+                    <div className="relative w-12 h-12 bg-gradient-to-br from-data-blue to-data-cyan rounded-xl flex items-center justify-center shadow-glow-sm">
+                      <Activity className="w-7 h-7 text-white" />
+                    </div>
                   </div>
                   <div>
-                    <h1 className="text-lg font-semibold text-light-50">URPO</h1>
-                    <p className="text-[10px] text-light-500 uppercase tracking-wider">
-                      Trace Explorer
+                    <h1 className="text-2xl font-bold text-glow bg-gradient-to-r from-white to-light-200 bg-clip-text text-transparent">
+                      URPO
+                    </h1>
+                    <p className="text-xs text-light-400 uppercase tracking-widest font-medium">
+                      Professional Trace Explorer
                     </p>
                   </div>
                 </div>
 
-                {/* Navigation */}
-                <nav className="flex items-center gap-1">
+                {/* Navigation with sharp styling */}
+                <nav className="flex items-center gap-2">
                   {navigationItems.map(({ key, icon: Icon, label, shortcut }) => (
                     <button
                       key={key}
                       onClick={() => setActiveView(key)}
-                      className={`
-                        px-3 py-2 rounded-md flex items-center gap-2 text-sm font-medium
-                        transition-all duration-150
-                        ${activeView === key
-                          ? 'bg-dark-200 text-data-blue'
-                          : 'text-light-300 hover:text-light-100 hover:bg-dark-200'
-                        }
-                      `}
+                      className={`nav-item-sharp ${activeView === key ? 'active' : ''}`}
                     >
                       <Icon className="w-4 h-4" />
-                      <span>{label}</span>
-                      <kbd className="hidden lg:inline-block px-1.5 py-0.5 text-[10px] bg-dark-300 text-light-500 rounded">
+                      <span className="font-medium">{label}</span>
+                      <kbd className="hidden lg:inline-block badge-sharp bg-dark-300 text-light-500 text-[10px] px-2 py-0.5">
                         {shortcut}
                       </kbd>
                     </button>
@@ -212,43 +213,68 @@ const App = memo(() => {
               </div>
 
               {/* Actions and Status */}
-              <div className="flex items-center gap-4">
-                {/* Global Search */}
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-light-500" />
-                  <input
-                    id="global-search"
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search traces, services... (Press /)"
-                    className="search-input pl-9 w-64"
-                  />
+              <div className="flex items-center gap-6">
+                {/* Professional Search */}
+                <div className="relative group">
+                  <div className="absolute inset-0 bg-gradient-to-r from-data-blue/10 to-data-purple/10 rounded-lg blur opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-light-500" />
+                    <input
+                      id="global-search"
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Search traces, services..."
+                      className="input-sharp pl-10 pr-16 w-80"
+                    />
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      <kbd className="badge-sharp text-[10px] px-2 py-1">⌘K</kbd>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Status indicators */}
+                <div className="flex items-center gap-3 px-4 py-2 sharp-panel bg-dark-100">
+                  <div className="flex items-center gap-2">
+                    <div className="status-sharp online"></div>
+                    <span className="text-xs font-medium text-light-300">Live</span>
+                  </div>
+                  <div className="w-px h-4 bg-dark-300"></div>
+                  <div className="text-xs text-light-400">
+                    {services.length} services
+                  </div>
                 </div>
 
                 {/* Action Buttons */}
-                <div className="flex items-center gap-2">
-                  <button className="btn-ghost p-2">
+                <div className="flex items-center gap-1">
+                  <button className="btn-sharp p-2" title="Filter">
                     <Filter className="w-4 h-4" />
                   </button>
                   <button
                     onClick={updateMetrics}
-                    className="btn-ghost p-2"
+                    className="btn-sharp p-2"
+                    title="Refresh"
                   >
                     <RefreshCw className="w-4 h-4" />
                   </button>
-                  <button className="btn-ghost p-2">
+                  <button className="btn-sharp p-2 relative" title="Notifications">
                     <Bell className="w-4 h-4" />
+                    <span className="absolute -top-1 -right-1 w-2 h-2 bg-semantic-error rounded-full"></span>
                   </button>
-                  <button className="btn-ghost p-2">
+                  <button className="btn-sharp p-2" title="Settings">
                     <Settings className="w-4 h-4" />
                   </button>
                 </div>
 
-                {/* User Menu */}
-                <div className="flex items-center gap-2 pl-4 border-l border-dark-300">
-                  <div className="w-8 h-8 bg-gradient-to-br from-data-purple to-data-pink rounded-full"></div>
-                  <ChevronDown className="w-4 h-4 text-light-500" />
+                {/* User Section */}
+                <div className="flex items-center gap-3 pl-4 border-l border-dark-300">
+                  <div className="text-right">
+                    <p className="text-xs font-medium text-light-200">Admin</p>
+                    <p className="text-[10px] text-light-500">Production</p>
+                  </div>
+                  <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-data-purple to-data-pink shadow-lg flex items-center justify-center text-white font-bold text-sm">
+                    A
+                  </div>
                 </div>
               </div>
             </div>
@@ -325,13 +351,40 @@ const App = memo(() => {
           </div>
         )}
 
-        {/* Main Content Area */}
-        <main className="flex-1 overflow-hidden bg-dark-50">
-          <div className="h-full">
+        {/* Main Content Area with polished styling */}
+        <main className="flex-1 overflow-hidden bg-dark-0 relative">
+          {/* Subtle background pattern */}
+          <div className="absolute inset-0 opacity-[0.02]" style={{
+            backgroundImage: `
+              linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+              linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)
+            `,
+            backgroundSize: '50px 50px'
+          }}></div>
+
+          <div className="relative h-full">
             {activeView === 'graph' && (
               <ErrorBoundary componentName="ServiceGraphPro" isolate>
-                <div className="h-full p-4">
-                  <ServiceGraphPro services={services} traces={traces} />
+                <div className="h-full p-6">
+                  <div className="h-full sharp-panel bg-dark-50 p-6">
+                    <div className="flex items-center justify-between mb-6">
+                      <div>
+                        <h2 className="text-xl font-bold text-light-50 mb-1">Service Dependency Map</h2>
+                        <p className="text-sm text-light-400">Real-time service interactions and health status</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button className="btn-sharp-primary text-sm px-4 py-2">
+                          Auto Layout
+                        </button>
+                        <button className="btn-sharp text-sm px-4 py-2">
+                          Export
+                        </button>
+                      </div>
+                    </div>
+                    <div className="h-[calc(100%-100px)] sharp-card p-4">
+                      <ServiceGraphPro services={services} traces={traces} />
+                    </div>
+                  </div>
                 </div>
               </ErrorBoundary>
             )}

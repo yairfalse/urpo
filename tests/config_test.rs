@@ -48,7 +48,7 @@ ui:
   theme: light
   vim_mode: false
 features:
-  enable_fake_spans: false
+  experimental: false
 "#;
 
     let config = ConfigBuilder::new()
@@ -63,7 +63,7 @@ features:
     assert_eq!(config.sampling.default_rate, 0.8);
     assert_eq!(config.sampling.per_service.get("high-volume"), Some(&0.1));
     assert_eq!(config.sampling.per_service.get("debug"), Some(&1.0));
-    assert!(!config.features.enable_fake_spans);
+    assert!(!config.features.experimental);
 }
 
 #[test]
