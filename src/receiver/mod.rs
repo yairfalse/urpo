@@ -36,6 +36,8 @@ pub struct OtelReceiver {
     storage: Arc<tokio::sync::RwLock<dyn crate::storage::StorageBackend>>,
     /// Health monitor
     health_monitor: Arc<crate::monitoring::Monitor>,
+    /// Sampling rate (0.0 to 1.0)
+    sampling_rate: f32,
 }
 
 impl OtelReceiver {
@@ -61,7 +63,14 @@ impl OtelReceiver {
             http_port,
             storage,
             health_monitor,
+            sampling_rate: 0.1, // Default to 10% sampling for production safety
         }
+    }
+
+    /// Set the sampling rate (0.0 to 1.0).
+    pub fn with_sampling_rate(mut self, rate: f32) -> Self {
+        self.sampling_rate = rate.clamp(0.0, 1.0);
+        self
     }
 
     /// Run both GRPC and HTTP receivers
@@ -168,20 +177,23 @@ impl OtelReceiver {
         Ok(())
     }
 
-    /// Process incoming spans.
+    /// Process incoming spans with sampling.
     async fn process_spans(&self, spans: Vec<UrpoSpan>) -> Result<()> {
         let storage = self.storage.write().await;
         for span in spans {
-            // Store the span
-            storage.store_span(span).await?;
+            // Apply sampling decision
+            if self.should_sample() {
+                storage.store_span(span).await?;
+            }
         }
         Ok(())
     }
 
-    /// Determine if a span should be sampled.
+    /// Determine if a span should be sampled based on the configured sampling rate.
+    #[inline]
     fn should_sample(&self) -> bool {
-        // Always sample for now
-        true
+        // Use fastrand for efficient random sampling
+        fastrand::f32() < self.sampling_rate
     }
 }
 
@@ -298,7 +310,33 @@ fn convert_otel_span(
     otel_span: opentelemetry_proto::tonic::trace::v1::Span,
     service_name: String,
 ) -> Result<UrpoSpan> {
-    // OTEL trace IDs are 16 bytes (32 hex chars), span IDs are 8 bytes (16 hex chars)
+    let (trace_id, span_id, parent_span_id) = extract_span_ids(&otel_span)?;
+    let service_name = parse_service_name(service_name)?;
+    let status = extract_span_status(&otel_span);
+    let timing = extract_span_timing(&otel_span);
+    let attributes = extract_span_attributes(&otel_span);
+
+    let mut builder = UrpoSpan::builder()
+        .trace_id(trace_id)
+        .span_id(span_id)
+        .service_name(service_name)
+        .operation_name(otel_span.name)
+        .start_time(timing.start_time)
+        .duration(timing.duration)
+        .status(status)
+        .attribute("span.kind", extract_span_kind(&otel_span));
+
+    if let Some(parent_id) = parent_span_id {
+        builder = builder.parent_span_id(parent_id);
+    }
+
+    builder.build()
+}
+
+/// Extract trace ID, span ID, and parent span ID from OTEL span
+fn extract_span_ids(
+    otel_span: &opentelemetry_proto::tonic::trace::v1::Span,
+) -> Result<(TraceId, SpanId, Option<SpanId>)> {
     let trace_id_hex = hex::encode(&otel_span.trace_id);
     let span_id_hex = hex::encode(&otel_span.span_id);
 
@@ -324,62 +362,57 @@ fn convert_otel_span(
         }
     };
 
-    let service_name = if service_name.is_empty() {
-        ServiceName::new("unknown".to_string())?
-    } else {
-        ServiceName::new(service_name)?
-    };
+    Ok((trace_id, span_id, parent_span_id))
+}
 
-    // Map span kind to an attribute instead
-    let kind_str = match otel_span.kind() {
+/// Parse and validate service name
+fn parse_service_name(service_name: String) -> Result<ServiceName> {
+    if service_name.is_empty() {
+        ServiceName::new("unknown".to_string())
+    } else {
+        ServiceName::new(service_name)
+    }
+}
+
+/// Extract span status from OTEL span
+fn extract_span_status(
+    otel_span: &opentelemetry_proto::tonic::trace::v1::Span,
+) -> SpanStatus {
+    if let Some(status) = &otel_span.status {
+        match status.code() {
+            opentelemetry_proto::tonic::trace::v1::status::StatusCode::Unset => SpanStatus::Unknown,
+            opentelemetry_proto::tonic::trace::v1::status::StatusCode::Ok => SpanStatus::Ok,
+            opentelemetry_proto::tonic::trace::v1::status::StatusCode::Error => {
+                SpanStatus::Error(status.message.clone())
+            },
+        }
+    } else {
+        SpanStatus::Unknown
+    }
+}
+
+/// Extract span kind as string
+fn extract_span_kind(otel_span: &opentelemetry_proto::tonic::trace::v1::Span) -> &'static str {
+    match otel_span.kind() {
         opentelemetry_proto::tonic::trace::v1::span::SpanKind::Unspecified => "internal",
         opentelemetry_proto::tonic::trace::v1::span::SpanKind::Internal => "internal",
         opentelemetry_proto::tonic::trace::v1::span::SpanKind::Server => "server",
         opentelemetry_proto::tonic::trace::v1::span::SpanKind::Client => "client",
         opentelemetry_proto::tonic::trace::v1::span::SpanKind::Producer => "producer",
         opentelemetry_proto::tonic::trace::v1::span::SpanKind::Consumer => "consumer",
-    };
-
-    let _start_time = nanos_to_datetime(otel_span.start_time_unix_nano);
-    let _end_time = nanos_to_datetime(otel_span.end_time_unix_nano);
-
-    let status = if let Some(status) = otel_span.status {
-        match status.code() {
-            opentelemetry_proto::tonic::trace::v1::status::StatusCode::Unset => SpanStatus::Unknown,
-            opentelemetry_proto::tonic::trace::v1::status::StatusCode::Ok => SpanStatus::Ok,
-            opentelemetry_proto::tonic::trace::v1::status::StatusCode::Error => {
-                SpanStatus::Error(status.message)
-            },
-        }
-    } else {
-        SpanStatus::Unknown
-    };
-
-    let mut attributes = HashMap::new();
-    for attr in otel_span.attributes {
-        if let Some(value) = attr.value {
-            attributes.insert(attr.key, value_to_string(value));
-        }
     }
+}
 
-    // Store events as attributes for now since we don't have SpanEvent in core types
-    for (i, event) in otel_span.events.into_iter().enumerate() {
-        attributes.insert(format!("event.{}.name", i), event.name);
-        attributes.insert(
-            format!("event.{}.time", i),
-            nanos_to_datetime(event.time_unix_nano).to_rfc3339(),
-        );
-        for attr in event.attributes {
-            if let Some(value) = attr.value {
-                attributes.insert(format!("event.{}.{}", i, attr.key), value_to_string(value));
-            }
-        }
-    }
+/// Timing information extracted from span
+struct SpanTiming {
+    start_time: std::time::SystemTime,
+    duration: std::time::Duration,
+}
 
-    // Add span kind to attributes
-    attributes.insert("span.kind".to_string(), kind_str.to_string());
-
-    // Calculate duration from start and end times
+/// Extract timing information from OTEL span
+fn extract_span_timing(
+    otel_span: &opentelemetry_proto::tonic::trace::v1::Span,
+) -> SpanTiming {
     let start_system = std::time::SystemTime::UNIX_EPOCH
         + std::time::Duration::from_nanos(otel_span.start_time_unix_nano);
     let end_system = std::time::SystemTime::UNIX_EPOCH
@@ -391,21 +424,40 @@ fn convert_otel_span(
         std::time::Duration::from_millis(0)
     };
 
-    let mut builder = UrpoSpan::builder()
-        .trace_id(trace_id)
-        .span_id(span_id)
-        .service_name(service_name)
-        .operation_name(otel_span.name)
-        .start_time(start_system)
-        .duration(duration)
-        .status(status)
-        .attribute("span.kind", kind_str);
+    SpanTiming {
+        start_time: start_system,
+        duration,
+    }
+}
 
-    if let Some(parent_id) = parent_span_id {
-        builder = builder.parent_span_id(parent_id);
+/// Extract attributes from OTEL span including events
+fn extract_span_attributes(
+    otel_span: &opentelemetry_proto::tonic::trace::v1::Span,
+) -> HashMap<String, String> {
+    let mut attributes = HashMap::new();
+
+    // Extract regular attributes
+    for attr in &otel_span.attributes {
+        if let Some(value) = &attr.value {
+            attributes.insert(attr.key.clone(), value_to_string(value.clone()));
+        }
     }
 
-    builder.build()
+    // Store events as attributes for now since we don't have SpanEvent in core types
+    for (i, event) in otel_span.events.iter().enumerate() {
+        attributes.insert(format!("event.{}.name", i), event.name.clone());
+        attributes.insert(
+            format!("event.{}.time", i),
+            nanos_to_datetime(event.time_unix_nano).to_rfc3339(),
+        );
+        for attr in &event.attributes {
+            if let Some(value) = &attr.value {
+                attributes.insert(format!("event.{}.{}", i, attr.key), value_to_string(value.clone()));
+            }
+        }
+    }
+
+    attributes
 }
 
 /// Convert nanoseconds to DateTime.

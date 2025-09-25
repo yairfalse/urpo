@@ -1,4 +1,5 @@
 import React, { memo } from 'react';
+import { motion } from 'framer-motion';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { ServiceHealthDashboard } from './components/tables/ServiceHealthDashboard';
@@ -15,6 +16,20 @@ import {
   type ViewMode
 } from './lib/tauri';
 import {
+  Button,
+  Input,
+  NavItem,
+  StatusIndicator,
+  Dropdown,
+  DropdownItem,
+  LoadingScreen,
+  Header,
+  Page,
+  Section,
+  Badge,
+  Metric
+} from './components';
+import {
   Activity,
   BarChart3,
   Layers,
@@ -25,13 +40,14 @@ import {
   RefreshCw,
   Settings,
   Bell,
-  ChevronDown
+  ChevronDown,
+  type LucideIcon
 } from 'lucide-react';
 
 // Navigation item type
 interface NavigationItem {
   key: ViewMode;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: LucideIcon;
   label: string;
   shortcut: string;
 }
@@ -70,15 +86,15 @@ const App = memo(() => {
 
   // Start the OTLP receiver on app initialization
   const startReceiver = useStartReceiver({
-    onError: (error) => {
+    onError: (error: any) => {
       console.error('Failed to start OTEL receiver:', error);
     }
   });
 
   // Initialize receiver on mount
   React.useEffect(() => {
-    startReceiver.mutate();
-  }, []);
+    startReceiver.mutate(undefined);
+  }, [startReceiver]);
 
   // ============================================================================
   // KEYBOARD SHORTCUTS
@@ -103,15 +119,7 @@ const App = memo(() => {
   // ============================================================================
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-dark-50">
-        <div className="text-center">
-          <div className="w-12 h-12 mx-auto mb-4 rounded-full border-2 border-data-blue border-t-transparent animate-spin"></div>
-          <h2 className="text-light-100 font-semibold text-lg mb-2">Initializing URPO</h2>
-          <p className="text-light-400 text-sm">Starting observability engine...</p>
-        </div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   const navigationItems: NavigationItem[] = [
@@ -125,11 +133,7 @@ const App = memo(() => {
   return (
     <ErrorBoundary componentName="App">
       <div className="h-screen bg-dark-0 text-light-50 flex flex-col">
-        {/* Ultra-polished header */}
-        <header className="sharp-panel bg-dark-50 border-b shadow-lg relative overflow-hidden">
-          {/* Gradient accent line */}
-          <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-data-blue to-transparent opacity-80"></div>
-
+        <Header>
           <div className="px-6 py-4">
             <div className="flex items-center justify-between">
               {/* Logo and Brand */}
@@ -154,17 +158,14 @@ const App = memo(() => {
                 {/* Navigation with sharp styling */}
                 <nav className="flex items-center gap-2">
                   {navigationItems.map(({ key, icon: Icon, label, shortcut }) => (
-                    <button
+                    <NavItem
                       key={key}
+                      icon={Icon}
+                      label={label}
+                      active={activeView === key}
+                      shortcut={shortcut}
                       onClick={() => setActiveView(key)}
-                      className={`nav-item-sharp ${activeView === key ? 'active' : ''}`}
-                    >
-                      <Icon className="w-4 h-4" />
-                      <span className="font-medium">{label}</span>
-                      <kbd className="hidden lg:inline-block badge-sharp bg-dark-300 text-light-500 text-[10px] px-2 py-0.5">
-                        {shortcut}
-                      </kbd>
-                    </button>
+                    />
                   ))}
                 </nav>
               </div>
@@ -172,81 +173,81 @@ const App = memo(() => {
               {/* Actions and Status */}
               <div className="flex items-center gap-6">
                 {/* Professional Search */}
-                <div className="relative group">
-                  <div className="absolute inset-0 bg-gradient-to-r from-data-blue/10 to-data-purple/10 rounded-lg blur opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-light-500" />
-                    <input
-                      id="global-search"
-                      type="text"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Search traces, services..."
-                      className="input-sharp pl-10 pr-16 w-80"
-                    />
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                      <kbd className="badge-sharp text-[10px] px-2 py-1">⌘K</kbd>
-                    </div>
-                  </div>
-                </div>
+                <Input
+                  id="global-search"
+                  icon={Search}
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search traces, services..."
+                  className="w-80"
+                  rightElement={<Badge>⌘K</Badge>}
+                />
 
                 {/* Status indicators */}
-                <div className="flex items-center gap-3 px-4 py-2 sharp-panel bg-dark-100">
-                  <div className="flex items-center gap-2">
-                    <div className="status-sharp online"></div>
-                    <span className="text-xs font-medium text-light-300">Live</span>
-                  </div>
+                <div className="flex items-center gap-3 px-4 py-2 bg-dark-100 rounded-lg border border-dark-400">
+                  <StatusIndicator status="online" label="Live" pulse />
                   <div className="w-px h-4 bg-dark-300"></div>
                   <div className="text-xs text-light-400">
-                    {services.length} services
+                    {(serviceMetrics.data as any)?.length || 0} services
                   </div>
                 </div>
 
                 {/* Action Buttons */}
                 <div className="flex items-center gap-2">
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={Filter}
                     onClick={toggleFilters}
-                    className={`btn-ghost p-2 ${showFilters ? 'bg-dark-200 text-data-blue' : ''}`}
                     title="Toggle Filters"
-                  >
-
-                    <Filter className="w-4 h-4" />
-                  </button>
-                  <button
+                    className={showFilters ? 'bg-dark-200 text-data-blue' : ''}
+                  ></Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={RefreshCw}
                     onClick={refetchAll}
-                    className="btn-ghost p-2"
                     title="Refresh Data"
-                  >
-                    <RefreshCw className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={toggleNotifications}
-                    className={`btn-ghost p-2 relative ${showNotifications ? 'bg-dark-200 text-data-blue' : ''}`}
-                    title="Notifications"
-                  >
-                    <Bell className="w-4 h-4" />
-                    <span className="absolute -top-1 -right-1 w-2 h-2 bg-semantic-error rounded-full"></span>
-                  </button>
-                  <button
+                  ></Button>
+                  <div className="relative">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      icon={Bell}
+                      onClick={toggleNotifications}
+                      title="Notifications"
+                      className={showNotifications ? 'bg-dark-200 text-data-blue' : ''}
+                    ></Button>
+                    <span className="absolute -top-1 -right-1 w-2 h-2 bg-semantic-error rounded-full" />
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={Settings}
                     onClick={toggleSettings}
-                    className={`btn-ghost p-2 ${showSettings ? 'bg-dark-200 text-data-blue' : ''}`}
                     title="Settings"
-                  >
-
-                    <Settings className="w-4 h-4" />
-                  </button>
+                    className={showSettings ? 'bg-dark-200 text-data-blue' : ''}
+                  ></Button>
                 </div>
 
                 {/* User Menu */}
-                <button
-                  onClick={toggleUserMenu}
-                  className="flex items-center gap-2 pl-4 border-l border-dark-300 hover:bg-dark-200 rounded-r-lg px-2 py-1 transition-colors"
-                >
-                  <div className="w-8 h-8 bg-gradient-to-br from-data-purple to-data-pink rounded-full flex items-center justify-center text-white font-semibold text-sm">
-                    U
-                  </div>
-                  <ChevronDown className={`w-4 h-4 text-light-500 transition-transform ${showUserMenu ? 'rotate-180' : ''}`} />
-                </button>
+                <div className="relative">
+                  <motion.button
+                    onClick={toggleUserMenu}
+                    className="flex items-center gap-2 pl-4 border-l border-dark-300 hover:bg-dark-200 rounded-r-lg px-2 py-1 transition-colors"
+                  >
+                    <div className="w-8 h-8 bg-gradient-to-br from-data-purple to-data-pink rounded-full flex items-center justify-center text-white font-semibold text-sm">
+                      U
+                    </div>
+                    <motion.div
+                      animate={{ rotate: showUserMenu ? 180 : 0 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <ChevronDown className="w-4 h-4 text-light-500" />
+                    </motion.div>
+                  </motion.button>
+                </div>
 
               </div>
             </div>
@@ -254,55 +255,46 @@ const App = memo(() => {
 
           {/* Sub-header with Metrics */}
           {systemMetrics.data && (
-            <div className="px-4 py-2 bg-dark-150 border-t border-dark-300">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="px-6 py-3 bg-dark-150 border-t border-dark-300"
+            >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-6">
-                  {/* Connection Status */}
-                  <div className="flex items-center gap-2">
-                    <div className={`w-2 h-2 rounded-full ${
-                      !hasError ? 'bg-semantic-success' : 'bg-semantic-warning'
-                    } animate-pulse`}></div>
-                    <span className="text-xs text-light-400">
-                      {!hasError ? 'OTLP Connected' : 'Connection Issues'}
-                    </span>
-                  </div>
+                  <StatusIndicator
+                    status={!hasError ? 'online' : 'warning'}
+                    label={!hasError ? 'OTLP Connected' : 'Connection Issues'}
+                    pulse
+                  />
 
                   {/* Key Metrics Bar */}
                   <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-light-500">Services</span>
-                      <span className="text-sm font-medium text-light-200">
-                        {serviceMetrics.data?.length || 0}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-light-500">Traces</span>
-                      <span className="text-sm font-medium text-light-200">
-                        {recentTraces.data?.length || 0}
-                      </span>
-                    </div>
-                    {systemMetrics.data && (
-                      <>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-light-500">Spans/s</span>
-                          <span className="text-sm font-medium text-data-cyan">
-                            {systemMetrics.data.spans_per_second.toFixed(0)}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-light-500">Memory</span>
-                          <span className="text-sm font-medium text-data-yellow">
-                            {systemMetrics.data.memory_usage_mb.toFixed(0)}MB
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-light-500">CPU</span>
-                          <span className="text-sm font-medium text-data-orange">
-                            {systemMetrics.data.cpu_usage_percent.toFixed(1)}%
-                          </span>
-                        </div>
-                      </>
-                    )}
+                    <Metric
+                      label="Services"
+                      value={(serviceMetrics.data as any)?.length || 0}
+                      color="blue"
+                    />
+                    <Metric
+                      label="Traces"
+                      value={(recentTraces.data as any)?.length || 0}
+                      color="blue"
+                    />
+                    <Metric
+                      label="Spans/s"
+                      value={(systemMetrics.data as any)?.spans_per_second?.toFixed(0) || '0'}
+                      color="cyan"
+                    />
+                    <Metric
+                      label="Memory"
+                      value={`${(systemMetrics.data as any)?.memory_usage_mb?.toFixed(0) || '0'}MB`}
+                      color="yellow"
+                    />
+                    <Metric
+                      label="CPU"
+                      value={`${(systemMetrics.data as any)?.cpu_usage_percent?.toFixed(1) || '0'}%`}
+                      color="red"
+                    />
                   </div>
                 </div>
 
@@ -317,19 +309,24 @@ const App = memo(() => {
                   </select>
                 </div>
               </div>
-            </div>
+            </motion.div>
           )}
-        </header>
+        </Header>
 
         {/* Filter Panel */}
         {showFilters && (
-          <div className="bg-dark-100 border-b border-dark-300 px-4 py-3">
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="bg-dark-100 border-b border-dark-300 px-6 py-4"
+          >
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
                 <label className="text-sm font-medium text-light-300">Service:</label>
                 <select className="bg-dark-200 border border-dark-400 rounded px-3 py-1 text-sm text-light-200">
                   <option>All Services</option>
-                  {serviceMetrics.data?.map(service => (
+                  {(serviceMetrics.data as any)?.map((service: any) => (
                     <option key={service.name} value={service.name}>
                       {service.name}
                     </option>
@@ -355,31 +352,31 @@ const App = memo(() => {
                 </select>
               </div>
             </div>
-          </div>
+          </motion.div>
         )}
 
         {/* Notifications Dropdown */}
-        {showNotifications && (
-          <div className="absolute top-16 right-4 w-80 bg-dark-100 border border-dark-300 rounded-lg shadow-xl z-50">
+        <div className="relative">
+          <Dropdown isOpen={showNotifications} onClose={() => toggleNotifications()}>
             <div className="p-4">
               <h3 className="text-sm font-semibold text-light-200 mb-3">Recent Notifications</h3>
               <div className="space-y-3">
                 <div className="flex items-start gap-3 p-3 bg-dark-200 rounded-lg">
-                  <div className="w-2 h-2 bg-semantic-error rounded-full mt-2 flex-shrink-0"></div>
+                  <StatusIndicator status="error" />
                   <div>
                     <p className="text-sm text-light-200">High error rate detected</p>
                     <p className="text-xs text-light-500">payment-service - 5 minutes ago</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3 p-3 bg-dark-200 rounded-lg">
-                  <div className="w-2 h-2 bg-semantic-warning rounded-full mt-2 flex-shrink-0"></div>
+                  <StatusIndicator status="warning" />
                   <div>
                     <p className="text-sm text-light-200">Latency spike observed</p>
                     <p className="text-xs text-light-500">auth-service - 12 minutes ago</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3 p-3 bg-dark-200 rounded-lg">
-                  <div className="w-2 h-2 bg-semantic-success rounded-full mt-2 flex-shrink-0"></div>
+                  <StatusIndicator status="online" />
                   <div>
                     <p className="text-sm text-light-200">Service recovered</p>
                     <p className="text-xs text-light-500">notification-service - 1 hour ago</p>
@@ -387,39 +384,26 @@ const App = memo(() => {
                 </div>
               </div>
             </div>
-          </div>
-        )}
+          </Dropdown>
+        </div>
 
         {/* Settings Dropdown */}
-        {showSettings && (
-          <div className="absolute top-16 right-4 w-64 bg-dark-100 border border-dark-300 rounded-lg shadow-xl z-50">
-            <div className="p-4">
-              <h3 className="text-sm font-semibold text-light-200 mb-3">Settings</h3>
-              <div className="space-y-2">
-                <button className="w-full text-left px-3 py-2 text-sm text-light-300 hover:bg-dark-200 rounded">
-                  Theme Settings
-                </button>
-                <button className="w-full text-left px-3 py-2 text-sm text-light-300 hover:bg-dark-200 rounded">
-                  Data Refresh Rate
-                </button>
-                <button className="w-full text-left px-3 py-2 text-sm text-light-300 hover:bg-dark-200 rounded">
-                  Export Settings
-                </button>
-                <button className="w-full text-left px-3 py-2 text-sm text-light-300 hover:bg-dark-200 rounded">
-                  Keyboard Shortcuts
-                </button>
-                <hr className="border-dark-300 my-2" />
-                <button className="w-full text-left px-3 py-2 text-sm text-light-300 hover:bg-dark-200 rounded">
-                  About URPO
-                </button>
-              </div>
+        <div className="relative">
+          <Dropdown isOpen={showSettings} onClose={() => toggleSettings()} className="w-64">
+            <div className="p-2">
+              <DropdownItem>Theme Settings</DropdownItem>
+              <DropdownItem>Data Refresh Rate</DropdownItem>
+              <DropdownItem>Export Settings</DropdownItem>
+              <DropdownItem>Keyboard Shortcuts</DropdownItem>
+              <hr className="border-dark-300 my-2" />
+              <DropdownItem>About URPO</DropdownItem>
             </div>
-          </div>
-        )}
+          </Dropdown>
+        </div>
 
         {/* User Menu Dropdown */}
-        {showUserMenu && (
-          <div className="absolute top-16 right-4 w-56 bg-dark-100 border border-dark-300 rounded-lg shadow-xl z-50">
+        <div className="relative">
+          <Dropdown isOpen={showUserMenu} onClose={() => toggleUserMenu()} className="w-56">
             <div className="p-4">
               <div className="flex items-center gap-3 mb-4 pb-3 border-b border-dark-300">
                 <div className="w-10 h-10 bg-gradient-to-br from-data-purple to-data-pink rounded-full flex items-center justify-center text-white font-semibold">
@@ -430,38 +414,33 @@ const App = memo(() => {
                   <p className="text-xs text-light-500">admin@urpo.dev</p>
                 </div>
               </div>
-              <div className="space-y-2">
-                <button className="w-full text-left px-3 py-2 text-sm text-light-300 hover:bg-dark-200 rounded">
-                  Profile Settings
-                </button>
-                <button className="w-full text-left px-3 py-2 text-sm text-light-300 hover:bg-dark-200 rounded">
-                  API Keys
-                </button>
-                <button className="w-full text-left px-3 py-2 text-sm text-light-300 hover:bg-dark-200 rounded">
-                  Preferences
-                </button>
+              <div className="space-y-1">
+                <DropdownItem>Profile Settings</DropdownItem>
+                <DropdownItem>API Keys</DropdownItem>
+                <DropdownItem>Preferences</DropdownItem>
                 <hr className="border-dark-300 my-2" />
-                <button className="w-full text-left px-3 py-2 text-sm text-light-300 hover:bg-dark-200 rounded">
-                  Help & Support
-                </button>
-                <button className="w-full text-left px-3 py-2 text-sm text-semantic-error hover:bg-semantic-error hover:bg-opacity-10 rounded">
-                  Sign Out
-                </button>
+                <DropdownItem>Help & Support</DropdownItem>
+                <DropdownItem variant="danger">Sign Out</DropdownItem>
               </div>
             </div>
-          </div>
-        )}
+          </Dropdown>
+        </div>
 
         {/* Error Banner */}
         {hasError && (
-          <div className="px-4 py-2 bg-semantic-error bg-opacity-10 border-b border-semantic-error border-opacity-30">
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="px-6 py-3 bg-semantic-error bg-opacity-10 border-b border-semantic-error border-opacity-30"
+          >
             <div className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-semantic-error rounded-full"></div>
+              <StatusIndicator status="error" />
               <span className="text-sm text-semantic-error">
                 Connection error - check OTEL receiver status
               </span>
             </div>
-          </div>
+          </motion.div>
         )}
 
         {/* Main Content Area with polished styling */}
@@ -478,112 +457,99 @@ const App = memo(() => {
           <div className="relative h-full">
             {activeView === 'graph' && (
               <ErrorBoundary componentName="ServiceGraphPro" isolate>
-                <div className="h-full p-6">
-                  <div className="h-full sharp-panel bg-dark-50 p-6">
-                    <div className="flex items-center justify-between mb-6">
-                      <div>
-                        <h2 className="text-xl font-bold text-light-50 mb-1">Service Dependency Map</h2>
-                        <p className="text-sm text-light-400">Real-time service interactions and health status</p>
+                <Page>
+                  <Section
+                    title="Service Dependency Map"
+                    subtitle="Real-time service interactions and health status"
+                    action={
+                      <div className="flex gap-2">
+                        <Button variant="primary" size="sm">Auto Layout</Button>
+                        <Button variant="secondary" size="sm">Export</Button>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <button className="btn-sharp-primary text-sm px-4 py-2">
-                          Auto Layout
-                        </button>
-                        <button className="btn-sharp text-sm px-4 py-2">
-                          Export
-                        </button>
-                      </div>
-                    </div>
-                    <div className="h-[calc(100%-100px)] sharp-card p-4">
-                      <ServiceGraphPro
-                        services={serviceMetrics.data || []}
-                        traces={recentTraces.data || []}
-                      />
-                    </div>
-                  </div>
-                </div>
+                    }
+                  >
+                    <ServiceGraphPro
+                      services={(serviceMetrics.data as any) || []}
+                      traces={(recentTraces.data as any) || []}
+                    />
+                  </Section>
+                </Page>
               </ErrorBoundary>
             )}
 
             {activeView === 'flows' && (
               <ErrorBoundary componentName="FlowTable" isolate>
-                <div className="h-full p-4">
-                  {(recentTraces.data?.length || 0) > 100 ? (
+                <Page className="p-4">
+                  {((recentTraces.data as any)?.length || 0) > 100 ? (
                     <VirtualizedFlowTable
-                      traces={recentTraces.data || []}
+                      traces={(recentTraces.data as any) || []}
                       onRefresh={recentTraces.refetch}
                     />
                   ) : (
                     <FlowTable
-                      traces={recentTraces.data || []}
+                      traces={(recentTraces.data as any) || []}
                       onRefresh={recentTraces.refetch}
                     />
                   )}
-                </div>
+                </Page>
               </ErrorBoundary>
             )}
 
             {activeView === 'health' && (
               <ErrorBoundary componentName="HealthView" isolate>
-                <div className="p-4 dashboard-grid">
-                  <div className="panel-full">
-                    <ServiceHealthDashboard services={serviceMetrics.data || []} />
-                  </div>
+                <Page className="space-y-6">
+                  <ServiceHealthDashboard services={(serviceMetrics.data as any) || []} />
                   {systemMetrics.data && (
-                    <div className="panel-full">
-                      <SystemMetrics metrics={systemMetrics.data} />
-                    </div>
+                    <SystemMetrics metrics={(systemMetrics.data as any)} />
                   )}
-                </div>
+                </Page>
               </ErrorBoundary>
             )}
 
             {activeView === 'traces' && (
               <ErrorBoundary componentName="TraceExplorer" isolate>
-                <div className="h-full p-4">
+                <Page className="p-4">
                   <TraceExplorer
-                    traces={recentTraces.data || []}
+                    traces={(recentTraces.data as any) || []}
                     onRefresh={recentTraces.refetch}
                   />
-                </div>
+                </Page>
               </ErrorBoundary>
             )}
 
             {activeView === 'servicemap' && (
               <ErrorBoundary componentName="ServiceMap" isolate>
-                <div className="h-full p-4 bg-dark-50">
+                <Page>
                   <ServiceMap />
-                </div>
+                </Page>
               </ErrorBoundary>
             )}
           </div>
         </main>
 
         {/* Status Bar */}
-        <footer className="bg-dark-100 border-t border-dark-300 px-4 py-2">
+        <footer className="bg-dark-100 border-t border-dark-300 px-6 py-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4 text-xs">
               <span className="text-light-500">
                 © 2025 URPO • Ultra-Fast OTEL Explorer
               </span>
-              <span className="text-light-600">
-                v0.1.0
-              </span>
+              <Badge variant="info" size="sm">v0.1.0</Badge>
             </div>
 
-            <div className="flex items-center gap-4 text-xs">
+            <div className="flex items-center gap-4">
               {systemMetrics.data && (
                 <>
-                  <span className="text-light-500">
-                    Total Spans: <span className="font-medium text-light-300">
-                      {systemMetrics.data.total_spans.toLocaleString()}
-                    </span>
-                  </span>
-                  <span className="text-light-500">
-                    Uptime: <span className="font-medium text-light-300">
-                      {Math.floor(systemMetrics.data.uptime_seconds / 60)}m
-                    </span>
-                  </span>
+                  <Metric
+                    label="Total Spans"
+                    value={(systemMetrics.data as any)?.total_spans?.toLocaleString() || '0'}
+                    color="green"
+                  />
+                  <Metric
+                    label="Uptime"
+                    value={`${Math.floor(((systemMetrics.data as any)?.uptime_seconds || 0) / 60)}m`}
+                    color="cyan"
+                  />
                 </>
               )}
             </div>

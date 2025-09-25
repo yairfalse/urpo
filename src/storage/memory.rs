@@ -410,6 +410,7 @@ impl InMemoryStorage {
     }
 
     /// Check if cleanup is needed based on memory pressure.
+    #[inline]
     pub async fn should_cleanup(&self) -> bool {
         let last_cleanup = *self.last_cleanup.lock().await;
         let memory_usage = self.counters.memory_bytes.load(Ordering::Relaxed);
@@ -425,12 +426,14 @@ impl InMemoryStorage {
     }
 
     /// Get current memory pressure level.
+    #[inline]
     pub fn get_memory_pressure(&self) -> f64 {
         let memory_usage = update_counter!(self.counters.memory_bytes, get);
         memory_usage as f64 / self.cleanup_config.max_memory_bytes as f64
     }
 
     /// Get storage health status.
+    #[inline]
     pub fn get_health_status(&self) -> StorageHealth {
         let pressure = self.get_memory_pressure();
 
@@ -651,6 +654,7 @@ impl StorageBackend for InMemoryStorage {
         Ok(())
     }
 
+    #[inline]
     async fn get_span(&self, span_id: &SpanId) -> Result<Option<Span>> {
         Ok(self.spans.get(span_id).map(|entry| entry.clone()))
     }
@@ -716,6 +720,7 @@ impl StorageBackend for InMemoryStorage {
         Ok(metrics)
     }
 
+    #[inline(always)]
     async fn get_span_count(&self) -> Result<usize> {
         Ok(self.spans.len())
     }
@@ -730,6 +735,7 @@ impl StorageBackend for InMemoryStorage {
         }
     }
 
+    #[inline]
     async fn list_services(&self) -> Result<Vec<ServiceName>> {
         Ok(self.list_active_services().await)
     }
@@ -742,10 +748,12 @@ impl StorageBackend for InMemoryStorage {
         self.emergency_cleanup_internal().await
     }
 
+    #[inline(always)]
     fn get_health(&self) -> StorageHealth {
         self.get_health_status()
     }
 
+    #[inline(always)]
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }

@@ -195,7 +195,10 @@ impl App {
 }
 
 /// Run the TUI
-pub async fn run_tui(storage: Arc<RwLock<dyn StorageBackend>>) -> Result<()> {
+pub async fn run_tui(
+    storage: Arc<RwLock<dyn StorageBackend>>,
+    _monitor: Arc<crate::monitoring::Monitor>,
+) -> Result<()> {
     // Setup terminal
     enable_raw_mode().map_err(|e| UrpoError::render(format!("Failed to enable raw mode: {}", e)))?;
     let mut stdout = io::stdout();
