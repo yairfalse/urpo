@@ -586,11 +586,11 @@ fn extract_span_ids(
 }
 
 /// Parse and validate service name
-fn parse_service_name(service_name: String) -> Result<ServiceName> {
+fn parse_service_name(service_name: &str) -> Result<ServiceName> {
     if service_name.is_empty() {
         ServiceName::new("unknown".to_string())
     } else {
-        ServiceName::new(service_name)
+        ServiceName::new(service_name.to_string())
     }
 }
 
