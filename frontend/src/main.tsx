@@ -7,8 +7,7 @@ console.log('main.tsx: Starting imports...');
 
 import App from './App';
 import './index.css';
-import './styles/professional.css';
-import './styles/sharp.css';
+import './styles/design-system.css';
 
 console.log('main.tsx: Imports complete, App:', App);
 
