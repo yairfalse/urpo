@@ -13,15 +13,17 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
+    "@radix-ui/themes": "^3.2.1",
     "@react-three/drei": "^9.122.0",
     "@react-three/fiber": "^8.18.0",
     "@tanstack/react-query": "^5.90.2",
     "@tanstack/react-virtual": "^3.13.12",
     "@tauri-apps/api": "^1.5.0",
     "@types/three": "^0.180.0",
-    "clsx": "^2.0.0",
+    "clsx": "^2.1.1",
     "d3": "^7.9.0",
     "date-fns": "^2.30.0",
+    "framer-motion": "^11.18.2",
     "lucide-react": "^0.542.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

@@ -42,6 +42,7 @@
 #![allow(clippy::must_use_candidate)]
 
 pub mod api;
+pub mod application;
 pub mod cli;
 pub mod core;
 pub mod export;
@@ -56,4 +57,5 @@ pub mod storage;
 pub mod tui;
 
 // Re-export core types for convenience
+pub use crate::application::Application;
 pub use crate::core::{Config, Result};
