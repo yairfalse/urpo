@@ -26,10 +26,8 @@ impl Application {
         let monitor = Arc::new(Monitor::new());
 
         // Initialize storage with configuration
-        let storage = Arc::new(UnifiedStorage::new(
-            config.storage.max_spans,
-            config.storage.max_memory_mb,
-        ));
+        let storage =
+            Arc::new(UnifiedStorage::new(config.storage.max_spans, config.storage.max_memory_mb));
 
         // Initialize receiver with storage and monitor
         let receiver = Arc::new(
@@ -65,10 +63,7 @@ impl Application {
         // If TUI is enabled, run it; otherwise just wait for shutdown
         if self.config.ui.enabled {
             // Run TUI in foreground
-            let result = tui::run_tui(
-                self.storage.as_backend(),
-                self.monitor.clone(),
-            ).await;
+            let result = tui::run_tui(self.storage.as_backend(), self.monitor.clone()).await;
 
             // Shutdown receiver when TUI exits
             receiver_handle.abort();

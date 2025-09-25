@@ -417,21 +417,23 @@ impl CompressionEngine {
         let base_time = columnar.start_times.iter().min().copied().unwrap_or(0);
 
         for i in 0..columnar.trace_ids.len() {
-            use crate::core::{SpanBuilder, SpanId, SpanStatus, TraceId, ServiceName};
+            use crate::core::{ServiceName, SpanBuilder, SpanId, SpanStatus, TraceId};
 
             // Reconstruct timestamp
             let timestamp_nanos = base_time + columnar.start_times.get(i).copied().unwrap_or(0);
-            let start_time = std::time::UNIX_EPOCH
-                + std::time::Duration::from_nanos(timestamp_nanos);
+            let start_time =
+                std::time::UNIX_EPOCH + std::time::Duration::from_nanos(timestamp_nanos);
 
             // Decode service and operation names
             let service_idx = columnar.service_indices.get(i).copied().unwrap_or(0);
             let operation_idx = columnar.operation_indices.get(i).copied().unwrap_or(0);
 
-            let service_name = string_pool.get(service_idx)
+            let service_name = string_pool
+                .get(service_idx)
                 .unwrap_or("unknown")
                 .to_string();
-            let operation_name = string_pool.get(operation_idx)
+            let operation_name = string_pool
+                .get(operation_idx)
                 .unwrap_or("unknown")
                 .to_string();
 
@@ -452,7 +454,7 @@ impl CompressionEngine {
                 .operation_name(operation_name)
                 .start_time(start_time)
                 .duration(std::time::Duration::from_nanos(
-                    columnar.durations.get(i).copied().unwrap_or(0) as u64
+                    columnar.durations.get(i).copied().unwrap_or(0) as u64,
                 ))
                 .status(status);
 
@@ -467,9 +469,11 @@ impl CompressionEngine {
             for (j, &span_idx) in columnar.attribute_spans.iter().enumerate() {
                 if span_idx == i as u32 {
                     if let (Some(&key_idx), Some(&val_idx)) =
-                        (columnar.attribute_keys.get(j), columnar.attribute_values.get(j)) {
+                        (columnar.attribute_keys.get(j), columnar.attribute_values.get(j))
+                    {
                         if let (Some(key), Some(val)) =
-                            (string_pool.get(key_idx), string_pool.get(val_idx)) {
+                            (string_pool.get(key_idx), string_pool.get(val_idx))
+                        {
                             attributes.insert(key.to_string(), val.to_string());
                         }
                     }

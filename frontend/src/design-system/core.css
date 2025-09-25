@@ -1,0 +1,524 @@
+/**
+ * URPO Core Design System CSS
+ * Single source of truth - no other CSS files needed
+ */
+
+/* ============================================================================
+   RESET & BASE
+   ============================================================================ */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  background: #0A0A0A;
+  color: #A3A3A3;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ============================================================================
+   PAGE LAYOUT
+   ============================================================================ */
+
+.urpo-page {
+  height: 100%;
+  background: #0A0A0A;
+  display: flex;
+  flex-direction: column;
+}
+
+.urpo-page-header {
+  background: #141414;
+  border-bottom: 1px solid #262626;
+  padding: 16px 24px;
+}
+
+.urpo-page-header-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.urpo-page-header-text {
+  flex: 1;
+}
+
+.urpo-page-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #FFFFFF;
+  line-height: 1.2;
+}
+
+.urpo-page-subtitle {
+  font-size: 12px;
+  color: #666666;
+  margin-top: 2px;
+}
+
+.urpo-page-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.urpo-page-metrics {
+  display: flex;
+  gap: 24px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #262626;
+}
+
+/* ============================================================================
+   CARD
+   ============================================================================ */
+
+.urpo-card {
+  background: #141414;
+  border: 1px solid #262626;
+  border-radius: 6px;
+  padding: 16px;
+  transition: all 0.15s ease;
+}
+
+.urpo-card-clickable {
+  cursor: pointer;
+}
+
+.urpo-card-clickable:hover {
+  background: #1A1A1A;
+  border-color: #333333;
+}
+
+/* ============================================================================
+   METRIC
+   ============================================================================ */
+
+.urpo-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.urpo-metric-label {
+  font-size: 11px;
+  color: #666666;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.urpo-metric-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: #FFFFFF;
+}
+
+.urpo-metric-primary { color: #0EA5E9; }
+.urpo-metric-success { color: #10B981; }
+.urpo-metric-warning { color: #F59E0B; }
+.urpo-metric-error { color: #EF4444; }
+.urpo-metric-info { color: #8B5CF6; }
+
+.urpo-metric-up { color: #10B981; }
+.urpo-metric-down { color: #EF4444; }
+
+/* ============================================================================
+   TABLE
+   ============================================================================ */
+
+.urpo-table-container {
+  background: #141414;
+  border: 1px solid #262626;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.urpo-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.urpo-table-header {
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #666666;
+  background: #0A0A0A;
+  border-bottom: 1px solid #262626;
+}
+
+.urpo-table-row {
+  border-bottom: 1px solid #262626;
+  transition: background 0.15s ease;
+}
+
+.urpo-table-row:last-child {
+  border-bottom: none;
+}
+
+.urpo-table-row-clickable {
+  cursor: pointer;
+}
+
+.urpo-table-row:hover {
+  background: #1A1A1A;
+}
+
+.urpo-table-cell {
+  padding: 12px;
+  font-size: 12px;
+  color: #A3A3A3;
+}
+
+.urpo-align-left { text-align: left; }
+.urpo-align-center { text-align: center; }
+.urpo-align-right { text-align: right; }
+
+/* ============================================================================
+   LIST
+   ============================================================================ */
+
+.urpo-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: #141414;
+  border: 1px solid #262626;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+
+.urpo-list-item + .urpo-list-item {
+  margin-top: 8px;
+}
+
+.urpo-list-item-clickable {
+  cursor: pointer;
+}
+
+.urpo-list-item-clickable:hover {
+  background: #1A1A1A;
+  border-color: #333333;
+}
+
+.urpo-list-item-content {
+  flex: 1;
+}
+
+.urpo-list-item-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: #FFFFFF;
+}
+
+.urpo-list-item-subtitle {
+  font-size: 11px;
+  color: #666666;
+  margin-top: 2px;
+}
+
+.urpo-list-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.urpo-list-item-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: #FFFFFF;
+}
+
+/* ============================================================================
+   BUTTON
+   ============================================================================ */
+
+.urpo-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: none;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  outline: none;
+}
+
+.urpo-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Variants */
+.urpo-button-primary {
+  background: #0EA5E9;
+  color: #FFFFFF;
+}
+
+.urpo-button-primary:hover:not(:disabled) {
+  background: #0284C7;
+}
+
+.urpo-button-secondary {
+  background: #1A1A1A;
+  color: #A3A3A3;
+  border: 1px solid #333333;
+}
+
+.urpo-button-secondary:hover:not(:disabled) {
+  background: #222222;
+  color: #FFFFFF;
+}
+
+.urpo-button-ghost {
+  background: transparent;
+  color: #666666;
+}
+
+.urpo-button-ghost:hover:not(:disabled) {
+  background: #1A1A1A;
+  color: #A3A3A3;
+}
+
+/* Sizes */
+.urpo-button-sm {
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
+.urpo-button-md {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+.urpo-button-lg {
+  padding: 8px 16px;
+  font-size: 13px;
+}
+
+/* ============================================================================
+   INPUT
+   ============================================================================ */
+
+.urpo-input {
+  width: 100%;
+  padding: 8px 12px;
+  background: #0A0A0A;
+  border: 1px solid #333333;
+  border-radius: 6px;
+  color: #FFFFFF;
+  font-size: 12px;
+  transition: all 0.15s ease;
+  outline: none;
+}
+
+.urpo-input::placeholder {
+  color: #4A4A4A;
+}
+
+.urpo-input:focus {
+  border-color: #0EA5E9;
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
+}
+
+/* ============================================================================
+   STATUS
+   ============================================================================ */
+
+.urpo-status-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.urpo-status-primary { background: #0EA5E9; }
+.urpo-status-success { background: #10B981; }
+.urpo-status-warning { background: #F59E0B; }
+.urpo-status-error { background: #EF4444; }
+.urpo-status-info { background: #8B5CF6; }
+
+.urpo-status-pulse {
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* ============================================================================
+   BADGE
+   ============================================================================ */
+
+.urpo-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.urpo-badge-primary {
+  background: rgba(14, 165, 233, 0.2);
+  color: #0EA5E9;
+}
+
+.urpo-badge-success {
+  background: rgba(16, 185, 129, 0.2);
+  color: #10B981;
+}
+
+.urpo-badge-warning {
+  background: rgba(245, 158, 11, 0.2);
+  color: #F59E0B;
+}
+
+.urpo-badge-error {
+  background: rgba(239, 68, 68, 0.2);
+  color: #EF4444;
+}
+
+.urpo-badge-info {
+  background: rgba(139, 92, 246, 0.2);
+  color: #8B5CF6;
+}
+
+/* ============================================================================
+   EMPTY STATE
+   ============================================================================ */
+
+.urpo-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  text-align: center;
+}
+
+.urpo-empty-state-icon {
+  color: #333333;
+  margin-bottom: 16px;
+}
+
+.urpo-empty-state-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #666666;
+  margin-bottom: 8px;
+}
+
+.urpo-empty-state-description {
+  font-size: 12px;
+  color: #4A4A4A;
+  max-width: 300px;
+}
+
+/* ============================================================================
+   LOADING STATE
+   ============================================================================ */
+
+.urpo-loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  gap: 12px;
+}
+
+.urpo-spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid #333333;
+  border-top-color: #0EA5E9;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.urpo-loading-text {
+  font-size: 12px;
+  color: #666666;
+}
+
+/* ============================================================================
+   GRID
+   ============================================================================ */
+
+.urpo-grid {
+  display: grid;
+}
+
+.urpo-grid-1 { grid-template-columns: 1fr; }
+.urpo-grid-2 { grid-template-columns: repeat(2, 1fr); }
+.urpo-grid-3 { grid-template-columns: repeat(3, 1fr); }
+.urpo-grid-4 { grid-template-columns: repeat(4, 1fr); }
+
+/* ============================================================================
+   SCROLLBAR
+   ============================================================================ */
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0A0A0A;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #333333;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #404040;
+}
+
+/* ============================================================================
+   UTILITIES
+   ============================================================================ */
+
+.urpo-content {
+  flex: 1;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+.urpo-section {
+  margin-bottom: 24px;
+}
+
+.urpo-section:last-child {
+  margin-bottom: 0;
+}
+
+.urpo-divider {
+  height: 1px;
+  background: #262626;
+  margin: 16px 0;
+}

@@ -254,6 +254,40 @@ fn compute_scores_scalar(lengths: &[u32], weights: &[f32]) -> Vec<f32> {
         .collect()
 }
 
+/// SIMD-accelerated trace ID lookup
+#[inline]
+pub fn find_trace_id_simd(needle: u128, haystack: &[u128]) -> Option<usize> {
+    #[cfg(target_arch = "x86_64")]
+    {
+        if is_x86_feature_detected!("avx2") {
+            unsafe { find_trace_id_simd_internal(needle, haystack) }
+        } else {
+            find_trace_id_scalar(needle, haystack)
+        }
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    {
+        find_trace_id_scalar(needle, haystack)
+    }
+}
+
+/// SIMD-accelerated batch scoring for search relevance
+#[inline]
+pub fn compute_scores_simd(lengths: &[u32], weights: &[f32]) -> Vec<f32> {
+    #[cfg(target_arch = "x86_64")]
+    {
+        if is_x86_feature_detected!("avx2") {
+            unsafe { compute_scores_simd_internal(lengths, weights) }
+        } else {
+            compute_scores_scalar(lengths, weights)
+        }
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    {
+        compute_scores_scalar(lengths, weights)
+    }
+}
+
 /// Batch check if any values in the array match the target using SIMD
 #[inline]
 pub fn contains_u64_simd(haystack: &[u64], needle: u64) -> bool {

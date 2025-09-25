@@ -3,11 +3,7 @@
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use urpo_lib::{
-    monitoring::Monitor,
-    receiver::OtelReceiver,
-    storage::StorageBackend,
-};
+use urpo_lib::{monitoring::Monitor, receiver::OtelReceiver, storage::StorageBackend};
 
 /// Application state shared across Tauri commands
 pub struct AppState {

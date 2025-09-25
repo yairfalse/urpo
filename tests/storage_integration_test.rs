@@ -19,7 +19,11 @@ async fn test_storage_with_real_spans() {
             .operation_name(format!("operation_{}", i % 3))
             .start_time(std::time::SystemTime::now())
             .duration(Duration::from_millis(i as u64 * 10))
-            .status(if i % 10 == 0 { SpanStatus::Error("test error".to_string()) } else { SpanStatus::Ok })
+            .status(if i % 10 == 0 {
+                SpanStatus::Error("test error".to_string())
+            } else {
+                SpanStatus::Ok
+            })
             .build_default();
         spans.push(span);
     }
@@ -94,7 +98,11 @@ async fn test_metrics_calculation_accuracy() {
             .span_id(SpanId::new(format!("span_{:04}", i)).unwrap())
             .service_name(ServiceName::new(format!("service_{}", i % 5)).unwrap())
             .operation_name(format!("operation_{}", i % 3))
-            .status(if i % 10 == 0 { SpanStatus::Error("test error".to_string()) } else { SpanStatus::Ok })
+            .status(if i % 10 == 0 {
+                SpanStatus::Error("test error".to_string())
+            } else {
+                SpanStatus::Ok
+            })
             .build_default();
         storage.store_span(span).await.unwrap();
     }
@@ -144,15 +152,25 @@ async fn test_service_health_status() {
         let span = SpanBuilder::default()
             .trace_id(TraceId::new(format!("trace_{:04}", i)).unwrap())
             .span_id(SpanId::new(format!("span_{:04}", i)).unwrap())
-            .service_name(ServiceName::new(match service_num {
-                0 => "api-gateway",
-                1 => "user-service",
-                2 => "order-service",
-                3 => "payment-service",
-                _ => "inventory-service",
-            }.to_string()).unwrap())
+            .service_name(
+                ServiceName::new(
+                    match service_num {
+                        0 => "api-gateway",
+                        1 => "user-service",
+                        2 => "order-service",
+                        3 => "payment-service",
+                        _ => "inventory-service",
+                    }
+                    .to_string(),
+                )
+                .unwrap(),
+            )
             .operation_name("test-op")
-            .status(if has_error { SpanStatus::Error("error".to_string()) } else { SpanStatus::Ok })
+            .status(if has_error {
+                SpanStatus::Error("error".to_string())
+            } else {
+                SpanStatus::Ok
+            })
             .build_default();
         storage.store_span(span).await.unwrap();
     }

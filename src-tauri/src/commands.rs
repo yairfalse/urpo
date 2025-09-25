@@ -1,10 +1,10 @@
 //! Optimized Tauri command handlers with performance-focused macros.
 
+use serde_json::Value;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{State, Window};
-use serde_json::Value;
 
-use crate::{AppState, ServiceMetrics, TraceInfo, StorageInfo};
+use crate::{AppState, ServiceMetrics, StorageInfo, TraceInfo};
 use urpo_lib::core::{ServiceName, TraceId};
 
 /// Macro for efficient error conversion with zero allocation where possible
@@ -77,7 +77,9 @@ macro_rules! batch_convert {
 
 #[tauri::command]
 #[inline]
-pub async fn get_service_metrics(state: State<'_, AppState>) -> Result<Vec<ServiceMetrics>, String> {
+pub async fn get_service_metrics(
+    state: State<'_, AppState>,
+) -> Result<Vec<ServiceMetrics>, String> {
     timed_command!("get_service_metrics", {
         let metrics = map_err_str!(state.storage.get_service_metrics().await)?;
 
@@ -148,7 +150,10 @@ pub async fn list_recent_traces(
             .map_err(|e| e.to_string())?;
 
         let traces = map_err_str!(
-            state.storage.list_recent_traces(limit, service.as_ref()).await
+            state
+                .storage
+                .list_recent_traces(limit, service.as_ref())
+                .await
         )?;
 
         Ok(batch_convert!(traces, convert_trace_info))

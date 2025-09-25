@@ -23,10 +23,16 @@ async fn test_list_recent_traces() {
     assert_trace_properties!(traces[0], spans: 4, service: "api-gateway");
 
     // Test filtering by service
-    let api_traces = test_storage_query!(storage, recent_traces(10, &ServiceName::new("api-gateway".to_string()).unwrap()));
+    let api_traces = test_storage_query!(
+        storage,
+        recent_traces(10, &ServiceName::new("api-gateway".to_string()).unwrap())
+    );
     assert_eq!(api_traces.len(), 5);
 
-    let service_traces = test_storage_query!(storage, recent_traces(10, &ServiceName::new("service-1".to_string()).unwrap()));
+    let service_traces = test_storage_query!(
+        storage,
+        recent_traces(10, &ServiceName::new("service-1".to_string()).unwrap())
+    );
     assert_eq!(service_traces.len(), 5);
 }
 
@@ -124,39 +130,45 @@ async fn test_trace_with_multiple_services() {
     let trace_id = TraceId::new("complex_trace".to_string()).unwrap();
 
     // Root span
-    storage.store_span(
-        Span::builder()
-            .trace_id(trace_id.clone())
-            .span_id(SpanId::new("root".to_string()).unwrap())
-            .service_name(ServiceName::new("gateway".to_string()).unwrap())
-            .operation_name("GET /api/data")
-            .start_time(SystemTime::now())
-            .duration(Duration::from_millis(200))
-            .status(SpanStatus::Ok)
-            .build()
-            .unwrap()
-    ).await.unwrap();
+    storage
+        .store_span(
+            Span::builder()
+                .trace_id(trace_id.clone())
+                .span_id(SpanId::new("root".to_string()).unwrap())
+                .service_name(ServiceName::new("gateway".to_string()).unwrap())
+                .operation_name("GET /api/data")
+                .start_time(SystemTime::now())
+                .duration(Duration::from_millis(200))
+                .status(SpanStatus::Ok)
+                .build()
+                .unwrap(),
+        )
+        .await
+        .unwrap();
 
     // Service chain
     let services = ["auth", "database", "cache", "processor"];
     for (i, service) in services.iter().enumerate() {
-        storage.store_span(
-            Span::builder()
-                .trace_id(trace_id.clone())
-                .span_id(SpanId::new(format!("span_{}", service)).unwrap())
-                .parent_span_id(SpanId::new("root".to_string()).unwrap())
-                .service_name(ServiceName::new(service.to_string()).unwrap())
-                .operation_name(format!("{}_operation", service))
-                .start_time(SystemTime::now())
-                .duration(Duration::from_millis(30))
-                .status(if i == 2 {
-                    SpanStatus::Error("Cache miss".to_string())
-                } else {
-                    SpanStatus::Ok
-                })
-                .build()
-                .unwrap()
-        ).await.unwrap();
+        storage
+            .store_span(
+                Span::builder()
+                    .trace_id(trace_id.clone())
+                    .span_id(SpanId::new(format!("span_{}", service)).unwrap())
+                    .parent_span_id(SpanId::new("root".to_string()).unwrap())
+                    .service_name(ServiceName::new(service.to_string()).unwrap())
+                    .operation_name(format!("{}_operation", service))
+                    .start_time(SystemTime::now())
+                    .duration(Duration::from_millis(30))
+                    .status(if i == 2 {
+                        SpanStatus::Error("Cache miss".to_string())
+                    } else {
+                        SpanStatus::Ok
+                    })
+                    .build()
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
     }
 
     // Verify the trace
@@ -219,31 +231,37 @@ async fn test_trace_duration_calculation() {
     // Create spans with different start times and durations
     let base_time = SystemTime::now();
 
-    storage.store_span(
-        Span::builder()
-            .trace_id(trace_id.clone())
-            .span_id(SpanId::new("early".to_string()).unwrap())
-            .service_name(ServiceName::new("service1".to_string()).unwrap())
-            .operation_name("early_op")
-            .start_time(base_time)
-            .duration(Duration::from_millis(50))
-            .status(SpanStatus::Ok)
-            .build()
-            .unwrap()
-    ).await.unwrap();
+    storage
+        .store_span(
+            Span::builder()
+                .trace_id(trace_id.clone())
+                .span_id(SpanId::new("early".to_string()).unwrap())
+                .service_name(ServiceName::new("service1".to_string()).unwrap())
+                .operation_name("early_op")
+                .start_time(base_time)
+                .duration(Duration::from_millis(50))
+                .status(SpanStatus::Ok)
+                .build()
+                .unwrap(),
+        )
+        .await
+        .unwrap();
 
-    storage.store_span(
-        Span::builder()
-            .trace_id(trace_id.clone())
-            .span_id(SpanId::new("late".to_string()).unwrap())
-            .service_name(ServiceName::new("service2".to_string()).unwrap())
-            .operation_name("late_op")
-            .start_time(base_time + Duration::from_millis(100))
-            .duration(Duration::from_millis(50))
-            .status(SpanStatus::Ok)
-            .build()
-            .unwrap()
-    ).await.unwrap();
+    storage
+        .store_span(
+            Span::builder()
+                .trace_id(trace_id.clone())
+                .span_id(SpanId::new("late".to_string()).unwrap())
+                .service_name(ServiceName::new("service2".to_string()).unwrap())
+                .operation_name("late_op")
+                .start_time(base_time + Duration::from_millis(100))
+                .duration(Duration::from_millis(50))
+                .status(SpanStatus::Ok)
+                .build()
+                .unwrap(),
+        )
+        .await
+        .unwrap();
 
     // Check trace duration calculation
     let traces = test_storage_query!(storage, recent_traces(1));

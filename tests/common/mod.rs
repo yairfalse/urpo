@@ -68,9 +68,8 @@ impl TestSpanBuilder {
             });
 
         if !self.is_root {
-            builder = builder.parent_span_id(
-                SpanId::new(format!("span_root_{:04}", self.trace_num)).unwrap()
-            );
+            builder = builder
+                .parent_span_id(SpanId::new(format!("span_root_{:04}", self.trace_num)).unwrap());
         }
 
         builder.build().unwrap()
@@ -93,8 +92,7 @@ pub async fn create_test_trace(
 
     // Child spans
     for i in 0..num_children {
-        let mut builder = TestSpanBuilder::new(trace_num, i + 1)
-            .service(&format!("service-{}", i));
+        let mut builder = TestSpanBuilder::new(trace_num, i + 1).service(&format!("service-{}", i));
 
         if has_error && i == 1 {
             builder = builder.with_error();
@@ -105,11 +103,7 @@ pub async fn create_test_trace(
 }
 
 /// Create multiple test traces.
-pub async fn create_test_traces(
-    storage: &InMemoryStorage,
-    num_traces: u32,
-    spans_per_trace: u32,
-) {
+pub async fn create_test_traces(storage: &InMemoryStorage, num_traces: u32, spans_per_trace: u32) {
     for i in 0..num_traces {
         let has_error = i % 2 == 0;
         create_test_trace(storage, i, spans_per_trace, has_error).await;
@@ -123,13 +117,19 @@ macro_rules! test_span {
         TestSpanBuilder::new($trace_num, $span_num).build()
     };
     ($trace_num:expr, $span_num:expr, error) => {
-        TestSpanBuilder::new($trace_num, $span_num).with_error().build()
+        TestSpanBuilder::new($trace_num, $span_num)
+            .with_error()
+            .build()
     };
     ($trace_num:expr, $span_num:expr, root) => {
-        TestSpanBuilder::new($trace_num, $span_num).as_root().build()
+        TestSpanBuilder::new($trace_num, $span_num)
+            .as_root()
+            .build()
     };
     ($trace_num:expr, $span_num:expr, $service:expr) => {
-        TestSpanBuilder::new($trace_num, $span_num).service($service).build()
+        TestSpanBuilder::new($trace_num, $span_num)
+            .service($service)
+            .build()
     };
 }
 
@@ -157,7 +157,10 @@ macro_rules! test_storage_query {
         $storage.list_recent_traces($limit, None).await.unwrap()
     };
     ($storage:expr, recent_traces($limit:expr, $service:expr)) => {
-        $storage.list_recent_traces($limit, Some($service)).await.unwrap()
+        $storage
+            .list_recent_traces($limit, Some($service))
+            .await
+            .unwrap()
     };
     ($storage:expr, error_traces($limit:expr)) => {
         $storage.get_error_traces($limit).await.unwrap()
@@ -183,9 +186,6 @@ pub fn assert_traces_sorted_by_time(traces: &[urpo_lib::storage::TraceInfo]) {
 /// Verify traces are sorted by duration (slowest first).
 pub fn assert_traces_sorted_by_duration(traces: &[urpo_lib::storage::TraceInfo]) {
     for i in 1..traces.len() {
-        assert!(
-            traces[i - 1].duration >= traces[i].duration,
-            "Traces not sorted by duration"
-        );
+        assert!(traces[i - 1].duration >= traces[i].duration, "Traces not sorted by duration");
     }
 }

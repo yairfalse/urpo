@@ -69,4 +69,3 @@ pub enum StorageHealth {
     /// Storage is offline or unavailable.
     Offline,
 }
-

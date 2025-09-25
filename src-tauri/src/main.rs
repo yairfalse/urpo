@@ -136,10 +136,7 @@ async fn main() {
             tracing::info!("🚀 Urpo started in {}ms", startup_ms);
 
             if startup_ms > 200 {
-                tracing::warn!(
-                    "⚠️ Startup time {}ms exceeds 200ms target!",
-                    startup_ms
-                );
+                tracing::warn!("⚠️ Startup time {}ms exceeds 200ms target!", startup_ms);
             }
 
             Ok(())

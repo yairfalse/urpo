@@ -38,7 +38,7 @@ pub enum UrpoError {
         /// Current memory usage in MB
         current: usize,
         /// Configured memory limit in MB
-        limit: usize
+        limit: usize,
     },
 
     #[error("Sampling rate must be between 0.0 and 1.0, got {0}")]
@@ -75,14 +75,14 @@ pub enum UrpoError {
     #[error("Timeout error: operation took longer than {timeout_ms}ms")]
     Timeout {
         /// Timeout duration in milliseconds
-        timeout_ms: u64
+        timeout_ms: u64,
     },
 
     /// Data parsing errors (malformed JSON, invalid trace IDs, etc.)
     #[error("Parse error: {message}")]
     Parse {
         /// Detailed parsing error message
-        message: String
+        message: String,
     },
 
     #[error("Network error: {0}")]

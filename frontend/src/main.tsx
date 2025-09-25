@@ -6,9 +6,7 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 console.log('main.tsx: Starting imports...');
 
 import App from './App';
-import './index.css';
-import './styles/design-system.css';
-import './styles/unified-design.css';
+import './design-system/core.css';
 
 console.log('main.tsx: Imports complete, App:', App);
 
