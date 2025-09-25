@@ -810,14 +810,30 @@ impl StorageBackend for InMemoryStorage {
     }
 
     async fn get_trace_spans(&self, trace_id: &TraceId) -> Result<Vec<Span>> {
-        // Try SIMD-accelerated lookup first for 4x speedup
+        let mut spans = Vec::new();
+
+        // First check compressed batches for 5-10x memory efficiency
+        if let Some(compressed_batch) = self.compressed_batches.get(trace_id) {
+            match self.compression_engine.decompress_spans(&compressed_batch) {
+                Ok(decompressed_spans) => {
+                    spans.extend(decompressed_spans);
+                },
+                Err(e) => {
+                    tracing::error!("Failed to decompress spans for trace {}: {}", trace_id, e);
+                }
+            }
+        }
+
+        // Then try SIMD-accelerated lookup for active spans (4x speedup)
         if let Some(span_ids) = self.find_trace_simd(trace_id) {
-            let mut spans = Vec::with_capacity(span_ids.len());
             for span_id in span_ids.iter() {
                 if let Some(span) = self.spans.get(span_id) {
                     spans.push(span.clone());
                 }
             }
+        }
+
+        if !spans.is_empty() {
             // Sort by start time
             spans.sort_by_key(|s| s.start_time);
             return Ok(spans);

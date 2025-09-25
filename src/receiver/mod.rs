@@ -19,6 +19,24 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use tonic::{transport::Server, Request, Response, Status};
 
+/// Configuration for OTEL receiver
+#[derive(Debug, Clone)]
+pub struct ReceiverConfig {
+    pub span_pool_size: usize,
+    pub batch_size: usize,
+    pub sampling_rate: f32,
+}
+
+impl Default for ReceiverConfig {
+    fn default() -> Self {
+        Self {
+            span_pool_size: 10_000,  // Configurable instead of hardcoded
+            batch_size: 512,         // Configurable instead of hardcoded
+            sampling_rate: 0.1,      // Configurable instead of hardcoded
+        }
+    }
+}
+
 /// OpenTelemetry trace receiver supporting both GRPC and HTTP protocols.
 ///
 /// This receiver implements the OTLP specification for collecting trace data
@@ -49,35 +67,45 @@ pub struct OtelReceiver {
 }
 
 impl OtelReceiver {
-    /// Create a new OTEL receiver with UnifiedStorage (recommended).
-    pub fn with_storage(
+    /// Create a new OTEL receiver from any storage backend.
+    pub fn from_storage<S: Into<Arc<tokio::sync::RwLock<dyn crate::storage::StorageBackend>>>>(
         grpc_port: u16,
         http_port: u16,
-        storage: &UnifiedStorage,
+        storage: S,
         health_monitor: Arc<crate::monitoring::Monitor>,
     ) -> Self {
-        Self::new(grpc_port, http_port, storage.as_backend(), health_monitor)
+        Self::new(grpc_port, http_port, storage.into(), health_monitor)
     }
 
-    /// Create a new OTEL receiver.
+    /// Create a new OTEL receiver with configurable parameters.
     pub fn new(
         grpc_port: u16,
         http_port: u16,
         storage: Arc<tokio::sync::RwLock<dyn crate::storage::StorageBackend>>,
         health_monitor: Arc<crate::monitoring::Monitor>,
     ) -> Self {
-        // Initialize span pool with 10,000 pre-allocated spans for zero-alloc operation
-        let span_pool = Arc::new(ZeroAllocSpanPool::new(10_000));
+        Self::with_config(grpc_port, http_port, storage, health_monitor, Default::default())
+    }
+
+    /// Create receiver with custom configuration.
+    pub fn with_config(
+        grpc_port: u16,
+        http_port: u16,
+        storage: Arc<tokio::sync::RwLock<dyn crate::storage::StorageBackend>>,
+        health_monitor: Arc<crate::monitoring::Monitor>,
+        config: ReceiverConfig,
+    ) -> Self {
+        let span_pool = Arc::new(ZeroAllocSpanPool::new(config.span_pool_size));
 
         Self {
             grpc_port,
             http_port,
             storage,
             health_monitor,
-            sampling_rate: 0.1, // Default to 10% sampling for production safety
+            sampling_rate: config.sampling_rate,
             span_pool,
             batch_sender: None,
-            batch_size: 512, // Default batch size
+            batch_size: config.batch_size,
             sampler: None,
         }
     }
@@ -344,20 +372,9 @@ impl TraceService for GrpcTraceService {
 
                 for otel_span in scope_spans.spans {
                     total_spans += 1;
-                    let span_name = otel_span.name.clone();
-                    let trace_id_hex = hex::encode(&otel_span.trace_id);
-                    let span_id_hex = hex::encode(&otel_span.span_id);
 
-                    match convert_otel_span_with_pool(otel_span, service_name.clone(), &self.receiver.span_pool) {
+                    match convert_otel_span_with_pool(otel_span, &service_name, &self.receiver.span_pool) {
                         Ok(span) => {
-                            tracing::debug!(
-                                "Converted span: service={}, operation={}, trace_id={}, span_id={}, sdk={:?}",
-                                service_name,
-                                span_name,
-                                trace_id_hex,
-                                span_id_hex,
-                                semantics.telemetry_sdk_name
-                            );
                             spans.push(span);
                         },
                         Err(e) => {
@@ -468,7 +485,7 @@ fn extract_attribute_value(value: &Option<opentelemetry_proto::tonic::common::v1
 /// Convert OTEL span to Urpo span using zero-alloc pool for 6.3x performance.
 fn convert_otel_span_with_pool(
     otel_span: opentelemetry_proto::tonic::trace::v1::Span,
-    service_name: String,
+    service_name: &str,
     pool: &Arc<ZeroAllocSpanPool>,
 ) -> Result<UrpoSpan> {
     // Try to get a span from the pool for zero-allocation
@@ -569,11 +586,11 @@ fn extract_span_ids(
 }
 
 /// Parse and validate service name
-fn parse_service_name(service_name: String) -> Result<ServiceName> {
+fn parse_service_name(service_name: &str) -> Result<ServiceName> {
     if service_name.is_empty() {
         ServiceName::new("unknown".to_string())
     } else {
-        ServiceName::new(service_name)
+        ServiceName::new(service_name.to_string())
     }
 }
 
