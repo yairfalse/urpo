@@ -2,8 +2,8 @@
 
 use atomic_float::AtomicF64 as AtomicFloat;
 use dashmap::DashMap;
-use std::sync::atomic::Ordering;
 use std::collections::HashMap;
+use std::sync::atomic::Ordering;
 use sysinfo::System;
 use tokio::sync::RwLock;
 
@@ -69,10 +69,10 @@ impl TelemetryState {
             self.heap_usage_mb.store(heap_mb, Ordering::Relaxed);
 
             // CPU usage percentage
-            let cpu_usage = system.cpus().iter()
-                .map(|cpu| cpu.cpu_usage())
-                .sum::<f32>() / system.cpus().len() as f32;
-            self.cpu_usage_percent.store(cpu_usage as f64, Ordering::Relaxed);
+            let cpu_usage = system.cpus().iter().map(|cpu| cpu.cpu_usage()).sum::<f32>()
+                / system.cpus().len() as f32;
+            self.cpu_usage_percent
+                .store(cpu_usage as f64, Ordering::Relaxed);
 
             // Available disk space
             let available_space = system.available_memory() as f64 / (1024.0 * 1024.0);

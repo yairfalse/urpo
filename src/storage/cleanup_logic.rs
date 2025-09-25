@@ -122,7 +122,9 @@ pub fn batch_remove_spans(
         if let Some((_, span)) = spans.remove(span_id) {
             // Update memory estimate
             let span_memory = estimate_span_memory(&span);
-            counters.memory_bytes.fetch_sub(span_memory, Ordering::Relaxed);
+            counters
+                .memory_bytes
+                .fetch_sub(span_memory, Ordering::Relaxed);
 
             // Remove from trace index
             if let Some(mut trace_spans) = traces.get_mut(&span.trace_id) {
@@ -142,7 +144,9 @@ pub fn batch_remove_spans(
         }
     }
 
-    counters.spans_evicted.fetch_add(removed as u64, Ordering::Relaxed);
+    counters
+        .spans_evicted
+        .fetch_add(removed as u64, Ordering::Relaxed);
     removed
 }
 
@@ -150,9 +154,7 @@ pub fn batch_remove_spans(
 #[macro_export]
 macro_rules! aggregate_metrics {
     ($spans:expr, $field:ident, $op:tt) => {{
-        $spans.iter()
-            .$op(|span| span.$field)
-            .unwrap_or_default()
+        $spans.iter().$op(|span| span.$field).unwrap_or_default()
     }};
 }
 
@@ -177,17 +179,22 @@ macro_rules! update_counter {
 #[macro_export]
 macro_rules! create_trace_info {
     ($trace_id:expr, $spans:expr) => {{
-        use $crate::storage::TraceInfo;
         use $crate::core::ServiceName;
+        use $crate::storage::TraceInfo;
 
         if $spans.is_empty() {
             None
         } else {
             let start_time = $spans.iter().map(|s| s.start_time).min().unwrap();
-            let duration = $spans.iter().map(|s| s.duration).max().unwrap_or_else(|| Duration::from_secs(0));
+            let duration = $spans
+                .iter()
+                .map(|s| s.duration)
+                .max()
+                .unwrap_or_else(|| Duration::from_secs(0));
             let has_error = $spans.iter().any(|s| s.is_error());
             let root_span = $spans.iter().find(|s| s.parent_span_id.is_none());
-            let services: Vec<ServiceName> = $spans.iter()
+            let services: Vec<ServiceName> = $spans
+                .iter()
                 .map(|s| s.service_name.clone())
                 .collect::<std::collections::HashSet<_>>()
                 .into_iter()
@@ -195,8 +202,12 @@ macro_rules! create_trace_info {
 
             Some(TraceInfo {
                 trace_id: $trace_id.clone(),
-                root_service: root_span.map(|s| s.service_name.clone()).unwrap_or_else(|| ServiceName::new("unknown".to_string()).unwrap()),
-                root_operation: root_span.map(|s| s.operation_name.clone()).unwrap_or_else(|| "unknown".to_string()),
+                root_service: root_span
+                    .map(|s| s.service_name.clone())
+                    .unwrap_or_else(|| ServiceName::new("unknown".to_string()).unwrap()),
+                root_operation: root_span
+                    .map(|s| s.operation_name.clone())
+                    .unwrap_or_else(|| "unknown".to_string()),
                 span_count: $spans.len(),
                 duration,
                 start_time,
@@ -213,12 +224,15 @@ macro_rules! impl_search {
     ($self:expr, $filter:expr, $limit:expr) => {{
         use $crate::storage::TraceInfo;
 
-        let traces = $self.traces.iter()
+        let traces = $self
+            .traces
+            .iter()
             .filter_map(|entry| {
                 let trace_id = entry.key();
                 let span_ids = entry.value();
 
-                let spans: Vec<_> = span_ids.iter()
+                let spans: Vec<_> = span_ids
+                    .iter()
                     .filter_map(|id| $self.spans.get(id).map(|s| s.clone()))
                     .collect();
 
@@ -234,9 +248,9 @@ macro_rules! impl_search {
         let mut sorted = traces;
         sorted.sort_by(|a, b| b.start_time.cmp(&a.start_time));
 
-        Ok::<Vec<TraceInfo>, $crate::core::UrpoError>(sorted.into_iter()
-            .take($limit)
-            .collect::<Vec<TraceInfo>>())
+        Ok::<Vec<TraceInfo>, $crate::core::UrpoError>(
+            sorted.into_iter().take($limit).collect::<Vec<TraceInfo>>(),
+        )
     }};
 }
 

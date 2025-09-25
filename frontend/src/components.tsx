@@ -1,9 +1,12 @@
 /**
- * URPO UI Components
+ * URPO Design System - Professional UI Components
  *
- * Minimal, professional components inspired by Linear/Vercel aesthetics.
- * Every component serves a specific purpose with zero boilerplate.
- * Built for speed, beauty, and observability excellence.
+ * Linear/Vercel-quality components with:
+ * - Perfect 4px spacing grid
+ * - Minimal, refined color palette
+ * - Subtle micro-interactions
+ * - Typography perfection
+ * - Premium, expensive feel
  */
 
 import React from 'react';
@@ -12,37 +15,42 @@ import { clsx } from 'clsx';
 import { LucideIcon, Loader2 } from 'lucide-react';
 
 // ============================================================================
-// ANIMATION PRESETS
+// REFINED ANIMATION SYSTEM
 // ============================================================================
 
 const animations = {
-  fadeIn: {
+  // Ultra-smooth micro-interactions (150ms - perfect for premium feel)
+  subtle: {
     initial: { opacity: 0 },
     animate: { opacity: 1 },
     exit: { opacity: 0 },
-    transition: { duration: 0.15 }
+    transition: { duration: 0.15, ease: [0.23, 1, 0.32, 1] }
   },
+  // Elegant slide-up with perfect easing
   slideUp: {
-    initial: { opacity: 0, y: 10 },
+    initial: { opacity: 0, y: 4 },
     animate: { opacity: 1, y: 0 },
-    exit: { opacity: 0, y: 10 },
-    transition: { duration: 0.2 }
+    exit: { opacity: 0, y: 4 },
+    transition: { duration: 0.15, ease: [0.23, 1, 0.32, 1] }
   },
+  // Scale with perfect spring feel
   scaleIn: {
-    initial: { opacity: 0, scale: 0.95 },
+    initial: { opacity: 0, scale: 0.96 },
     animate: { opacity: 1, scale: 1 },
-    exit: { opacity: 0, scale: 0.95 },
-    transition: { duration: 0.15 }
+    exit: { opacity: 0, scale: 0.96 },
+    transition: { duration: 0.15, ease: [0.23, 1, 0.32, 1] }
   },
+  // Perfect spring for interactive elements
   spring: {
     type: 'spring',
-    stiffness: 280,
-    damping: 30
+    stiffness: 400,
+    damping: 30,
+    mass: 0.8
   }
 };
 
 // ============================================================================
-// BUTTON COMPONENTS
+// BUTTON COMPONENTS - Linear/Vercel Quality
 // ============================================================================
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -63,23 +71,51 @@ export const Button: React.FC<ButtonProps> = ({
   disabled,
   ...props
 }) => {
-  const baseClasses = 'relative inline-flex items-center justify-center font-medium rounded-lg transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-dark-50 disabled:opacity-50 disabled:cursor-not-allowed';
+  // Perfect base classes - follows Linear's approach
+  const baseClasses = `
+    relative inline-flex items-center justify-center
+    font-medium rounded-md
+    transition-all duration-150 ease-out
+    focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:ring-offset-0
+    disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none
+    select-none
+  `;
 
+  // Refined variants - minimal, elegant, expensive feel
   const variants = {
-    primary: 'bg-gradient-to-r from-data-blue to-data-cyan text-white shadow-lg shadow-data-blue/25 hover:shadow-xl hover:shadow-data-blue/40 focus:ring-data-blue/50 active:scale-[0.98]',
-    secondary: 'bg-dark-100 border border-dark-400 text-light-200 hover:bg-dark-150 hover:border-dark-300 hover:text-light-100 focus:ring-dark-300 active:scale-[0.98]',
-    ghost: 'text-light-400 hover:text-light-200 hover:bg-dark-100 focus:ring-dark-300 active:scale-[0.98]',
-    danger: 'bg-semantic-error text-white shadow-lg shadow-semantic-error/25 hover:shadow-xl hover:shadow-semantic-error/40 focus:ring-semantic-error/50 active:scale-[0.98]'
+    primary: `
+      bg-white text-gray-900 shadow-sm
+      hover:bg-gray-50 hover:shadow-md
+      active:bg-gray-100 active:shadow-sm active:scale-[0.98]
+      border-0
+    `,
+    secondary: `
+      bg-gray-900 text-gray-100 border border-gray-800
+      hover:bg-gray-800 hover:border-gray-700 hover:text-white
+      active:bg-gray-750 active:scale-[0.98]
+    `,
+    ghost: `
+      text-gray-400 bg-transparent border-0
+      hover:text-gray-300 hover:bg-gray-900/50
+      active:bg-gray-900/70 active:scale-[0.98]
+    `,
+    danger: `
+      bg-red-600 text-white border-0 shadow-sm
+      hover:bg-red-500 hover:shadow-md
+      active:bg-red-700 active:scale-[0.98]
+    `
   };
 
+  // Perfect spacing on 4px grid
   const sizes = {
-    sm: 'px-3 py-1.5 text-sm gap-1.5',
-    md: 'px-4 py-2 text-sm gap-2',
-    lg: 'px-6 py-3 text-base gap-2'
+    sm: 'h-8 px-3 text-sm gap-2',
+    md: 'h-9 px-4 text-sm gap-2',
+    lg: 'h-10 px-6 text-base gap-3'
   };
 
   return (
     <motion.button
+      whileHover={{ scale: 1.01 }}
       whileTap={{ scale: 0.98 }}
       transition={animations.spring}
       className={clsx(
@@ -94,15 +130,17 @@ export const Button: React.FC<ButtonProps> = ({
       {loading ? (
         <Loader2 className="w-4 h-4 animate-spin" />
       ) : Icon ? (
-        <Icon className="w-4 h-4" />
+        <Icon className="w-4 h-4 shrink-0" />
       ) : null}
-      {children}
+      {children && (
+        <span className="truncate">{children}</span>
+      )}
     </motion.button>
   );
 };
 
 // ============================================================================
-// INPUT COMPONENTS
+// INPUT COMPONENTS - Perfect Typography & Spacing
 // ============================================================================
 
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
@@ -118,27 +156,30 @@ export const Input: React.FC<InputProps> = ({
 }) => {
   return (
     <div className="relative group">
-      {/* Subtle glow effect */}
-      <div className="absolute inset-0 bg-gradient-to-r from-data-blue/10 to-data-cyan/10 rounded-lg blur opacity-0 group-focus-within:opacity-100 transition-opacity" />
-
       <div className="relative">
         {Icon && (
-          <Icon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-light-500" />
+          <Icon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
         )}
         <input
           className={clsx(
-            'w-full bg-dark-100 border border-dark-400 rounded-lg text-light-100 placeholder:text-light-500',
-            'focus:outline-none focus:ring-2 focus:ring-data-blue/50 focus:border-data-blue',
-            'transition-all duration-150',
-            Icon ? 'pl-10' : 'pl-4',
-            rightElement ? 'pr-12' : 'pr-4',
-            'py-2',
+            // Base styling - clean & minimal
+            'w-full h-9 bg-gray-950 border border-gray-800 rounded-md',
+            'text-gray-100 text-sm placeholder:text-gray-500',
+            // Focus states - subtle blue accent
+            'focus:outline-none focus:ring-1 focus:ring-blue-500/30 focus:border-blue-500/50',
+            // Hover state
+            'hover:border-gray-700',
+            // Transitions
+            'transition-all duration-150 ease-out',
+            // Spacing
+            Icon ? 'pl-10' : 'pl-3',
+            rightElement ? 'pr-12' : 'pr-3',
             className
           )}
           {...props}
         />
         {rightElement && (
-          <div className="absolute right-3 top-1/2 -translate-y-1/2">
+          <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center">
             {rightElement}
           </div>
         )}
@@ -148,7 +189,7 @@ export const Input: React.FC<InputProps> = ({
 };
 
 // ============================================================================
-// CARD COMPONENTS
+// CARD COMPONENTS - Linear-Style Clean Cards
 // ============================================================================
 
 interface CardProps {
@@ -164,21 +205,26 @@ export const Card: React.FC<CardProps> = ({
   hover = false,
   padding = 'md'
 }) => {
+  // Perfect 4px grid spacing
   const paddingClasses = {
     none: '',
-    sm: 'p-4',
-    md: 'p-6',
-    lg: 'p-8'
+    sm: 'p-4',    // 16px
+    md: 'p-6',    // 24px
+    lg: 'p-8'     // 32px
   };
 
   return (
     <motion.div
-      initial={animations.fadeIn.initial}
-      animate={animations.fadeIn.animate}
-      transition={animations.fadeIn.transition}
+      initial={animations.subtle.initial}
+      animate={animations.subtle.animate}
+      transition={animations.subtle.transition}
       className={clsx(
-        'bg-dark-100 border border-dark-400 rounded-xl shadow-card',
-        hover && 'hover:border-dark-300 hover:shadow-card-hover transition-all duration-250',
+        // Base card styling - clean & minimal
+        'bg-gray-950 border border-gray-900 rounded-lg',
+        // Subtle shadow for depth
+        'shadow-sm',
+        // Hover effects (if enabled)
+        hover && 'hover:border-gray-800 hover:shadow-md transition-all duration-150',
         paddingClasses[padding],
         className
       )}
@@ -189,7 +235,7 @@ export const Card: React.FC<CardProps> = ({
 };
 
 // ============================================================================
-// NAVIGATION COMPONENTS
+// NAVIGATION COMPONENTS - Linear-Style Nav
 // ============================================================================
 
 interface NavItemProps {
@@ -209,20 +255,24 @@ export const NavItem: React.FC<NavItemProps> = ({
 }) => {
   return (
     <motion.button
+      whileHover={{ scale: 1.01 }}
       whileTap={{ scale: 0.98 }}
       onClick={onClick}
       className={clsx(
-        'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150',
-        'focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-dark-50',
+        // Base styling
+        'flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium',
+        'transition-all duration-150 ease-out',
+        'focus:outline-none focus:ring-1 focus:ring-blue-500/20',
+        // Active state - clean white accent
         active
-          ? 'bg-dark-200 text-light-100 shadow-sm border border-dark-300 focus:ring-data-blue/50'
-          : 'text-light-400 hover:text-light-200 hover:bg-dark-150 focus:ring-dark-300'
+          ? 'bg-gray-900 text-white border border-gray-800 shadow-sm'
+          : 'text-gray-400 hover:text-gray-300 hover:bg-gray-900/50'
       )}
     >
-      <Icon className="w-4 h-4" />
-      <span>{label}</span>
+      <Icon className="w-4 h-4 shrink-0" />
+      <span className="truncate">{label}</span>
       {shortcut && (
-        <kbd className="hidden lg:inline-block ml-auto px-2 py-0.5 text-xs bg-dark-300 text-light-500 rounded">
+        <kbd className="ml-auto px-2 py-1 text-xs bg-gray-800 text-gray-400 rounded border border-gray-700 font-mono hidden sm:block">
           {shortcut}
         </kbd>
       )}
@@ -231,7 +281,7 @@ export const NavItem: React.FC<NavItemProps> = ({
 };
 
 // ============================================================================
-// STATUS INDICATORS
+// STATUS INDICATORS - Refined & Minimal
 // ============================================================================
 
 interface StatusIndicatorProps {
@@ -245,11 +295,12 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
   label,
   pulse = false
 }) => {
+  // Refined, professional colors
   const colors = {
-    online: 'bg-semantic-success',
-    offline: 'bg-light-500',
-    warning: 'bg-semantic-warning',
-    error: 'bg-semantic-error'
+    online: 'bg-green-500',
+    offline: 'bg-gray-500',
+    warning: 'bg-yellow-500',
+    error: 'bg-red-500'
   };
 
   return (
@@ -262,14 +313,14 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
         )}
       />
       {label && (
-        <span className="text-xs font-medium text-light-300">{label}</span>
+        <span className="text-xs font-medium text-gray-400 select-none">{label}</span>
       )}
     </div>
   );
 };
 
 // ============================================================================
-// DROPDOWN COMPONENTS
+// DROPDOWN COMPONENTS - Vercel-Style Popovers
 // ============================================================================
 
 interface DropdownProps {
@@ -311,7 +362,10 @@ export const Dropdown: React.FC<DropdownProps> = ({
           {...animations.scaleIn}
           data-dropdown
           className={clsx(
-            'absolute right-0 top-full mt-2 w-72 bg-dark-100 border border-dark-400 rounded-xl shadow-xl z-50',
+            // Refined dropdown styling
+            'absolute right-0 top-full mt-2 w-64',
+            'bg-gray-950 border border-gray-800 rounded-lg shadow-lg',
+            'z-50 overflow-hidden',
             className
           )}
         >
@@ -337,10 +391,11 @@ export const DropdownItem: React.FC<DropdownItemProps> = ({
     <button
       onClick={onClick}
       className={clsx(
-        'w-full text-left px-4 py-2 text-sm transition-colors duration-150 first:rounded-t-xl last:rounded-b-xl',
+        'w-full text-left px-3 py-2 text-sm transition-colors duration-150',
+        'flex items-center gap-2',
         variant === 'default'
-          ? 'text-light-300 hover:bg-dark-150 hover:text-light-100'
-          : 'text-semantic-error hover:bg-semantic-error/10'
+          ? 'text-gray-300 hover:bg-gray-900 hover:text-white'
+          : 'text-red-400 hover:bg-red-500/10 hover:text-red-300'
       )}
     >
       {children}
@@ -349,7 +404,7 @@ export const DropdownItem: React.FC<DropdownItemProps> = ({
 };
 
 // ============================================================================
-// LOADING COMPONENTS
+// LOADING COMPONENTS - Elegant Spinners
 // ============================================================================
 
 interface LoadingSpinnerProps {
@@ -363,14 +418,14 @@ export const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
 }) => {
   const sizes = {
     sm: 'w-4 h-4',
-    md: 'w-8 h-8',
-    lg: 'w-12 h-12'
+    md: 'w-6 h-6',
+    lg: 'w-8 h-8'
   };
 
   return (
     <div className={clsx('flex items-center justify-center', className)}>
       <div className={clsx(
-        'rounded-full border-2 border-data-blue border-t-transparent animate-spin',
+        'rounded-full border-2 border-gray-800 border-t-white animate-spin',
         sizes[size]
       )} />
     </div>
@@ -378,25 +433,27 @@ export const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
 };
 
 export const LoadingScreen: React.FC<{ title?: string; subtitle?: string }> = ({
-  title = "Initializing URPO",
-  subtitle = "Starting observability engine..."
+  title = "Starting URPO",
+  subtitle = "Initializing trace explorer..."
 }) => {
   return (
     <motion.div
-      {...animations.fadeIn}
-      className="flex items-center justify-center h-screen bg-dark-50"
+      {...animations.subtle}
+      className="flex items-center justify-center h-screen bg-black"
     >
-      <div className="text-center">
-        <LoadingSpinner size="lg" className="mb-4" />
-        <h2 className="text-light-100 font-semibold text-lg mb-2">{title}</h2>
-        <p className="text-light-400 text-sm">{subtitle}</p>
+      <div className="text-center space-y-4">
+        <LoadingSpinner size="lg" />
+        <div className="space-y-2">
+          <h2 className="text-white font-medium text-lg">{title}</h2>
+          <p className="text-gray-400 text-sm">{subtitle}</p>
+        </div>
       </div>
     </motion.div>
   );
 };
 
 // ============================================================================
-// LAYOUT HELPERS
+// LAYOUT HELPERS - Linear-Style Clean Layouts
 // ============================================================================
 
 interface HeaderProps {
@@ -406,16 +463,14 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ children, className }) => (
   <motion.header
-    initial={{ opacity: 0, y: -10 }}
+    initial={{ opacity: 0, y: -4 }}
     animate={{ opacity: 1, y: 0 }}
-    transition={{ duration: 0.3 }}
+    transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
     className={clsx(
-      'bg-dark-100 border-b border-dark-400 shadow-lg relative overflow-hidden',
+      'bg-black border-b border-gray-900 relative',
       className
     )}
   >
-    {/* Gradient accent line */}
-    <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-data-blue to-transparent opacity-80" />
     {children}
   </motion.header>
 );
@@ -427,9 +482,9 @@ interface PageProps {
 
 export const Page: React.FC<PageProps> = ({ children, className }) => (
   <motion.div
-    initial={animations.fadeIn.initial}
-    animate={animations.fadeIn.animate}
-    transition={animations.fadeIn.transition}
+    initial={animations.subtle.initial}
+    animate={animations.subtle.animate}
+    transition={animations.subtle.transition}
     className={clsx('h-full p-6', className)}
   >
     {children}
@@ -449,24 +504,30 @@ export const Section: React.FC<SectionProps> = ({
   action,
   children
 }) => (
-  <Card className="h-full">
-    <div className="flex items-center justify-between mb-6">
-      <div>
-        <h2 className="text-xl font-bold text-light-50 mb-1">{title}</h2>
+  <Card className="h-full" padding="lg">
+    {/* Perfect header spacing */}
+    <div className="flex items-start justify-between mb-6">
+      <div className="space-y-1">
+        <h2 className="text-lg font-semibold text-white">{title}</h2>
         {subtitle && (
-          <p className="text-sm text-light-400">{subtitle}</p>
+          <p className="text-sm text-gray-400">{subtitle}</p>
         )}
       </div>
-      {action && <div className="flex items-center gap-2">{action}</div>}
+      {action && (
+        <div className="flex items-center gap-2">
+          {action}
+        </div>
+      )}
     </div>
-    <div className="h-[calc(100%-100px)]">
+    {/* Content with proper spacing */}
+    <div className="h-[calc(100%-84px)]">
       {children}
     </div>
   </Card>
 );
 
 // ============================================================================
-// BADGE COMPONENTS
+// BADGE COMPONENTS - Clean & Minimal
 // ============================================================================
 
 interface BadgeProps {
@@ -480,22 +541,23 @@ export const Badge: React.FC<BadgeProps> = ({
   variant = 'default',
   size = 'sm'
 }) => {
+  // Refined badge colors - subtle & professional
   const variants = {
-    default: 'bg-dark-300 text-light-300',
-    success: 'bg-semantic-success/20 text-semantic-success',
-    warning: 'bg-semantic-warning/20 text-semantic-warning',
-    error: 'bg-semantic-error/20 text-semantic-error',
-    info: 'bg-data-blue/20 text-data-blue'
+    default: 'bg-gray-800 text-gray-300 border border-gray-700',
+    success: 'bg-green-500/10 text-green-400 border border-green-500/20',
+    warning: 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20',
+    error: 'bg-red-500/10 text-red-400 border border-red-500/20',
+    info: 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
   };
 
   const sizes = {
-    sm: 'px-2 py-0.5 text-xs',
+    sm: 'px-2 py-1 text-xs',
     md: 'px-3 py-1 text-sm'
   };
 
   return (
     <span className={clsx(
-      'inline-flex items-center font-medium rounded-full',
+      'inline-flex items-center font-medium rounded-md select-none',
       variants[variant],
       sizes[size]
     )}>
@@ -505,7 +567,7 @@ export const Badge: React.FC<BadgeProps> = ({
 };
 
 // ============================================================================
-// METRICS DISPLAY
+// METRICS DISPLAY - Professional Data Presentation
 // ============================================================================
 
 interface MetricProps {
@@ -520,18 +582,19 @@ export const Metric: React.FC<MetricProps> = ({
   value,
   color = 'blue'
 }) => {
+  // Refined metric colors - subtle but clear
   const colors = {
-    blue: 'text-data-blue',
-    green: 'text-data-green',
-    yellow: 'text-data-yellow',
-    red: 'text-data-red',
-    cyan: 'text-data-cyan'
+    blue: 'text-blue-400',
+    green: 'text-green-400',
+    yellow: 'text-yellow-400',
+    red: 'text-red-400',
+    cyan: 'text-cyan-400'
   };
 
   return (
     <div className="flex items-center gap-2">
-      <span className="text-xs text-light-500">{label}</span>
-      <span className={clsx('text-sm font-medium', colors[color])}>
+      <span className="text-xs text-gray-500 font-medium">{label}</span>
+      <span className={clsx('text-sm font-semibold tabular-nums', colors[color])}>
         {typeof value === 'number' ? value.toLocaleString() : value}
       </span>
     </div>

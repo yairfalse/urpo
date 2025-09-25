@@ -27,10 +27,10 @@ pub fn handle_key(key: KeyEvent) -> Action {
         KeyCode::Down | KeyCode::Char('j') => Action::MoveDown,
         KeyCode::PageUp | KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
             Action::PageUp
-        }
+        },
         KeyCode::PageDown | KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
             Action::PageDown
-        }
+        },
 
         // Selection
         KeyCode::Enter => Action::SelectItem,

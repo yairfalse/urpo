@@ -200,6 +200,8 @@ nav button[class*="text-data-blue"] {
   border-color: rgba(255, 255, 255, 0.12) !important;
 }
 
+/* Additional CSS variables */
+:root {
   /* Accent colors with more punch */
   --accent-primary: #0ea5e9;
   --accent-primary-glow: #0ea5e933;

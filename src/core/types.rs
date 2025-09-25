@@ -240,6 +240,16 @@ impl TraceId {
         }
         Ok(TraceId(Arc::from(hex)))
     }
+
+    /// Convert TraceId to u128 for SIMD operations (first 16 bytes of hex string)
+    #[inline]
+    pub fn as_u128(&self) -> u128 {
+        // Take first 32 chars (16 bytes) for u128 representation
+        let hex_str = &self.0[..self.0.len().min(32)];
+
+        // Parse hex string to u128 (first 16 bytes)
+        u128::from_str_radix(hex_str, 16).unwrap_or(0)
+    }
 }
 
 impl fmt::Display for TraceId {

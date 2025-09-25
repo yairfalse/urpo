@@ -89,7 +89,7 @@ impl App {
                     View::Services => View::Traces,
                     View::Traces => View::Services,
                 };
-            }
+            },
             Action::MoveUp => {
                 let selected = match self.view {
                     View::Services => &mut self.selected_service,
@@ -100,7 +100,7 @@ impl App {
                         *idx -= 1;
                     }
                 }
-            }
+            },
             Action::MoveDown => {
                 let (selected, max) = match self.view {
                     View::Services => (&mut self.selected_service, self.services.len()),
@@ -111,7 +111,7 @@ impl App {
                         *idx += 1;
                     }
                 }
-            }
+            },
             Action::PageUp => {
                 let selected = match self.view {
                     View::Services => &mut self.selected_service,
@@ -120,7 +120,7 @@ impl App {
                 if let Some(idx) = selected {
                     *idx = idx.saturating_sub(10);
                 }
-            }
+            },
             Action::PageDown => {
                 let (selected, max) = match self.view {
                     View::Services => (&mut self.selected_service, self.services.len()),
@@ -129,8 +129,8 @@ impl App {
                 if let Some(idx) = selected {
                     *idx = (*idx + 10).min(max.saturating_sub(1));
                 }
-            }
-            _ => {}
+            },
+            _ => {},
         }
     }
 
@@ -139,9 +139,9 @@ impl App {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(3),  // Header
-                Constraint::Min(0),     // Content
-                Constraint::Length(2),  // Footer
+                Constraint::Length(3), // Header
+                Constraint::Min(0),    // Content
+                Constraint::Length(2), // Footer
             ])
             .split(frame.area());
 
@@ -151,11 +151,16 @@ impl App {
         // Content
         match self.view {
             View::Services => {
-                service_list::draw_service_table(frame, chunks[1], &self.services, self.selected_service);
-            }
+                service_list::draw_service_table(
+                    frame,
+                    chunks[1],
+                    &self.services,
+                    self.selected_service,
+                );
+            },
             View::Traces => {
                 trace_list::draw_trace_table(frame, chunks[1], &self.traces, self.selected_trace);
-            }
+            },
         }
 
         // Footer
@@ -200,7 +205,8 @@ pub async fn run_tui(
     _monitor: Arc<crate::monitoring::Monitor>,
 ) -> Result<()> {
     // Setup terminal
-    enable_raw_mode().map_err(|e| UrpoError::render(format!("Failed to enable raw mode: {}", e)))?;
+    enable_raw_mode()
+        .map_err(|e| UrpoError::render(format!("Failed to enable raw mode: {}", e)))?;
     let mut stdout = io::stdout();
     stdout
         .execute(EnterAlternateScreen)
@@ -256,7 +262,8 @@ pub async fn run_tui(
     }
 
     // Cleanup
-    disable_raw_mode().map_err(|e| UrpoError::render(format!("Failed to disable raw mode: {}", e)))?;
+    disable_raw_mode()
+        .map_err(|e| UrpoError::render(format!("Failed to disable raw mode: {}", e)))?;
     terminal
         .backend_mut()
         .execute(LeaveAlternateScreen)

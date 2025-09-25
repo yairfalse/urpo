@@ -482,7 +482,6 @@ async fn start_with_ui(config: Config, cli: &Cli) -> Result<()> {
     use std::sync::Arc;
     use tokio::sync::RwLock;
 
-
     // Initialize storage
     let storage = Arc::new(RwLock::new(InMemoryStorage::with_config(&config)));
     let storage_trait: Arc<RwLock<dyn StorageBackend>> = storage.clone();
@@ -549,7 +548,6 @@ async fn start_headless(config: Config, cli: &Cli) -> Result<()> {
     };
     use std::sync::Arc;
     use tokio::sync::RwLock;
-
 
     // Initialize storage
     let storage = Arc::new(RwLock::new(InMemoryStorage::with_config(&config)));

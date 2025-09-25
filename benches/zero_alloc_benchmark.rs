@@ -4,9 +4,7 @@ use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criteri
 use std::sync::Arc;
 use std::time::Duration;
 use urpo_lib::core::{ServiceName, Span, SpanId, SpanKind, SpanStatus, TraceId};
-use urpo_lib::storage::zero_alloc_pool::{
-    get_pooled_span, GlobalPools, ZeroAllocSpanPool,
-};
+use urpo_lib::storage::zero_alloc_pool::{get_pooled_span, GlobalPools, ZeroAllocSpanPool};
 
 fn bench_with_allocation(c: &mut Criterion) {
     c.bench_function("span_with_allocation", |b| {
