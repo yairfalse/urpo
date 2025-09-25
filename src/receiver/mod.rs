@@ -378,10 +378,7 @@ impl TraceService for GrpcTraceService {
                             spans.push(span);
                         },
                         Err(e) => {
-                            tracing::warn!(
-                                "Failed to convert span: service={}, operation={}, trace_id={}, span_id={}, error={}",
-                                service_name, span_name, trace_id_hex, span_id_hex, e
-                            );
+                            tracing::warn!("Failed to convert span: service={}, error={}", service_name, e);
                         },
                     }
                 }
