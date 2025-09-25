@@ -1,6 +1,5 @@
-import { useState, useEffect, useCallback, memo } from 'react';
+import React, { memo } from 'react';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
-import { useLocalStorage } from './hooks/useLocalStorage';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { ServiceHealthDashboard } from './components/tables/ServiceHealthDashboard';
 import { TraceExplorer } from './components/tables/TraceExplorer';
@@ -9,7 +8,12 @@ import { ServiceGraphPro } from './components/charts/ServiceGraphPro';
 import { ServiceMap } from './components/tables/ServiceMap';
 import { FlowTable } from './components/tables/FlowTable';
 import { VirtualizedFlowTable } from './components/tables/VirtualizedFlowTable';
-import { ServiceMetrics, TraceInfo, SystemMetrics as SystemMetricsType, ViewMode, NavigationItem } from './types';
+import {
+  useDashboardData,
+  useAppStore,
+  useStartReceiver,
+  type ViewMode
+} from './lib/tauri';
 import {
   Activity,
   BarChart3,
@@ -23,81 +27,62 @@ import {
   Bell,
   ChevronDown
 } from 'lucide-react';
-import { isTauriAvailable, safeTauriInvoke } from './utils/tauri';
-import { POLLING } from './constants/ui';
+
+// Navigation item type
+interface NavigationItem {
+  key: ViewMode;
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  shortcut: string;
+}
 
 const App = memo(() => {
-  const [activeView, setActiveView] = useLocalStorage<ViewMode>('urpo-active-view', 'graph');
-  const [services, setServices] = useState<ServiceMetrics[]>([]);
-  const [traces, setTraces] = useState<TraceInfo[]>([]);
-  const [systemMetrics, setSystemMetrics] = useState<SystemMetricsType | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [showFilters, setShowFilters] = useState(false);
-  const [showNotifications, setShowNotifications] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
-  const [showUserMenu, setShowUserMenu] = useState(false);
+  // ============================================================================
+  // HOOKS AND STATE
+  // ============================================================================
 
-  const updateMetrics = useCallback(async () => {
-    try {
-      if (isTauriAvailable()) {
-        const [serviceData, systemData] = await Promise.all([
-          safeTauriInvoke<ServiceMetrics[]>('get_service_metrics'),
-          safeTauriInvoke<SystemMetricsType>('get_system_metrics'),
-        ]);
+  // Global app state from Zustand store
+  const {
+    activeView,
+    setActiveView,
+    searchQuery,
+    setSearchQuery,
+    showFilters,
+    showNotifications,
+    showSettings,
+    showUserMenu,
+    toggleFilters,
+    toggleNotifications,
+    toggleSettings,
+    toggleUserMenu,
+    closeAllDropdowns,
+  } = useAppStore();
 
-        if (serviceData && systemData) {
-          requestAnimationFrame(() => {
-            setServices(serviceData);
-            setSystemMetrics(systemData);
-            setError(null);
-          });
-        }
-      } else {
-        requestAnimationFrame(() => {
-          setServices([]);
-          setSystemMetrics(null);
-          setError('Backend not available - ensure OTEL receiver is running');
-        });
-      }
-    } catch (err) {
-      console.error('Error updating metrics:', err);
-      requestAnimationFrame(() => {
-        setServices([]);
-        setSystemMetrics(null);
-        setError(`Failed to connect to backend`);
-      });
+  // Data fetching with React Query hooks
+  const {
+    serviceMetrics,
+    systemMetrics,
+    recentTraces,
+    isLoading,
+    hasError,
+    refetchAll
+  } = useDashboardData();
+
+  // Start the OTLP receiver on app initialization
+  const startReceiver = useStartReceiver({
+    onError: (error) => {
+      console.error('Failed to start OTEL receiver:', error);
     }
+  });
+
+  // Initialize receiver on mount
+  React.useEffect(() => {
+    startReceiver.mutate();
   }, []);
 
-  const loadTraces = useCallback(async () => {
-    try {
-      if (isTauriAvailable()) {
-        const traceData = await safeTauriInvoke<TraceInfo[]>('list_recent_traces', {
-          limit: 100,
-        });
-
-        if (traceData) {
-          requestAnimationFrame(() => {
-            setTraces(traceData);
-            setError(null);
-          });
-        }
-      } else {
-        requestAnimationFrame(() => {
-          setTraces([]);
-          setError('Backend not available');
-        });
-      }
-    } catch (err) {
-      console.error('Error loading traces:', err);
-      requestAnimationFrame(() => {
-        setTraces([]);
-        setError(`Failed to load traces`);
-      });
-    }
-  }, []);
+  // ============================================================================
+  // KEYBOARD SHORTCUTS
+  // ============================================================================
 
   useKeyboardShortcuts([
     { key: '1', handler: () => setActiveView('graph'), description: 'Service Map' },
@@ -105,58 +90,19 @@ const App = memo(() => {
     { key: '3', handler: () => setActiveView('health'), description: 'Health Metrics' },
     { key: '4', handler: () => setActiveView('traces'), description: 'Traces' },
     { key: '5', handler: () => setActiveView('servicemap'), description: 'Dependencies' },
-    { key: 'r', handler: updateMetrics, description: 'Refresh', ctrl: true },
-    { key: 't', handler: loadTraces, description: 'Reload traces', ctrl: true },
+    { key: 'r', handler: refetchAll, description: 'Refresh', ctrl: true },
     { key: '/', handler: () => {
       document.getElementById('global-search')?.focus();
       // Close any open dropdowns when focusing search
-      setShowFilters(false);
-      setShowNotifications(false);
-      setShowSettings(false);
-      setShowUserMenu(false);
+      closeAllDropdowns();
     }, description: 'Search' },
   ]);
 
-  useEffect(() => {
-    const startReceiver = async () => {
-      if (isTauriAvailable()) {
-        try {
-          await safeTauriInvoke('start_receiver');
-          setLoading(false);
-          setError(null);
-        } catch (err) {
-          setError(`Failed to start OTEL receiver: ${err}`);
-          setLoading(false);
-        }
-      } else {
-        setLoading(false);
-        setError(null);
-      }
-    };
+  // ============================================================================
+  // LOADING AND ERROR STATES
+  // ============================================================================
 
-    startReceiver();
-
-    return () => {
-      if (isTauriAvailable()) {
-        safeTauriInvoke('stop_receiver').catch(console.error);
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    if (loading) return;
-    updateMetrics();
-    const interval = setInterval(updateMetrics, POLLING.METRICS_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, [loading, updateMetrics]);
-
-  useEffect(() => {
-    if (activeView === 'traces' && !loading) {
-      loadTraces();
-    }
-  }, [activeView, loading, loadTraces]);
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen bg-dark-50">
         <div className="text-center">
@@ -259,7 +205,7 @@ const App = memo(() => {
                 {/* Action Buttons */}
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => setShowFilters(!showFilters)}
+                    onClick={toggleFilters}
                     className={`btn-ghost p-2 ${showFilters ? 'bg-dark-200 text-data-blue' : ''}`}
                     title="Toggle Filters"
                   >
@@ -267,14 +213,14 @@ const App = memo(() => {
                     <Filter className="w-4 h-4" />
                   </button>
                   <button
-                    onClick={updateMetrics}
+                    onClick={refetchAll}
                     className="btn-ghost p-2"
                     title="Refresh Data"
                   >
                     <RefreshCw className="w-4 h-4" />
                   </button>
                   <button
-                    onClick={() => setShowNotifications(!showNotifications)}
+                    onClick={toggleNotifications}
                     className={`btn-ghost p-2 relative ${showNotifications ? 'bg-dark-200 text-data-blue' : ''}`}
                     title="Notifications"
                   >
@@ -282,7 +228,7 @@ const App = memo(() => {
                     <span className="absolute -top-1 -right-1 w-2 h-2 bg-semantic-error rounded-full"></span>
                   </button>
                   <button
-                    onClick={() => setShowSettings(!showSettings)}
+                    onClick={toggleSettings}
                     className={`btn-ghost p-2 ${showSettings ? 'bg-dark-200 text-data-blue' : ''}`}
                     title="Settings"
                   >
@@ -293,7 +239,7 @@ const App = memo(() => {
 
                 {/* User Menu */}
                 <button
-                  onClick={() => setShowUserMenu(!showUserMenu)}
+                  onClick={toggleUserMenu}
                   className="flex items-center gap-2 pl-4 border-l border-dark-300 hover:bg-dark-200 rounded-r-lg px-2 py-1 transition-colors"
                 >
                   <div className="w-8 h-8 bg-gradient-to-br from-data-purple to-data-pink rounded-full flex items-center justify-center text-white font-semibold text-sm">
@@ -307,17 +253,17 @@ const App = memo(() => {
           </div>
 
           {/* Sub-header with Metrics */}
-          {systemMetrics && (
+          {systemMetrics.data && (
             <div className="px-4 py-2 bg-dark-150 border-t border-dark-300">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-6">
                   {/* Connection Status */}
                   <div className="flex items-center gap-2">
                     <div className={`w-2 h-2 rounded-full ${
-                      isTauriAvailable() ? 'bg-semantic-success' : 'bg-semantic-warning'
+                      !hasError ? 'bg-semantic-success' : 'bg-semantic-warning'
                     } animate-pulse`}></div>
                     <span className="text-xs text-light-400">
-                      {isTauriAvailable() ? 'OTLP Connected' : 'Demo Mode'}
+                      {!hasError ? 'OTLP Connected' : 'Connection Issues'}
                     </span>
                   </div>
 
@@ -325,30 +271,38 @@ const App = memo(() => {
                   <div className="flex items-center gap-4">
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-light-500">Services</span>
-                      <span className="text-sm font-medium text-light-200">{services.length}</span>
+                      <span className="text-sm font-medium text-light-200">
+                        {serviceMetrics.data?.length || 0}
+                      </span>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-light-500">Traces</span>
-                      <span className="text-sm font-medium text-light-200">{traces.length}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-light-500">Spans/s</span>
-                      <span className="text-sm font-medium text-data-cyan">
-                        {systemMetrics.spans_per_second.toFixed(0)}
+                      <span className="text-sm font-medium text-light-200">
+                        {recentTraces.data?.length || 0}
                       </span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-light-500">Memory</span>
-                      <span className="text-sm font-medium text-data-yellow">
-                        {systemMetrics.memory_usage_mb.toFixed(0)}MB
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-light-500">CPU</span>
-                      <span className="text-sm font-medium text-data-orange">
-                        {systemMetrics.cpu_usage_percent.toFixed(1)}%
-                      </span>
-                    </div>
+                    {systemMetrics.data && (
+                      <>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-light-500">Spans/s</span>
+                          <span className="text-sm font-medium text-data-cyan">
+                            {systemMetrics.data.spans_per_second.toFixed(0)}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-light-500">Memory</span>
+                          <span className="text-sm font-medium text-data-yellow">
+                            {systemMetrics.data.memory_usage_mb.toFixed(0)}MB
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-light-500">CPU</span>
+                          <span className="text-sm font-medium text-data-orange">
+                            {systemMetrics.data.cpu_usage_percent.toFixed(1)}%
+                          </span>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -375,9 +329,9 @@ const App = memo(() => {
                 <label className="text-sm font-medium text-light-300">Service:</label>
                 <select className="bg-dark-200 border border-dark-400 rounded px-3 py-1 text-sm text-light-200">
                   <option>All Services</option>
-                  {services.map(service => (
-                    <option key={service.service_name} value={service.service_name}>
-                      {service.service_name}
+                  {serviceMetrics.data?.map(service => (
+                    <option key={service.name} value={service.name}>
+                      {service.name}
                     </option>
                   ))}
                 </select>
@@ -499,11 +453,13 @@ const App = memo(() => {
         )}
 
         {/* Error Banner */}
-        {error && (
+        {hasError && (
           <div className="px-4 py-2 bg-semantic-error bg-opacity-10 border-b border-semantic-error border-opacity-30">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 bg-semantic-error rounded-full"></div>
-              <span className="text-sm text-semantic-error">{error}</span>
+              <span className="text-sm text-semantic-error">
+                Connection error - check OTEL receiver status
+              </span>
             </div>
           </div>
         )}
@@ -539,7 +495,10 @@ const App = memo(() => {
                       </div>
                     </div>
                     <div className="h-[calc(100%-100px)] sharp-card p-4">
-                      <ServiceGraphPro services={services} traces={traces} />
+                      <ServiceGraphPro
+                        services={serviceMetrics.data || []}
+                        traces={recentTraces.data || []}
+                      />
                     </div>
                   </div>
                 </div>
@@ -549,10 +508,16 @@ const App = memo(() => {
             {activeView === 'flows' && (
               <ErrorBoundary componentName="FlowTable" isolate>
                 <div className="h-full p-4">
-                  {traces.length > 100 ? (
-                    <VirtualizedFlowTable traces={traces} onRefresh={loadTraces} />
+                  {(recentTraces.data?.length || 0) > 100 ? (
+                    <VirtualizedFlowTable
+                      traces={recentTraces.data || []}
+                      onRefresh={recentTraces.refetch}
+                    />
                   ) : (
-                    <FlowTable traces={traces} onRefresh={loadTraces} />
+                    <FlowTable
+                      traces={recentTraces.data || []}
+                      onRefresh={recentTraces.refetch}
+                    />
                   )}
                 </div>
               </ErrorBoundary>
@@ -562,11 +527,11 @@ const App = memo(() => {
               <ErrorBoundary componentName="HealthView" isolate>
                 <div className="p-4 dashboard-grid">
                   <div className="panel-full">
-                    <ServiceHealthDashboard services={services} />
+                    <ServiceHealthDashboard services={serviceMetrics.data || []} />
                   </div>
-                  {systemMetrics && (
+                  {systemMetrics.data && (
                     <div className="panel-full">
-                      <SystemMetrics metrics={systemMetrics} />
+                      <SystemMetrics metrics={systemMetrics.data} />
                     </div>
                   )}
                 </div>
@@ -577,8 +542,8 @@ const App = memo(() => {
               <ErrorBoundary componentName="TraceExplorer" isolate>
                 <div className="h-full p-4">
                   <TraceExplorer
-                    traces={traces}
-                    onRefresh={loadTraces}
+                    traces={recentTraces.data || []}
+                    onRefresh={recentTraces.refetch}
                   />
                 </div>
               </ErrorBoundary>
@@ -607,16 +572,16 @@ const App = memo(() => {
             </div>
 
             <div className="flex items-center gap-4 text-xs">
-              {systemMetrics && (
+              {systemMetrics.data && (
                 <>
                   <span className="text-light-500">
                     Total Spans: <span className="font-medium text-light-300">
-                      {systemMetrics.total_spans.toLocaleString()}
+                      {systemMetrics.data.total_spans.toLocaleString()}
                     </span>
                   </span>
                   <span className="text-light-500">
                     Uptime: <span className="font-medium text-light-300">
-                      {Math.floor(systemMetrics.uptime_seconds / 60)}m
+                      {Math.floor(systemMetrics.data.uptime_seconds / 60)}m
                     </span>
                   </span>
                 </>

@@ -1,19 +1,42 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 
 console.log('main.tsx: Starting imports...');
 
 import App from './App';
-// import App from './AppPro';
-// import App from './TestApp';
-// import App from './AppDebug';
-// import App from './SimplestApp';
-// import App from './ProgressiveApp';
 import './index.css';
 import './styles/professional.css';
 import './styles/sharp.css';
 
 console.log('main.tsx: Imports complete, App:', App);
+
+// ============================================================================
+// REACT QUERY SETUP
+// ============================================================================
+
+// Create a client optimized for performance
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      // Cache data for 5 minutes by default
+      staleTime: 5 * 60 * 1000,
+      // Keep data in cache for 10 minutes when unused
+      gcTime: 10 * 60 * 1000,
+      // Retry failed requests 1 time (fast failure for better UX)
+      retry: 1,
+      // Refetch on window focus for fresh data
+      refetchOnWindowFocus: true,
+      // Don't refetch on reconnect to avoid spam
+      refetchOnReconnect: false,
+    },
+    mutations: {
+      // Don't retry mutations by default
+      retry: false,
+    },
+  },
+});
 
 // BLAZING FAST: Measure startup performance
 const startTime = performance.now();
@@ -59,10 +82,16 @@ const renderApp = async () => {
 
     console.log('renderApp: Creating React root...');
 
-    // Render React app
+    // Render React app with providers
     ReactDOM.createRoot(rootElement).render(
       <React.StrictMode>
-        <App />
+        <QueryClientProvider client={queryClient}>
+          <App />
+          {/* Show React Query devtools in development */}
+          {process.env.NODE_ENV === 'development' && (
+            <ReactQueryDevtools initialIsOpen={false} />
+          )}
+        </QueryClientProvider>
       </React.StrictMode>
     );
 
