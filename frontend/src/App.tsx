@@ -36,6 +36,15 @@ import {
   Metric
 } from './components-refined';
 import {
+  UnifiedPage,
+  UnifiedTable,
+  UnifiedCard,
+  UnifiedMetrics,
+  UnifiedEmptyState,
+  UnifiedLoadingState,
+  UnifiedList
+} from './components/unified-layout';
+import {
   Activity,
   BarChart3,
   Layers,
@@ -47,6 +56,7 @@ import {
   Settings,
   Bell,
   ChevronDown,
+  Download,
   type LucideIcon
 } from 'lucide-react';
 
@@ -94,10 +104,10 @@ const App = memo(() => {
   });
 
   React.useEffect(() => {
-    if (startReceiver.mutate) {
+    if (!startReceiver.isSuccess && !startReceiver.isLoading) {
       startReceiver.mutate();
     }
-  }, [startReceiver]);
+  }, [startReceiver.isSuccess, startReceiver.isLoading, startReceiver.mutate]);
 
   // ============================================================================
   // KEYBOARD SHORTCUTS
@@ -429,29 +439,42 @@ const App = memo(() => {
             >
               {activeView === 'graph' && (
                 <ErrorBoundary componentName="ServiceGraphPro" isolate>
-                  <Page>
-                    <Section
-                      title="Service Dependency Map"
-                      subtitle="Real-time service interactions and health status"
-                      action={
-                        <div className="flex gap-2">
-                          <Button variant="primary" size="sm">Auto Layout</Button>
-                          <Button variant="secondary" size="sm">Export</Button>
-                        </div>
-                      }
-                    >
-                      <ServiceGraphPro
-                        services={(serviceMetrics.data as any) || []}
-                        traces={(recentTraces.data as any) || []}
-                      />
-                    </Section>
-                  </Page>
+                  <UnifiedPage
+                    title="Service Dependency Map"
+                    subtitle="Real-time service interactions and health visualization"
+                    icon={GitBranch}
+                    onRefresh={refetchAll}
+                    isLoading={isLoading}
+                    actions={
+                      <>
+                        <Button variant="secondary" size="sm" icon={Settings}>Auto Layout</Button>
+                        <Button variant="secondary" size="sm" icon={Download}>Export</Button>
+                      </>
+                    }
+                  >
+                    <ServiceGraphPro
+                      services={(serviceMetrics.data as any) || []}
+                      traces={(recentTraces.data as any) || []}
+                    />
+                  </UnifiedPage>
                 </ErrorBoundary>
               )}
 
               {activeView === 'flows' && (
                 <ErrorBoundary componentName="FlowTable" isolate>
-                  <Page>
+                  <UnifiedPage
+                    title="Trace Flows"
+                    subtitle="Real-time trace flow visualization and analysis"
+                    icon={Activity}
+                    onRefresh={recentTraces.refetch}
+                    isLoading={recentTraces.isLoading}
+                    actions={
+                      <>
+                        <Button variant="secondary" size="sm" icon={Filter}>Filter</Button>
+                        <Button variant="secondary" size="sm" icon={Download}>Export</Button>
+                      </>
+                    }
+                  >
                     {((recentTraces.data as any)?.length || 0) > 100 ? (
                       <VirtualizedFlowTable
                         traces={(recentTraces.data as any) || []}
@@ -463,37 +486,75 @@ const App = memo(() => {
                         onRefresh={recentTraces.refetch}
                       />
                     )}
-                  </Page>
+                  </UnifiedPage>
                 </ErrorBoundary>
               )}
 
               {activeView === 'health' && (
                 <ErrorBoundary componentName="HealthView" isolate>
-                  <Page className="space-y-6">
-                    <ServiceHealthDashboard services={(serviceMetrics.data as any) || []} />
-                    {systemMetrics.data && (
-                      <SystemMetrics metrics={(systemMetrics.data as any)} />
-                    )}
-                  </Page>
+                  <UnifiedPage
+                    title="Service Health"
+                    subtitle="System health metrics and performance indicators"
+                    icon={BarChart3}
+                    onRefresh={refetchAll}
+                    isLoading={isLoading}
+                    actions={
+                      <>
+                        <Button variant="secondary" size="sm" icon={Settings}>Configure</Button>
+                        <Button variant="secondary" size="sm" icon={Download}>Report</Button>
+                      </>
+                    }
+                  >
+                    <div className="space-y-6">
+                      <ServiceHealthDashboard services={(serviceMetrics.data as any) || []} />
+                      {systemMetrics.data && (
+                        <SystemMetrics metrics={(systemMetrics.data as any)} />
+                      )}
+                    </div>
+                  </UnifiedPage>
                 </ErrorBoundary>
               )}
 
               {activeView === 'traces' && (
                 <ErrorBoundary componentName="TraceExplorer" isolate>
-                  <Page>
+                  <UnifiedPage
+                    title="Trace Explorer"
+                    subtitle="Deep dive into distributed trace data"
+                    icon={Layers}
+                    onRefresh={recentTraces.refetch}
+                    isLoading={recentTraces.isLoading}
+                    actions={
+                      <>
+                        <Button variant="secondary" size="sm" icon={Search}>Search</Button>
+                        <Button variant="secondary" size="sm" icon={Filter}>Filter</Button>
+                      </>
+                    }
+                  >
                     <TraceExplorer
                       traces={(recentTraces.data as any) || []}
                       onRefresh={recentTraces.refetch}
                     />
-                  </Page>
+                  </UnifiedPage>
                 </ErrorBoundary>
               )}
 
               {activeView === 'servicemap' && (
                 <ErrorBoundary componentName="ServiceMap" isolate>
-                  <Page>
+                  <UnifiedPage
+                    title="Service Dependencies"
+                    subtitle="Service topology and dependency mapping"
+                    icon={Share2}
+                    onRefresh={refetchAll}
+                    isLoading={isLoading}
+                    actions={
+                      <>
+                        <Button variant="secondary" size="sm" icon={Settings}>Layout</Button>
+                        <Button variant="secondary" size="sm" icon={Download}>Export</Button>
+                      </>
+                    }
+                  >
                     <ServiceMap />
-                  </Page>
+                  </UnifiedPage>
                 </ErrorBoundary>
               )}
             </motion.div>

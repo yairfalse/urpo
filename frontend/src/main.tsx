@@ -8,6 +8,7 @@ console.log('main.tsx: Starting imports...');
 import App from './App';
 import './index.css';
 import './styles/design-system.css';
+import './styles/unified-design.css';
 
 console.log('main.tsx: Imports complete, App:', App);
 

@@ -156,7 +156,10 @@ export const StatusIndicator = ({ status, label, pulse }: StatusIndicatorProps) 
   <div className="status-indicator">
     <div className={clsx(
       'status-dot',
-      `status-${status}`,
+      status === 'online' && 'status-online',
+      status === 'warning' && 'status-warning',
+      status === 'error' && 'status-error',
+      status === 'offline' && 'status-offline',
       pulse && 'status-pulse'
     )} />
     {label && <span>{label}</span>}
@@ -205,9 +208,18 @@ interface DropdownProps {
   onClose: () => void;
   children: ReactNode;
   className?: string;
+  align?: 'left' | 'right';
+  position?: 'top' | 'bottom';
 }
 
-export const Dropdown = ({ isOpen, onClose, children, className }: DropdownProps) => {
+export const Dropdown = ({
+  isOpen,
+  onClose,
+  children,
+  className,
+  align = 'right',
+  position = 'bottom'
+}: DropdownProps) => {
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -234,16 +246,38 @@ export const Dropdown = ({ isOpen, onClose, children, className }: DropdownProps
     };
   }, [isOpen, onClose]);
 
+  const dropdownPositionClasses = clsx(
+    'dropdown',
+    position === 'bottom' ? 'top-full mt-1' : 'bottom-full mb-1',
+    align === 'right' ? 'right-0' : 'left-0',
+    className
+  );
+
   return (
     <AnimatePresence>
       {isOpen && (
         <motion.div
           ref={dropdownRef}
-          initial={{ opacity: 0, scale: 0.95, y: -10 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.95, y: -10 }}
-          transition={{ duration: 0.15 }}
-          className={clsx('dropdown', className)}
+          initial={{
+            opacity: 0,
+            scale: 0.95,
+            y: position === 'bottom' ? -10 : 10
+          }}
+          animate={{
+            opacity: 1,
+            scale: 1,
+            y: 0
+          }}
+          exit={{
+            opacity: 0,
+            scale: 0.95,
+            y: position === 'bottom' ? -10 : 10
+          }}
+          transition={{
+            duration: 0.15,
+            ease: [0.4, 0, 0.2, 1]
+          }}
+          className={dropdownPositionClasses}
         >
           {children}
         </motion.div>
@@ -301,19 +335,43 @@ interface SectionProps {
   subtitle?: string;
   action?: ReactNode;
   children: ReactNode;
+  className?: string;
 }
 
-export const Section = ({ title, subtitle, action, children }: SectionProps) => (
-  <div className="card">
+export const Section = ({ title, subtitle, action, children, className }: SectionProps) => (
+  <motion.div
+    initial={{ opacity: 0, y: 20 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+    className={clsx('card', className)}
+  >
     <div className="section-header">
-      <div>
+      <motion.div
+        initial={{ opacity: 0, x: -20 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.3, delay: 0.1 }}
+      >
         <h2 className="section-title">{title}</h2>
         {subtitle && <p className="section-subtitle">{subtitle}</p>}
-      </div>
-      {action && <div>{action}</div>}
+      </motion.div>
+      {action && (
+        <motion.div
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.3, delay: 0.15 }}
+        >
+          {action}
+        </motion.div>
+      )}
     </div>
-    {children}
-  </div>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.3, delay: 0.2 }}
+    >
+      {children}
+    </motion.div>
+  </motion.div>
 );
 
 // ============================================================================
