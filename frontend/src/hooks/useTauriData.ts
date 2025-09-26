@@ -21,7 +21,7 @@ export function useTauriData() {
       if (isTauriAvailable()) {
         // Fetch from Tauri backend
         const [servicesResult, metricsResult] = await Promise.all([
-          safeTauriInvoke<ServiceMetrics[]>('get_services'),
+          safeTauriInvoke<ServiceMetrics[]>('get_service_metrics'),
           safeTauriInvoke<SystemMetrics>('get_system_metrics')
         ]);
 

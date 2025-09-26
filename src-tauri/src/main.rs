@@ -28,9 +28,6 @@ use urpo_lib::{
 pub use telemetry::TELEMETRY;
 pub use types::*;
 
-// Global telemetry system
-pub static TELEMETRY: Lazy<TelemetryState> = Lazy::new(TelemetryState::new);
-
 /// Initialize application state
 async fn init_app_state() -> AppState {
     // Create optimized storage with aggressive limits

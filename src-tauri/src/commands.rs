@@ -1,6 +1,7 @@
 //! Optimized Tauri command handlers with performance-focused macros.
 
 use serde_json::Value;
+use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{State, Window};
 

@@ -13,6 +13,13 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tonic::{Request, Response, Status};
 
+/// Create a metrics service server for GRPC
+pub fn create_metrics_service_server(
+    storage: Arc<Mutex<MetricStorage>>,
+) -> MetricsServiceServer<OtelMetricsReceiver> {
+    MetricsServiceServer::new(OtelMetricsReceiver::new(storage))
+}
+
 /// OTLP Metrics receiver service
 pub struct OtelMetricsReceiver {
     /// Metrics storage engine
@@ -86,8 +93,18 @@ impl OtelMetricsReceiver {
                 Data::ExponentialHistogram(_) => {
                     // Skip exponential histograms for now
                 },
-                Data::Summary(_) => {
-                    // Skip summaries for now
+                Data::Summary(summary) => {
+                    // Process summary data points with quantiles
+                    for data_point in &summary.data_points {
+                        if data_point.sum.unwrap_or(0.0) > 0.0 {
+                            points.push(MetricPoint::new(
+                                timestamp,
+                                service_id,
+                                metric_name_id,
+                                data_point.sum.unwrap_or(0.0) / data_point.count as f64, // Average
+                            ));
+                        }
+                    }
                 },
             }
         }

@@ -2,6 +2,7 @@
 
 use atomic_float::AtomicF64 as AtomicFloat;
 use dashmap::DashMap;
+use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use sysinfo::System;
@@ -107,3 +108,6 @@ impl TelemetryState {
         self.heap_usage_mb.load(Ordering::Relaxed)
     }
 }
+
+/// Global telemetry instance
+pub static TELEMETRY: Lazy<TelemetryState> = Lazy::new(TelemetryState::new);

@@ -3,6 +3,8 @@
 //! All types are designed for zero-allocation hot paths
 //! and cache-line optimization.
 
+use std::sync::Arc;
+
 /// OpenTelemetry metric types with ultra-fast processing
 #[derive(Debug, Clone)]
 pub enum MetricType {
@@ -14,13 +16,33 @@ pub enum MetricType {
     Histogram {
         sum: f64,
         count: u64,
-        // TODO: Add buckets when needed
+        buckets: Arc<[HistogramBucket]>,
     },
+    /// Summary with quantiles
+    Summary {
+        sum: f64,
+        count: u64,
+        quantiles: Arc<[Quantile]>,
+    },
+}
+
+/// Histogram bucket for distribution tracking
+#[derive(Debug, Clone)]
+pub struct HistogramBucket {
+    pub upper_bound: f64,
+    pub count: u64,
+}
+
+/// Quantile for summary metrics
+#[derive(Debug, Clone)]
+pub struct Quantile {
+    pub quantile: f64,
+    pub value: f64,
 }
 
 /// Metric data point optimized for cache efficiency
 /// Size: 32 bytes exactly for cache line optimization
-#[repr(C)]
+#[repr(C, align(32))]
 #[derive(Debug, Clone, Copy)]
 pub struct MetricPoint {
     /// Timestamp (8 bytes)

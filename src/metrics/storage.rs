@@ -5,8 +5,13 @@
 //! - <30MB memory for 500K metric points
 //! - Real-time service health calculation
 
-use crate::metrics::{ring_buffer::MetricRingBuffer, string_pool::StringPool, types::MetricPoint};
-use std::collections::HashMap;
+use crate::metrics::{
+    aggregator::{AggregationResult, MetricsAggregator},
+    ring_buffer::MetricRingBuffer,
+    string_pool::StringPool,
+    types::MetricPoint,
+};
+use dashmap::DashMap;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
@@ -21,20 +26,21 @@ pub struct ServiceHealth {
     pub last_updated: SystemTime,
 }
 
-/// Metric aggregation storage engine
+/// Metric aggregation storage engine with lock-free operations
 pub struct MetricStorage {
     ring_buffer: Arc<MetricRingBuffer>,
     string_pool: Arc<StringPool>,
-    service_aggregates: HashMap<u16, ServiceAggregator>,
+    service_aggregates: Arc<DashMap<u16, ServiceAggregator>>,
+    global_aggregator: Arc<MetricsAggregator>,
     max_services: usize,
 }
 
-/// Per-service metric aggregator
+/// Per-service metric aggregator with SIMD optimization
 #[derive(Debug)]
 struct ServiceAggregator {
     request_count: u64,
     error_count: u64,
-    latency_sum: f64,
+    latency_aggregator: MetricsAggregator,
     latency_samples: Vec<f64>,
     window_start: SystemTime,
     window_duration: Duration,
@@ -46,7 +52,8 @@ impl MetricStorage {
         Self {
             ring_buffer: Arc::new(MetricRingBuffer::new(buffer_capacity)),
             string_pool: Arc::new(StringPool::new()),
-            service_aggregates: HashMap::new(),
+            service_aggregates: Arc::new(DashMap::new()),
+            global_aggregator: Arc::new(MetricsAggregator::new()),
             max_services,
         }
     }

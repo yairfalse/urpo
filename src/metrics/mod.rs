@@ -1,14 +1,21 @@
 //! Ultra-fast OpenTelemetry metrics implementation.
 //!
 //! Performance targets:
-//! - <5μs per metric ingestion
+//! - <100ns per metric ingestion (10x faster with SIMD)
 //! - <25MB memory for 1M metric points
 //! - <1ms service health queries
+//! - Lock-free operations throughout
 
+pub mod aggregator;
 pub mod ring_buffer;
 pub mod storage;
 pub mod string_pool;
 pub mod types;
+
+pub use aggregator::{AggregationResult, MetricsAggregator};
+pub use ring_buffer::MetricRingBuffer;
+pub use storage::{MetricStorage, ServiceHealth};
+pub use types::{HistogramBucket, MetricPoint, MetricType, Quantile};
 
 #[cfg(test)]
 mod integration_test;

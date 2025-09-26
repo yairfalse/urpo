@@ -8,6 +8,7 @@ pub mod logs;
 pub mod metrics;
 
 use crate::core::{Result, ServiceName, Span as UrpoSpan, SpanId, SpanStatus, TraceId, UrpoError};
+use crate::metrics::MetricStorage;
 use crate::storage::{UnifiedStorage, ZeroAllocSpanPool};
 use chrono::{DateTime, Utc};
 use opentelemetry_proto::tonic::collector::trace::v1::{
@@ -64,6 +65,8 @@ pub struct OtelReceiver {
     batch_size: usize,
     /// Smart sampler for OTEL-compliant sampling
     sampler: Option<Arc<crate::sampling::SmartSampler>>,
+    /// Metrics storage for OTLP metrics
+    metrics_storage: Option<Arc<tokio::sync::Mutex<MetricStorage>>>,
 }
 
 impl OtelReceiver {
@@ -97,6 +100,11 @@ impl OtelReceiver {
     ) -> Self {
         let span_pool = Arc::new(ZeroAllocSpanPool::new(config.span_pool_size));
 
+        // Initialize metrics storage with 1M capacity
+        let metrics_storage = Some(Arc::new(tokio::sync::Mutex::new(
+            MetricStorage::new(1_048_576, 1000), // 1M metrics, 1000 services
+        )));
+
         Self {
             grpc_port,
             http_port,
@@ -107,6 +115,7 @@ impl OtelReceiver {
             batch_sender: None,
             batch_size: config.batch_size,
             sampler: None,
+            metrics_storage,
         }
     }
 
@@ -153,6 +162,19 @@ impl OtelReceiver {
     pub fn with_smart_sampling(mut self, storage_budget_gb: u64) -> Self {
         self.sampler = Some(Arc::new(crate::sampling::SmartSampler::new(storage_budget_gb)));
         self
+    }
+
+    /// Enable metrics collection with specified capacity.
+    pub fn with_metrics(mut self, buffer_capacity: usize, max_services: usize) -> Self {
+        self.metrics_storage = Some(Arc::new(tokio::sync::Mutex::new(
+            MetricStorage::new(buffer_capacity, max_services),
+        )));
+        self
+    }
+
+    /// Get metrics storage for querying.
+    pub fn metrics_storage(&self) -> Option<&Arc<tokio::sync::Mutex<MetricStorage>>> {
+        self.metrics_storage.as_ref()
     }
 
     /// Flush a batch to storage.
@@ -230,7 +252,15 @@ impl OtelReceiver {
         tracing::info!("GRPC server binding to {} with trace support", addr);
 
         // Create server builder with trace service
-        let server = Server::builder().add_service(trace_service);
+        let mut server = Server::builder().add_service(trace_service);
+
+        // Add metrics service if enabled
+        if let Some(ref metrics_storage) = self.metrics_storage {
+            tracing::info!("Adding OTLP metrics service to GRPC server");
+            server = server.add_service(
+                metrics::create_metrics_service_server(metrics_storage.clone())
+            );
+        }
 
         tracing::debug!("Starting server.serve() on {}", addr);
 
@@ -785,6 +815,10 @@ fn value_to_string(value: opentelemetry_proto::tonic::common::v1::AnyValue) -> S
 mod tests {
     use super::*;
     use chrono::Datelike;
+    use opentelemetry_proto::tonic::{
+        common::v1::{any_value::Value, AnyValue, KeyValue},
+        trace::v1::{Span as OtelSpan, Status},
+    };
 
     #[test]
     fn test_nanos_to_datetime() {
@@ -793,20 +827,8 @@ mod tests {
         assert!(dt.year() >= 2023);
     }
 
-    // fn test_should_sample() {
-    //     let (tx, _rx) = mpsc::channel(10);
-    //
-    //     let receiver = OtelReceiver::new(tx.clone(), 1.0);
-    //     assert!(receiver.should_sample());
-    //
-    //     let receiver = OtelReceiver::new(tx.clone(), 0.0);
-    //     assert!(!receiver.should_sample());
-    // }
-
     #[test]
     fn test_extract_service_name() {
-        use opentelemetry_proto::tonic::common::v1::{any_value::Value, AnyValue, KeyValue};
-
         let attributes = vec![KeyValue {
             key: "service.name".to_string(),
             value: Some(AnyValue {
@@ -818,5 +840,262 @@ mod tests {
 
         let empty_attributes = vec![];
         assert_eq!(extract_service_name(&empty_attributes), "unknown");
+    }
+
+    #[test]
+    fn test_extract_span_timing_valid() {
+        let span = OtelSpan {
+            start_time_unix_nano: 1_000_000_000,
+            end_time_unix_nano: 2_000_000_000,
+            ..Default::default()
+        };
+
+        let timing = extract_span_timing(&span).unwrap();
+        assert_eq!(timing.duration.as_nanos(), 1_000_000_000);
+    }
+
+    #[test]
+    fn test_extract_span_timing_zero_start() {
+        let span = OtelSpan {
+            start_time_unix_nano: 0,
+            end_time_unix_nano: 1_000_000_000,
+            ..Default::default()
+        };
+
+        let result = extract_span_timing(&span);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("start_time is zero"));
+    }
+
+    #[test]
+    fn test_extract_span_timing_overflow_protection() {
+        let span = OtelSpan {
+            start_time_unix_nano: u64::MAX - 1000,
+            end_time_unix_nano: u64::MAX,
+            ..Default::default()
+        };
+
+        let timing = extract_span_timing(&span).unwrap();
+        assert_eq!(timing.duration.as_nanos(), 1000);
+    }
+
+    #[test]
+    fn test_extract_span_timing_invalid_range() {
+        // Year 1999
+        let span = OtelSpan {
+            start_time_unix_nano: 915_148_800_000_000_000,
+            end_time_unix_nano: 915_148_801_000_000_000,
+            ..Default::default()
+        };
+
+        let result = extract_span_timing(&span);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("outside valid range"));
+    }
+
+    #[test]
+    fn test_extract_span_status_ok() {
+        let span = OtelSpan {
+            status: Some(Status {
+                code: 1,
+                message: String::new(),
+            }),
+            ..Default::default()
+        };
+
+        let status = extract_span_status(&span);
+        assert!(matches!(status, SpanStatus::Ok));
+    }
+
+    #[test]
+    fn test_extract_span_status_error() {
+        let span = OtelSpan {
+            status: Some(Status {
+                code: 2,
+                message: "Database connection failed".to_string(),
+            }),
+            ..Default::default()
+        };
+
+        let status = extract_span_status(&span);
+        match status {
+            SpanStatus::Error(msg) => assert_eq!(msg, "Database connection failed"),
+            _ => panic!("Expected error status"),
+        }
+    }
+
+    #[test]
+    fn test_extract_span_ids_valid() {
+        let span = OtelSpan {
+            trace_id: vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
+            span_id: vec![1, 2, 3, 4, 5, 6, 7, 8],
+            parent_span_id: vec![],
+            ..Default::default()
+        };
+
+        let (trace_id, span_id, parent_id) = extract_span_ids(&span).unwrap();
+        assert_eq!(trace_id.to_string(), "0102030405060708090a0b0c0d0e0f10");
+        assert_eq!(span_id.to_string(), "0102030405060708");
+        assert!(parent_id.is_none());
+    }
+
+    #[test]
+    fn test_extract_span_ids_with_parent() {
+        let span = OtelSpan {
+            trace_id: vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
+            span_id: vec![1, 2, 3, 4, 5, 6, 7, 8],
+            parent_span_id: vec![8, 7, 6, 5, 4, 3, 2, 1],
+            ..Default::default()
+        };
+
+        let (_, _, parent_id) = extract_span_ids(&span).unwrap();
+        assert!(parent_id.is_some());
+        assert_eq!(parent_id.unwrap().to_string(), "0807060504030201");
+    }
+
+    #[test]
+    fn test_extract_span_ids_empty_trace() {
+        let span = OtelSpan {
+            trace_id: vec![],
+            span_id: vec![1, 2, 3, 4, 5, 6, 7, 8],
+            ..Default::default()
+        };
+
+        let result = extract_span_ids(&span);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Invalid trace ID"));
+    }
+
+    #[test]
+    fn test_extract_span_ids_all_zeros() {
+        let span = OtelSpan {
+            trace_id: vec![0; 16],
+            span_id: vec![0; 8],
+            ..Default::default()
+        };
+
+        let result = extract_span_ids(&span);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("all zeros"));
+    }
+
+    #[test]
+    fn test_parse_service_name_valid() {
+        assert!(parse_service_name("my-service").is_ok());
+        assert!(parse_service_name("my_service").is_ok());
+        assert!(parse_service_name("my.service").is_ok());
+        assert!(parse_service_name("MyService123").is_ok());
+    }
+
+    #[test]
+    fn test_parse_service_name_empty() {
+        let result = parse_service_name("");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_service_name_too_long() {
+        let long_name = "a".repeat(300);
+        let result = parse_service_name(&long_name);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_extract_span_kind() {
+        let client_span = OtelSpan {
+            kind: 3, // CLIENT
+            ..Default::default()
+        };
+        assert_eq!(extract_span_kind(&client_span), "CLIENT");
+
+        let server_span = OtelSpan {
+            kind: 2, // SERVER
+            ..Default::default()
+        };
+        assert_eq!(extract_span_kind(&server_span), "SERVER");
+
+        let unknown_span = OtelSpan {
+            kind: 99,
+            ..Default::default()
+        };
+        assert_eq!(extract_span_kind(&unknown_span), "UNSPECIFIED");
+    }
+
+    #[test]
+    fn test_extract_attribute_value() {
+        // String value
+        let string_val = Some(AnyValue {
+            value: Some(Value::StringValue("test".to_string())),
+        });
+        assert_eq!(extract_attribute_value(&string_val), Some("test".to_string()));
+
+        // Int value
+        let int_val = Some(AnyValue {
+            value: Some(Value::IntValue(42)),
+        });
+        assert_eq!(extract_attribute_value(&int_val), Some("42".to_string()));
+
+        // Double value
+        let double_val = Some(AnyValue {
+            value: Some(Value::DoubleValue(3.14)),
+        });
+        assert_eq!(extract_attribute_value(&double_val), Some("3.14".to_string()));
+
+        // Bool value
+        let bool_val = Some(AnyValue {
+            value: Some(Value::BoolValue(true)),
+        });
+        assert_eq!(extract_attribute_value(&bool_val), Some("true".to_string()));
+
+        // None value
+        assert_eq!(extract_attribute_value(&None), None);
+    }
+
+    #[test]
+    fn test_convert_otel_span_with_pool() {
+        let pool = Arc::new(ZeroAllocSpanPool::new(10));
+
+        let otel_span = OtelSpan {
+            trace_id: vec![1; 16],
+            span_id: vec![2; 8],
+            name: "test-operation".to_string(),
+            start_time_unix_nano: 1_700_000_000_000_000_000,
+            end_time_unix_nano: 1_700_000_001_000_000_000,
+            kind: 2, // SERVER
+            attributes: vec![
+                KeyValue {
+                    key: "http.method".to_string(),
+                    value: Some(AnyValue {
+                        value: Some(Value::StringValue("GET".to_string())),
+                    }),
+                },
+            ],
+            ..Default::default()
+        };
+
+        let result = convert_otel_span_with_pool(otel_span, "test-service", &pool);
+        assert!(result.is_ok());
+
+        let span = result.unwrap();
+        assert_eq!(span.operation_name, "test-operation");
+        assert_eq!(span.service_name.to_string(), "test-service");
+        assert!(span.attributes.0.contains_key("http.method"));
+    }
+
+    #[test]
+    fn test_receiver_config() {
+        let config = ReceiverConfig::default();
+        assert_eq!(config.grpc_port, 4317);
+        assert_eq!(config.max_batch_size, 1000);
+        assert_eq!(config.batch_timeout, Duration::from_millis(500));
+        assert_eq!(config.sampling_rate, 1.0);
+
+        let custom_config = ReceiverConfig {
+            grpc_port: 5000,
+            sampling_rate: 0.5,
+            ..Default::default()
+        };
+        assert_eq!(custom_config.grpc_port, 5000);
+        assert_eq!(custom_config.sampling_rate, 0.5);
     }
 }
