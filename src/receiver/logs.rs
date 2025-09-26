@@ -5,6 +5,7 @@
 
 use crate::core::{otel_compliance, Result, SpanId, TraceId};
 use crate::logs::{
+    buffer::LogCircularBuffer,
     storage::LogStorage,
     types::{LogRecord, LogSeverity},
 };
@@ -19,18 +20,52 @@ use tonic::{Request, Response, Status};
 
 /// OTLP Logs receiver service
 pub struct OtelLogsReceiver {
+    /// High-performance circular buffer for log ingestion
+    buffer: Arc<LogCircularBuffer>,
     /// Logs storage engine
     log_storage: Arc<Mutex<LogStorage>>,
     /// String interning pool for service names
     string_pool: Arc<StringPool>,
+    /// Background processor handle
+    _processor_handle: tokio::task::JoinHandle<()>,
 }
 
 impl OtelLogsReceiver {
-    /// Create new logs receiver
+    /// Create new logs receiver with high-performance buffer
     pub fn new(log_storage: Arc<Mutex<LogStorage>>) -> Self {
+        let buffer = Arc::new(LogCircularBuffer::new(10_000));
+        let string_pool = Arc::new(StringPool::new());
+
+        // Spawn background processor for batched storage
+        let processor_buffer = buffer.clone();
+        let processor_storage = log_storage.clone();
+
+        let processor_handle = tokio::spawn(async move {
+            let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(100));
+
+            loop {
+                interval.tick().await;
+
+                // Process logs in batches for efficiency
+                let batch = processor_buffer.pop_batch(1000);
+                if !batch.is_empty() {
+                    let mut storage = processor_storage.lock().await;
+                    for log_arc in batch {
+                        // Convert Arc<LogRecord> back to owned
+                        let log_record = (*log_arc).clone();
+                        if let Err(e) = storage.store_log(log_record) {
+                            tracing::warn!("Failed to store log: {}", e);
+                        }
+                    }
+                }
+            }
+        });
+
         Self {
+            buffer,
             log_storage,
-            string_pool: Arc::new(StringPool::new()),
+            string_pool,
+            _processor_handle: processor_handle,
         }
     }
 
@@ -165,9 +200,11 @@ impl LogsService for OtelLogsReceiver {
 
                     match self.convert_otlp_log(&log_record, service_id) {
                         Ok(converted_log) => {
-                            let storage = self.log_storage.lock().await;
-                            if storage.store_log(converted_log).is_ok() {
+                            // Push to high-performance circular buffer (wait-free)
+                            if self.buffer.push(converted_log) {
                                 processed_logs += 1;
+                            } else {
+                                tracing::warn!("Failed to buffer log (buffer full)");
                             }
                         },
                         Err(e) => {

@@ -6,7 +6,7 @@
 //! - Real-time service health calculation
 
 use crate::metrics::{
-    aggregator::{AggregationResult, MetricsAggregator},
+    aggregator::MetricsAggregator,
     ring_buffer::MetricRingBuffer,
     string_pool::StringPool,
     types::MetricPoint,
@@ -40,7 +40,7 @@ pub struct MetricStorage {
 struct ServiceAggregator {
     request_count: u64,
     error_count: u64,
-    latency_aggregator: MetricsAggregator,
+    latency_sum: f64,
     latency_samples: Vec<f64>,
     window_start: SystemTime,
     window_duration: Duration,
@@ -108,7 +108,7 @@ impl MetricStorage {
 
     /// List all services with metrics
     pub fn list_services(&self) -> Vec<u16> {
-        self.service_aggregates.keys().copied().collect()
+        self.service_aggregates.iter().map(|item| *item.key()).collect()
     }
 
     /// Get current memory usage estimate
@@ -118,8 +118,8 @@ impl MetricStorage {
             self.service_aggregates.len() * std::mem::size_of::<ServiceAggregator>();
         let samples_size: usize = self
             .service_aggregates
-            .values()
-            .map(|a| a.latency_samples.len() * std::mem::size_of::<f64>())
+            .iter()
+            .map(|item| item.value().latency_samples.len() * std::mem::size_of::<f64>())
             .sum();
 
         base_size + aggregates_size + samples_size
@@ -152,20 +152,17 @@ impl ServiceAggregator {
             latency_sum: 0.0,
             latency_samples: Vec::new(),
             window_start,
-            window_duration: Duration::from_secs(60), // 1 minute window
+            window_duration: Duration::from_secs(60),
         }
     }
 
     fn add_metric(&mut self, metric: MetricPoint) {
         self.request_count += 1;
 
-        // Simple heuristic: values > 1000 are latencies in ms, > 0.5 are error rates
         if metric.value > 1000.0 {
-            // Treat as latency metric
             self.latency_sum += metric.value;
             self.latency_samples.push(metric.value);
         } else if metric.value > 0.5 && metric.value <= 1.0 {
-            // Treat as error indicator
             self.error_count += 1;
         }
     }
