@@ -6,10 +6,12 @@
 use crate::metrics::types::MetricPoint;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-/// High-performance ring buffer for metric points
+/// High-performance lock-free ring buffer for metric points
+/// Uses cache-aligned slots for optimal CPU cache usage
 pub struct MetricRingBuffer {
     buffer: Box<[MetricPoint]>,
     capacity: usize,
+    mask: usize,  // For fast modulo via bitwise AND
     head: AtomicUsize,
     tail: AtomicUsize,
     size: AtomicUsize,
@@ -33,6 +35,7 @@ impl MetricRingBuffer {
         Self {
             buffer: buffer.into_boxed_slice(),
             capacity,
+            mask: capacity - 1,  // For fast modulo
             head: AtomicUsize::new(0),
             tail: AtomicUsize::new(0),
             size: AtomicUsize::new(0),
@@ -50,7 +53,7 @@ impl MetricRingBuffer {
         }
 
         let tail = self.tail.load(Ordering::Acquire);
-        let next_tail = (tail + 1) % self.capacity;
+        let next_tail = (tail + 1) & self.mask;  // Fast modulo with bitwise AND
 
         // Store the metric at tail position
         // SAFETY: tail is always within bounds due to modulo operation
@@ -85,7 +88,7 @@ impl MetricRingBuffer {
             ptr.read()
         };
 
-        let next_head = (head + 1) % self.capacity;
+        let next_head = (head + 1) & self.mask;  // Fast modulo with bitwise AND
 
         // Update head and size atomically
         self.head.store(next_head, Ordering::Release);

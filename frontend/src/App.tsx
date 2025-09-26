@@ -5,7 +5,7 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useDashboardData, useAppStore, useStartReceiver } from './lib/tauri';
+import { useDashboardData, useAppStore } from './lib/tauri';
 import { Button, Input, StatusDot, Badge, COLORS } from './design-system/core';
 import {
   UnifiedHealthView,
@@ -43,15 +43,7 @@ const App = () => {
     refetchAll
   } = useDashboardData();
 
-  const startReceiver = useStartReceiver({
-    onError: (error: any) => console.error('Failed to start OTEL receiver:', error)
-  });
-
-  React.useEffect(() => {
-    if (!startReceiver.isSuccess && !startReceiver.isLoading) {
-      startReceiver.mutate();
-    }
-  }, [startReceiver.isSuccess, startReceiver.isLoading, startReceiver.mutate]);
+  // Start receiver will be handled by backend when Tauri is available
 
   const navigation = [
     { key: 'dashboard', icon: BarChart3, label: 'Dashboard', shortcut: '1' },
