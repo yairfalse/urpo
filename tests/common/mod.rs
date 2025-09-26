@@ -1,4 +1,9 @@
-//! Common test utilities and fixtures.
+//! Common test utilities and fixtures for URPO tests.
+//!
+//! Provides:
+//! - Test data generators for OTLP protocol testing
+//! - Performance measurement utilities
+//! - Common assertions and helpers
 
 use std::time::{Duration, SystemTime};
 use urpo_lib::core::{ServiceName, Span, SpanId, SpanStatus, TraceId};

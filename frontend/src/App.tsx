@@ -5,7 +5,7 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useDashboardData, useAppStore } from './lib/tauri';
+import { useDashboardData } from './lib/tauri';
 import { Button, Input, StatusDot, Badge, COLORS } from './design-system/core';
 import {
   UnifiedHealthView,
@@ -159,7 +159,7 @@ const App = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <StatusDot status={hasError ? 'error' : 'success'} pulse />
             <span style={{ fontSize: '11px', color: COLORS.text.tertiary }}>
-              {(serviceMetrics.data as any)?.length || 0} services
+              {serviceMetrics?.length || 0} services
             </span>
           </div>
 
@@ -185,7 +185,7 @@ const App = () => {
       </header>
 
       {/* STATUS BAR - System metrics */}
-      {systemMetrics.data && (
+      {systemMetrics && (
         <div
           style={{
             background: COLORS.bg.primary,
@@ -208,19 +208,19 @@ const App = () => {
               <div>
                 <span style={{ fontSize: '10px', color: COLORS.text.tertiary }}>SPANS/S</span>
                 <span style={{ fontSize: '12px', color: COLORS.text.primary, marginLeft: '8px' }}>
-                  {(systemMetrics.data as any)?.spans_per_second?.toFixed(0) || '0'}
+                  {systemMetrics?.spans_per_second?.toFixed(0) || '0'}
                 </span>
               </div>
               <div>
                 <span style={{ fontSize: '10px', color: COLORS.text.tertiary }}>MEMORY</span>
                 <span style={{ fontSize: '12px', color: COLORS.text.primary, marginLeft: '8px' }}>
-                  {(systemMetrics.data as any)?.memory_usage_mb?.toFixed(0) || '0'}MB
+                  {systemMetrics?.memory_usage_mb?.toFixed(0) || '0'}MB
                 </span>
               </div>
               <div>
                 <span style={{ fontSize: '10px', color: COLORS.text.tertiary }}>CPU</span>
                 <span style={{ fontSize: '12px', color: COLORS.text.primary, marginLeft: '8px' }}>
-                  {(systemMetrics.data as any)?.cpu_usage_percent?.toFixed(1) || '0'}%
+                  {systemMetrics?.cpu_usage_percent?.toFixed(1) || '0'}%
                 </span>
               </div>
             </div>
@@ -244,19 +244,19 @@ const App = () => {
             style={{ height: '100%' }}
           >
             {activeView === 'dashboard' && (
-              <UnifiedDashboardView data={{ services: serviceMetrics.data, traces: recentTraces.data }} />
+              <UnifiedDashboardView data={{ services: serviceMetrics, traces: recentTraces }} />
             )}
             {activeView === 'services' && (
-              <UnifiedServicesView services={serviceMetrics.data} />
+              <UnifiedServicesView services={serviceMetrics} />
             )}
             {activeView === 'traces' && (
-              <UnifiedTracesView traces={recentTraces.data} />
+              <UnifiedTracesView traces={recentTraces} />
             )}
             {activeView === 'health' && (
-              <UnifiedHealthView services={serviceMetrics.data} metrics={systemMetrics.data} />
+              <UnifiedHealthView services={serviceMetrics} metrics={systemMetrics} />
             )}
             {activeView === 'flows' && (
-              <UnifiedTracesView traces={recentTraces.data} />
+              <UnifiedTracesView traces={recentTraces} />
             )}
           </motion.div>
         </AnimatePresence>

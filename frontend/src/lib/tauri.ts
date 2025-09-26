@@ -79,11 +79,3 @@ export function useStartReceiver({ onError }: { onError?: (error: any) => void }
   return { startReceiver, isTauriMode };
 }
 
-/**
- * Global app store (placeholder for future state management)
- */
-export function useAppStore() {
-  return {
-    // Placeholder for global state
-  };
-}

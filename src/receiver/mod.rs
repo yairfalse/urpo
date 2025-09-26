@@ -1085,17 +1085,16 @@ mod tests {
     #[test]
     fn test_receiver_config() {
         let config = ReceiverConfig::default();
-        assert_eq!(config.grpc_port, 4317);
-        assert_eq!(config.max_batch_size, 1000);
-        assert_eq!(config.batch_timeout, Duration::from_millis(500));
+        assert_eq!(config.span_pool_size, 10000);
+        assert_eq!(config.batch_size, 1000);
         assert_eq!(config.sampling_rate, 1.0);
 
         let custom_config = ReceiverConfig {
-            grpc_port: 5000,
+            span_pool_size: 5000,
             sampling_rate: 0.5,
             ..Default::default()
         };
-        assert_eq!(custom_config.grpc_port, 5000);
+        assert_eq!(custom_config.span_pool_size, 5000);
         assert_eq!(custom_config.sampling_rate, 0.5);
     }
 }
