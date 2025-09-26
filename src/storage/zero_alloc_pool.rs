@@ -8,7 +8,6 @@
 
 use crate::core::{Span, SpanBuilder};
 use crossbeam::queue::ArrayQueue;
-use std::mem::MaybeUninit;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
