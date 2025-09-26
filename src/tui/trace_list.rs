@@ -4,7 +4,7 @@ use crate::storage::TraceInfo;
 use ratatui::{
     layout::Rect,
     style::{Color, Style},
-    widgets::{Block, Borders, Cell, Paragraph, Row, Table},
+    widgets::{Block, Borders, Cell, Row, Table},
     Frame,
 };
 use std::time::{Duration, SystemTime};

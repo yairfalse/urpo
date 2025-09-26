@@ -6,7 +6,7 @@
 use super::cleanup_logic::{estimate_span_memory, CleanupConfig, StorageCounters};
 use super::{StorageBackend, StorageHealth, StorageStats, TraceInfo};
 use crate::core::{Config, Result, ServiceMetrics, ServiceName, Span, SpanId, TraceId};
-use crate::storage::simd_search::{find_trace_id_simd, contains_u64_simd}; // SIMD acceleration
+use crate::storage::simd_search::find_trace_id_simd; // SIMD acceleration
 use crate::storage::{CompressedSpanBatch, CompressionEngine, CompressionLevel}; // Compression for 5-10x memory savings
 use crate::{create_trace_info, impl_search, remove_span_indices, update_counter};
 use crossbeam::queue::SegQueue;

@@ -7,7 +7,7 @@ use dashmap::DashMap;
 use parking_lot::RwLock;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 
 /// Log storage configuration
 pub struct LogStorageConfig {

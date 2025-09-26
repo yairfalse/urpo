@@ -1,6 +1,6 @@
 //! Main application entry point for Urpo.
 
-use crate::core::{Config, Result, UrpoError};
+use crate::core::{Config, Result};
 use crate::monitoring::Monitor;
 use crate::receiver::OtelReceiver;
 use crate::storage::UnifiedStorage;
@@ -31,13 +31,13 @@ impl Application {
 
         // Initialize receiver with storage and monitor
         let receiver = Arc::new(
-            OtelReceiver::with_storage(
-                config.receiver.grpc_port,
-                config.receiver.http_port,
-                &storage,
+            OtelReceiver::new(
+                config.server.grpc_port,
+                config.server.http_port,
+                storage.as_backend(),
                 monitor.clone(),
             )
-            .with_sampling_rate(config.sampling.rate),
+            .with_sampling_rate(config.sampling.default_rate as f32),
         );
 
         Ok(Self {
@@ -60,27 +60,14 @@ impl Application {
             }
         });
 
-        // If TUI is enabled, run it; otherwise just wait for shutdown
-        if self.config.ui.enabled {
+        // Always run TUI for now (we can add a CLI flag later if needed)
+        {
             // Run TUI in foreground
             let result = tui::run_tui(self.storage.as_backend(), self.monitor.clone()).await;
 
             // Shutdown receiver when TUI exits
             receiver_handle.abort();
             result
-        } else {
-            // Headless mode - just run until shutdown signal
-            tracing::info!("Running in headless mode (TUI disabled)");
-            tokio::select! {
-                _ = tokio::signal::ctrl_c() => {
-                    tracing::info!("Received shutdown signal");
-                    receiver_handle.abort();
-                    Ok(())
-                }
-                _ = receiver_handle => {
-                    Err(UrpoError::internal("Receiver terminated unexpectedly"))
-                }
-            }
         }
     }
 

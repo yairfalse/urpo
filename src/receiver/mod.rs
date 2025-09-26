@@ -491,7 +491,7 @@ fn convert_otel_span_with_pool(
 
     // Extract all the fields we need
     let (trace_id, span_id, parent_span_id) = extract_span_ids(&otel_span)?;
-    let service_name = parse_service_name(service_name)?;
+    let service_name = parse_service_name(&service_name)?;
     let status = extract_span_status(&otel_span);
     let timing = extract_span_timing(&otel_span)?;
 
@@ -528,7 +528,7 @@ fn convert_otel_span(
     service_name: String,
 ) -> Result<UrpoSpan> {
     let (trace_id, span_id, parent_span_id) = extract_span_ids(&otel_span)?;
-    let service_name = parse_service_name(service_name)?;
+    let service_name = parse_service_name(&service_name)?;
     let status = extract_span_status(&otel_span);
     let timing = extract_span_timing(&otel_span)?;
     let attributes = extract_span_attributes(&otel_span);
