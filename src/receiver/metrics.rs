@@ -211,13 +211,6 @@ impl MetricsService for OtelMetricsReceiver {
     }
 }
 
-/// Create MetricsServiceServer for gRPC
-pub fn create_metrics_service_server(
-    metric_storage: Arc<Mutex<MetricStorage>>,
-) -> MetricsServiceServer<OtelMetricsReceiver> {
-    let receiver = OtelMetricsReceiver::new(metric_storage);
-    MetricsServiceServer::new(receiver)
-}
 
 #[cfg(test)]
 mod tests {
