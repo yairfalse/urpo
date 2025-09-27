@@ -35,6 +35,8 @@ pub fn create_http_router(receiver: Arc<super::OtelReceiver>) -> Router {
         .route("/v1/trace", post(handle_traces_v1)) // Alternative endpoint
         // OTLP metrics endpoint
         .route("/v1/metrics", post(handle_metrics_v1))
+        // OTLP logs endpoint
+        .route("/v1/logs", post(handle_logs_v1))
         // Health check
         .route("/health", get(health_check))
         .route("/", get(root_handler))
@@ -435,6 +437,17 @@ async fn root_handler() -> impl IntoResponse {
 #[inline(always)]
 async fn handle_metrics_v1() -> impl IntoResponse {
     tracing::debug!("Received HTTP metrics export request");
+
+    // Zero-allocation OTLP success response
+    const OTLP_SUCCESS: &str = r#"{"partialSuccess":null}"#;
+
+    (StatusCode::OK, [("content-type", "application/json")], OTLP_SUCCESS)
+}
+
+/// Handle OTLP logs export requests - minimal implementation.
+#[inline(always)]
+async fn handle_logs_v1() -> impl IntoResponse {
+    tracing::debug!("Received HTTP logs export request");
 
     // Zero-allocation OTLP success response
     const OTLP_SUCCESS: &str = r#"{"partialSuccess":null}"#;
