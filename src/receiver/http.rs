@@ -428,6 +428,8 @@ async fn root_handler() -> impl IntoResponse {
         "version": env!("CARGO_PKG_VERSION"),
         "endpoints": {
             "/v1/traces": "POST - OTLP trace export",
+            "/v1/metrics": "POST - OTLP metrics export",
+            "/v1/logs": "POST - OTLP logs export",
             "/health": "GET - Health check"
         }
     }))
