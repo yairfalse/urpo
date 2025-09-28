@@ -35,7 +35,7 @@ impl Application {
                 config.server.grpc_port,
                 config.server.http_port,
                 storage.as_backend(),
-                monitor.clone(),
+                Arc::clone(&monitor),
             )
             .with_sampling_rate(config.sampling.default_rate as f32),
         );
@@ -53,7 +53,7 @@ impl Application {
         tracing::info!("Starting Urpo application");
 
         // Start the receiver in the background
-        let receiver = self.receiver.clone();
+        let receiver = Arc::clone(&self.receiver);
         let receiver_handle = tokio::spawn(async move {
             if let Err(e) = receiver.run().await {
                 tracing::error!("Receiver error: {}", e);
@@ -63,7 +63,7 @@ impl Application {
         // Always run TUI for now (we can add a CLI flag later if needed)
         {
             // Run TUI in foreground
-            let result = tui::run_tui(self.storage.as_backend(), self.monitor.clone()).await;
+            let result = tui::run_tui(self.storage.as_backend(), Arc::clone(&self.monitor)).await;
 
             // Shutdown receiver when TUI exits
             receiver_handle.abort();
