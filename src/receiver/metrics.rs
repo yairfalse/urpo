@@ -362,7 +362,7 @@ mod tests {
     #[tokio::test]
     async fn test_export_request_processing() {
         let storage = create_test_metric_storage();
-        let receiver = OtelMetricsReceiver::new(storage.clone());
+        let receiver = OtelMetricsReceiver::new(Arc::clone(&storage));
 
         let request = ExportMetricsServiceRequest {
             resource_metrics: vec![opentelemetry_proto::tonic::metrics::v1::ResourceMetrics {

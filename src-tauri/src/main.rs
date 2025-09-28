@@ -116,6 +116,8 @@ async fn main() {
             auth::commands::logout,
             auth::commands::get_current_user,
             auth::commands::is_authenticated,
+            auth::commands::set_oauth_config,
+            auth::commands::get_oauth_config,
             // Commands from module
             commands::get_service_metrics,
             commands::get_service_metrics_batch,
