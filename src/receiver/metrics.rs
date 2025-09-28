@@ -80,13 +80,15 @@ impl OtelMetricsReceiver {
                 Data::Histogram(histogram) => {
                     for data_point in &histogram.data_points {
                         // For histogram, use the sum as a latency indicator
-                        if data_point.sum.unwrap_or(0.0) > 0.0 {
-                            points.push(MetricPoint::new(
-                                timestamp,
-                                service_id,
-                                metric_name_id,
-                                data_point.sum.unwrap_or(0.0),
-                            ));
+                        if let Some(sum) = data_point.sum {
+                            if sum > 0.0 {
+                                points.push(MetricPoint::new(
+                                    timestamp,
+                                    service_id,
+                                    metric_name_id,
+                                    sum,
+                                ));
+                            }
                         }
                     }
                 },
@@ -96,12 +98,12 @@ impl OtelMetricsReceiver {
                 Data::Summary(summary) => {
                     // Process summary data points with quantiles
                     for data_point in &summary.data_points {
-                        if data_point.sum.unwrap_or(0.0) > 0.0 {
+                        if data_point.sum > 0.0 {
                             points.push(MetricPoint::new(
                                 timestamp,
                                 service_id,
                                 metric_name_id,
-                                data_point.sum.unwrap_or(0.0) / data_point.count as f64, // Average
+                                data_point.sum / data_point.count as f64, // Average
                             ));
                         }
                     }

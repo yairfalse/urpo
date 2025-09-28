@@ -86,7 +86,7 @@ pub fn draw_service_table(
             .title(format!(" Services ({}) ", services.len()))
             .border_style(Style::default().fg(Color::Cyan)),
     )
-    .highlight_style(Style::default().bg(Color::DarkGray));
+    .row_highlight_style(Style::default().bg(Color::DarkGray));
 
     frame.render_widget(table, area);
 }
