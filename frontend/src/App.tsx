@@ -13,6 +13,8 @@ import {
   UnifiedServicesView,
   UnifiedDashboardView
 } from './pages/unified-views';
+import { invoke } from '@tauri-apps/api/tauri';
+import { LoginPage } from './pages/LoginPage';
 import {
   Activity,
   BarChart3,
@@ -20,7 +22,9 @@ import {
   GitBranch,
   Share2,
   Search,
-  RefreshCw
+  RefreshCw,
+  User,
+  LogOut
 } from 'lucide-react';
 
 type ViewMode = 'dashboard' | 'services' | 'traces' | 'health' | 'flows';
@@ -28,6 +32,7 @@ type ViewMode = 'dashboard' | 'services' | 'traces' | 'health' | 'flows';
 const App = () => {
   const [activeView, setActiveView] = useState<ViewMode>('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
+  const [currentUser, setCurrentUser] = useState<string | null>(null);
 
   // Data hooks
   const {
@@ -38,6 +43,51 @@ const App = () => {
     hasError,
     refetchAll
   } = useDashboardData();
+
+  const handleLogin = (username: string, password?: string) => {
+    // Handle both GitHub OAuth and regular login
+    setCurrentUser(username);
+    localStorage.setItem('urpo_user', username);
+  };
+
+  const handleLogout = async () => {
+    try {
+      await invoke('logout');
+      setCurrentUser(null);
+      localStorage.removeItem('urpo_user');
+    } catch (error) {
+      console.error('Logout failed:', error);
+      // Still clear local state even if backend fails
+      setCurrentUser(null);
+      localStorage.removeItem('urpo_user');
+    }
+  };
+
+  // Check for saved user on mount (including GitHub OAuth tokens)
+  React.useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        // First check if we have a GitHub user logged in
+        const githubUser = await invoke('get_current_user');
+        if (githubUser) {
+          setCurrentUser(githubUser.username);
+          localStorage.setItem('urpo_user', githubUser.username);
+          return;
+        }
+      } catch (error) {
+        // No GitHub user, check localStorage
+        console.log('No GitHub user found');
+      }
+
+      // Fallback to localStorage
+      const savedUser = localStorage.getItem('urpo_user');
+      if (savedUser) {
+        setCurrentUser(savedUser);
+      }
+    };
+
+    checkAuth();
+  }, []);
 
   // Filter traces based on search
   const filteredTraces = useMemo(() => {
@@ -68,6 +118,11 @@ const App = () => {
     { key: 'health', icon: Activity, label: 'Health', shortcut: '4' },
     { key: 'flows', icon: Share2, label: 'Flows', shortcut: '5' },
   ] as const;
+
+  // Show login page if not authenticated
+  if (!currentUser) {
+    return <LoginPage onLogin={handleLogin} />;
+  }
 
   return (
     <div style={{ height: '100vh', background: COLORS.bg.primary, display: 'flex', flexDirection: 'column' }}>
@@ -182,6 +237,24 @@ const App = () => {
           <Button variant="ghost" size="sm" onClick={refetchAll} style={{ padding: '4px' }}>
             <RefreshCw size={12} />
           </Button>
+
+          {/* User button */}
+          <div style={{ marginLeft: '8px', paddingLeft: '8px', borderLeft: `1px solid ${COLORS.border.subtle}` }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ fontSize: '11px', color: COLORS.text.secondary }}>
+                {currentUser}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleLogout}
+                style={{ padding: '4px' }}
+                title="Logout"
+              >
+                <LogOut size={12} />
+              </Button>
+            </div>
+          </div>
         </div>
       </header>
 

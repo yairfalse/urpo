@@ -82,7 +82,8 @@ pub async fn get_service_metrics(
     state: State<'_, AppState>,
 ) -> Result<Vec<ServiceMetrics>, String> {
     timed_command!("get_service_metrics", {
-        let metrics = map_err_str!(state.storage.get_service_metrics().await)?;
+        let storage = state.storage.read().await;
+        let metrics = map_err_str!(storage.get_service_metrics().await)?;
 
         Ok(batch_convert!(metrics, |metric: urpo_lib::core::ServiceMetrics| {
             ServiceMetrics {
@@ -109,7 +110,8 @@ pub async fn get_service_metrics_batch(
     }
 
     timed_command!("get_service_metrics_batch", {
-        let all_metrics = map_err_str!(state.storage.get_service_metrics().await)?;
+        let storage = state.storage.read().await;
+        let all_metrics = map_err_str!(storage.get_service_metrics().await)?;
 
         // Use HashMap for O(1) lookup instead of O(n) find
         let metrics_map: std::collections::HashMap<_, _> = all_metrics
@@ -150,11 +152,9 @@ pub async fn list_recent_traces(
             .transpose()
             .map_err(|e| e.to_string())?;
 
+        let storage = state.storage.read().await;
         let traces = map_err_str!(
-            state
-                .storage
-                .list_recent_traces(limit, service.as_ref())
-                .await
+            storage.list_recent_traces(limit, service.as_ref()).await
         )?;
 
         Ok(batch_convert!(traces, convert_trace_info))
@@ -168,7 +168,8 @@ pub async fn get_error_traces(
     limit: usize,
 ) -> Result<Vec<TraceInfo>, String> {
     timed_command!("get_error_traces", {
-        let traces = map_err_str!(state.storage.get_error_traces(limit).await)?;
+        let storage = state.storage.read().await;
+        let traces = map_err_str!(storage.get_error_traces(limit).await)?;
         Ok(batch_convert!(traces, convert_trace_info))
     })
 }
@@ -181,7 +182,8 @@ pub async fn get_trace_spans(
 ) -> Result<Vec<Value>, String> {
     timed_command!("get_trace_spans", {
         let trace_id = map_err_str!(TraceId::new(trace_id))?;
-        let spans = map_err_str!(state.storage.get_trace_spans(&trace_id).await)?;
+        let storage = state.storage.read().await;
+        let spans = map_err_str!(storage.get_trace_spans(&trace_id).await)?;
 
         let mut result = preallocated_vec!(spans.len());
         for span in spans {
@@ -200,7 +202,8 @@ pub async fn search_traces(
     limit: usize,
 ) -> Result<Vec<TraceInfo>, String> {
     timed_command!("search_traces", {
-        let traces = map_err_str!(state.storage.search_traces(&query, limit).await)?;
+        let storage = state.storage.read().await;
+        let traces = map_err_str!(storage.search_traces(&query, limit).await)?;
         Ok(batch_convert!(traces, convert_trace_info))
     })
 }
@@ -209,7 +212,8 @@ pub async fn search_traces(
 #[inline]
 pub async fn get_storage_info(state: State<'_, AppState>) -> Result<StorageInfo, String> {
     timed_command!("get_storage_info", {
-        let stats = map_err_str!(state.storage.get_storage_stats().await)?;
+        let storage = state.storage.read().await;
+        let stats = map_err_str!(storage.get_storage_stats().await)?;
 
         Ok(StorageInfo {
             trace_count: stats.trace_count,
@@ -234,12 +238,10 @@ pub async fn start_receiver(state: State<'_, AppState>) -> Result<(), String> {
         let mut receiver_guard = state.receiver.write().await;
 
         if receiver_guard.is_none() {
-            let storage_lock = tokio::sync::RwLock::new(state.storage.clone());
-
             let receiver = urpo_lib::receiver::OtelReceiver::new(
                 4317, // gRPC port
                 4318, // HTTP port
-                Arc::new(storage_lock),
+                state.storage.clone(),
                 state.monitor.clone(),
             );
 
@@ -267,7 +269,8 @@ pub async fn stop_receiver(state: State<'_, AppState>) -> Result<(), String> {
 #[inline]
 pub async fn trigger_tier_migration(state: State<'_, AppState>) -> Result<String, String> {
     timed_command!("trigger_tier_migration", {
-        let removed = map_err_str!(state.storage.emergency_cleanup().await)?;
+        let mut storage = state.storage.write().await;
+        let removed = map_err_str!(storage.emergency_cleanup().await)?;
         Ok(format!("Migrated {} spans to cold storage", removed))
     })
 }
@@ -282,7 +285,8 @@ pub async fn stream_trace_data(
 ) -> Result<(), String> {
     timed_command!("stream_trace_data", {
         let trace_id = map_err_str!(TraceId::new(trace_id))?;
-        let spans = map_err_str!(state.storage.get_trace_spans(&trace_id).await)?;
+        let storage = state.storage.read().await;
+        let spans = map_err_str!(storage.get_trace_spans(&trace_id).await)?;
 
         // Stream in chunks for better performance
         for chunk in spans.chunks(chunk_size) {
