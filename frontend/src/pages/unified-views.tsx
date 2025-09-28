@@ -74,20 +74,14 @@ export const UnifiedHealthView = ({ services, metrics }: any) => {
       <PageHeader
         title="Service Health"
         subtitle="Real-time service metrics and health status"
-        actions={
-          <>
-            <Button variant="ghost" size="sm">Filter</Button>
-            <Button variant="secondary" size="sm">Export</Button>
-            <Button variant="primary" size="sm">Configure Alerts</Button>
-          </>
-        }
+        actions={<></>}
         metrics={
           <>
             <Metric label="Total Services" value={services?.length || 0} />
-            <Metric label="Healthy" value={12} color="success" />
-            <Metric label="Warning" value={3} color="warning" />
-            <Metric label="Critical" value={1} color="error" />
-            <Metric label="Avg Response" value="124ms" />
+            <Metric label="Healthy" value={services?.filter((s: any) => !s.error_rate || s.error_rate < 0.01).length || 0} color="success" />
+            <Metric label="Warning" value={services?.filter((s: any) => s.error_rate >= 0.01 && s.error_rate < 0.05).length || 0} color="warning" />
+            <Metric label="Critical" value={services?.filter((s: any) => s.error_rate >= 0.05).length || 0} color="error" />
+            <Metric label="Avg Response" value={services?.length ? `${Math.round(services.reduce((acc: number, s: any) => acc + (s.avg_duration || 0), 0) / services.length)}ms` : '0ms'} />
           </>
         }
       />
@@ -184,24 +178,13 @@ export const UnifiedTracesView = ({ traces }: any) => {
       <PageHeader
         title="Traces"
         subtitle="Distributed trace explorer"
-        actions={
-          <>
-            <Input
-              value=""
-              onChange={() => {}}
-              placeholder="Search traces..."
-              className="urpo-search"
-            />
-            <Button variant="secondary" size="sm">Filters</Button>
-            <Button variant="primary" size="sm">New Query</Button>
-          </>
-        }
+        actions={<></>}
         metrics={
           <>
             <Metric label="Total Traces" value={traces?.length || 0} />
-            <Metric label="Errors" value={23} color="error" />
-            <Metric label="Avg Duration" value="234ms" />
-            <Metric label="Spans/Trace" value="14.2" />
+            <Metric label="Errors" value={traces?.filter((t: any) => t.has_error).length || 0} color="error" />
+            <Metric label="Avg Duration" value={traces?.length ? `${Math.round(traces.reduce((acc: number, t: any) => acc + (t.duration?.as_millis || 0), 0) / traces.length)}ms` : '0ms'} />
+            <Metric label="Spans/Trace" value={traces?.length ? (traces.reduce((acc: number, t: any) => acc + (t.span_count || 0), 0) / traces.length).toFixed(1) : '0'} />
           </>
         }
       />
@@ -229,45 +212,42 @@ export const UnifiedTracesView = ({ traces }: any) => {
 // ============================================================================
 
 export const UnifiedServicesView = ({ services }: any) => {
+  const servicesList = services || [];
+
   return (
     <Page>
       <PageHeader
         title="Services"
-        subtitle="Service inventory and dependencies"
-        actions={
-          <>
-            <Button variant="ghost" size="sm">Refresh</Button>
-            <Button variant="primary" size="sm">Add Service</Button>
-          </>
-        }
+        subtitle={`${servicesList.length} services monitored`}
+        actions={<></>}
       />
 
       <div className="urpo-content">
-        <Grid cols={2} gap="md">
-          {services?.map((service: any) => (
-            <Card key={service.name}>
-              <ListItem
+        {servicesList.length === 0 ? (
+          <EmptyState
+            message="No services detected"
+            description="Start sending OTLP data to see services here"
+          />
+        ) : (
+          <Grid cols={2} gap="md">
+            {servicesList.map((service: any) => (
+              <Card key={service.name}>
+                <ListItem
                 title={service.name}
-                subtitle={`${service.endpoints} endpoints • ${service.instances} instances`}
-                value={service.requests}
-                status={service.health}
+                subtitle={`${service.trace_count || 0} traces • ${service.error_rate ? (service.error_rate * 100).toFixed(2) : 0}% errors`}
+                value={service.avg_duration ? `${service.avg_duration.toFixed(0)}ms` : '0ms'}
+                status={service.error_rate > 0.05 ? 'error' : 'success'}
                 onClick={() => console.log('Service:', service)}
               />
               <div className="urpo-divider" />
               <Grid cols={3} gap="sm">
-                <Metric label="Latency" value={`${service.latency}ms`} />
-                <Metric label="Errors" value={`${service.errors}%`} color={service.errors > 1 ? 'error' : undefined} />
-                <Metric label="Uptime" value={service.uptime} />
+                <Metric label="Latency" value={service.avg_duration ? `${service.avg_duration.toFixed(0)}ms` : '0ms'} />
+                <Metric label="Errors" value={`${service.error_rate ? (service.error_rate * 100).toFixed(2) : 0}%`} color={service.error_rate > 0.01 ? 'error' : undefined} />
+                <Metric label="Traces" value={service.trace_count || 0} />
               </Grid>
             </Card>
           ))}
         </Grid>
-
-        {(!services || services.length === 0) && (
-          <EmptyState
-            message="No services discovered"
-            description="Services will appear here once they start sending telemetry data"
-          />
         )}
       </div>
     </Page>
@@ -279,32 +259,30 @@ export const UnifiedServicesView = ({ services }: any) => {
 // ============================================================================
 
 export const UnifiedDashboardView = ({ data }: any) => {
+  const services = data?.services || [];
+  const traces = data?.traces || [];
+
   return (
     <Page>
       <PageHeader
         title="Dashboard"
         subtitle="System overview and key metrics"
-        actions={
-          <>
-            <Button variant="ghost" size="sm">Last 15 min</Button>
-            <Button variant="secondary" size="sm">Refresh</Button>
-          </>
-        }
+        actions={<></>}
       />
 
       <div className="urpo-content">
         {/* Key Metrics */}
         <Grid cols={4} gap="md">
           <Card>
-            <Metric label="Services" value={16} color="primary" />
+            <Metric label="Services" value={services.length} color="primary" />
             <div style={{ fontSize: '11px', color: COLORS.text.tertiary, marginTop: '4px' }}>
-              +2 from last hour
+              Active services
             </div>
           </Card>
           <Card>
-            <Metric label="Total Traces" value="45.2K" trend="up" />
+            <Metric label="Total Traces" value={traces.length} trend="up" />
             <div style={{ fontSize: '11px', color: COLORS.accent.success, marginTop: '4px' }}>
-              ↑ 12% from baseline
+              Recent traces
             </div>
           </Card>
           <Card>
