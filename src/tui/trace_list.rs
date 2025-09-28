@@ -96,7 +96,7 @@ pub fn draw_trace_table(
             .title(format!(" Recent Traces ({}) ", traces.len()))
             .border_style(Style::default().fg(Color::Cyan)),
     )
-    .highlight_style(Style::default().bg(Color::DarkGray));
+    .row_highlight_style(Style::default().bg(Color::DarkGray));
 
     frame.render_widget(table, area);
 }

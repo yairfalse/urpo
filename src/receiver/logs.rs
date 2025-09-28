@@ -37,8 +37,8 @@ impl OtelLogsReceiver {
         let string_pool = Arc::new(StringPool::new());
 
         // Spawn background processor for batched storage
-        let processor_buffer = buffer.clone();
-        let processor_storage = log_storage.clone();
+        let processor_buffer = Arc::clone(&buffer);
+        let processor_storage = Arc::clone(&log_storage);
 
         let processor_handle = tokio::spawn(async move {
             let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(100));
@@ -366,7 +366,7 @@ mod tests {
     #[tokio::test]
     async fn test_export_request_processing() {
         let storage = create_test_log_storage();
-        let receiver = OtelLogsReceiver::new(storage.clone());
+        let receiver = OtelLogsReceiver::new(Arc::clone(&storage));
 
         let request = ExportLogsServiceRequest {
             resource_logs: vec![ResourceLogs {

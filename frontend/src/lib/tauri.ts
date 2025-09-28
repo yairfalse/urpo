@@ -9,14 +9,14 @@ import { ServiceMetrics, TraceInfo, SystemMetrics } from '../types';
 /**
  * Hook for dashboard data with auto-refresh
  */
-export function useDashboardData() {
+export function useDashboardData(searchQuery: string) {
   const [serviceMetrics, setServiceMetrics] = useState<ServiceMetrics[]>([]);
   const [systemMetrics, setSystemMetrics] = useState<SystemMetrics | null>(null);
   const [recentTraces, setRecentTraces] = useState<TraceInfo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
 
-  const { fetchMetrics, fetchTraces, error, isTauriMode } = useTauriData();
+  const { fetchMetrics, fetchTraces, searchTraces, error, isTauriMode } = useTauriData();
 
   const loadData = useCallback(async () => {
     try {
@@ -26,7 +26,7 @@ export function useDashboardData() {
       // Fetch all data in parallel
       const [metricsData, tracesData] = await Promise.all([
         fetchMetrics(),
-        fetchTraces(100)
+        searchQuery ? searchTraces(searchQuery, 100) : fetchTraces(100)
       ]);
 
       setServiceMetrics(metricsData.services);
@@ -38,7 +38,7 @@ export function useDashboardData() {
     } finally {
       setIsLoading(false);
     }
-  }, [fetchMetrics, fetchTraces]);
+  }, [fetchMetrics, fetchTraces, searchTraces, searchQuery]);
 
   useEffect(() => {
     loadData();

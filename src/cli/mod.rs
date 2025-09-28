@@ -326,7 +326,7 @@ async fn execute_export(
 
     // Initialize storage (read-only for export)
     let storage = Arc::new(RwLock::new(InMemoryStorage::with_config(&config)));
-    let storage_trait: Arc<RwLock<dyn StorageBackend>> = storage.clone();
+    let storage_trait: Arc<RwLock<dyn StorageBackend>> = Arc::clone(&storage);
 
     // Parse export format
     let export_format = format
@@ -483,7 +483,7 @@ async fn start_with_ui(config: Config, cli: &Cli) -> Result<()> {
 
     // Initialize storage
     let storage = Arc::new(RwLock::new(InMemoryStorage::with_config(&config)));
-    let storage_trait: Arc<RwLock<dyn StorageBackend>> = storage.clone();
+    let storage_trait: Arc<RwLock<dyn StorageBackend>> = Arc::clone(&storage);
 
     // Initialize health monitor
     let health_monitor = Arc::new(Monitor::new());
@@ -494,11 +494,11 @@ async fn start_with_ui(config: Config, cli: &Cli) -> Result<()> {
     let receiver = Arc::new(OtelReceiver::new(
         config.server.grpc_port,
         config.server.http_port,
-        storage_trait.clone(),
+        Arc::clone(&storage_trait),
         Arc::clone(&health_monitor),
     ));
 
-    let receiver_clone = receiver.clone();
+    let receiver_clone = Arc::clone(&receiver);
     let receiver_handle = tokio::spawn(async move {
         if let Err(e) = receiver_clone.run().await {
             tracing::error!("OTEL receiver error: {}", e);
@@ -507,7 +507,7 @@ async fn start_with_ui(config: Config, cli: &Cli) -> Result<()> {
 
     // Start HTTP API server if enabled
     let api_handle = if cli.api {
-        let api_storage = storage_trait.clone();
+        let api_storage = Arc::clone(&storage_trait);
         let api_config = ApiConfig {
             port: cli.api_port,
             enable_cors: true,
@@ -549,7 +549,7 @@ async fn start_headless(config: Config, cli: &Cli) -> Result<()> {
 
     // Initialize storage
     let storage = Arc::new(RwLock::new(InMemoryStorage::with_config(&config)));
-    let storage_trait: Arc<RwLock<dyn StorageBackend>> = storage.clone();
+    let storage_trait: Arc<RwLock<dyn StorageBackend>> = Arc::clone(&storage);
 
     // Initialize health monitor
     let health_monitor = Arc::new(Monitor::new());
@@ -560,7 +560,7 @@ async fn start_headless(config: Config, cli: &Cli) -> Result<()> {
     let receiver = Arc::new(OtelReceiver::new(
         config.server.grpc_port,
         config.server.http_port,
-        storage_trait.clone(),
+        Arc::clone(&storage_trait),
         health_monitor,
     ));
 
@@ -571,7 +571,7 @@ async fn start_headless(config: Config, cli: &Cli) -> Result<()> {
     // Start API server if enabled
     if cli.api {
         tracing::info!("  HTTP API server on port {}", cli.api_port);
-        let api_storage = storage_trait.clone();
+        let api_storage = Arc::clone(&storage_trait);
         let api_config = ApiConfig {
             port: cli.api_port,
             enable_cors: true,

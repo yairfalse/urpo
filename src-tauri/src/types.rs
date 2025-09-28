@@ -6,8 +6,9 @@ use tokio::sync::RwLock;
 use urpo_lib::{monitoring::Monitor, receiver::OtelReceiver, storage::StorageBackend};
 
 /// Application state shared across Tauri commands
+/// PERFORMANCE: Uses RwLock for concurrent reads, exclusive writes
 pub struct AppState {
-    pub storage: Arc<dyn StorageBackend>,
+    pub storage: Arc<RwLock<dyn StorageBackend>>,
     pub receiver: Arc<RwLock<Option<OtelReceiver>>>,
     pub monitor: Arc<Monitor>,
 }

@@ -134,12 +134,10 @@ impl MetricStorage {
             return Err(format!("Maximum services limit ({}) exceeded", self.max_services));
         }
 
-        let aggregator = self
-            .service_aggregates
+        self.service_aggregates
             .entry(metric.service_idx)
-            .or_insert_with(|| ServiceAggregator::new(SystemTime::now()));
-
-        aggregator.add_metric(metric);
+            .or_insert_with(|| ServiceAggregator::new(SystemTime::now()))
+            .add_metric(metric);
         Ok(())
     }
 }

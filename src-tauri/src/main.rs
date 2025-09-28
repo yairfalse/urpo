@@ -10,6 +10,7 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 mod commands;
 mod telemetry;
 mod types;
+mod auth;
 
 use once_cell::sync::Lazy;
 use std::sync::Arc;
@@ -31,14 +32,14 @@ pub use types::*;
 /// Initialize application state
 async fn init_app_state() -> AppState {
     // Create optimized storage with aggressive limits
-    let storage: Arc<dyn StorageBackend> = Arc::new(InMemoryStorage::new(100_000));
+    let storage: Arc<RwLock<dyn StorageBackend>> = Arc::new(RwLock::new(InMemoryStorage::new(100_000)));
 
     // Create monitor
     let monitor = Arc::new(Monitor::new());
 
     // Spawn background monitoring task
     let monitor_clone = monitor.clone();
-    let storage_clone = storage.clone();
+    let _storage_clone = storage.clone();
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_secs(5));
         loop {
@@ -68,8 +69,8 @@ async fn get_system_metrics(state: tauri::State<'_, AppState>) -> Result<SystemM
     // Update telemetry
     TELEMETRY.update_system_metrics().await;
 
-    let storage_stats = state
-        .storage
+    let storage = state.storage.read().await;
+    let storage_stats = storage
         .get_storage_stats()
         .await
         .map_err(|e| e.to_string())?;
@@ -100,12 +101,23 @@ async fn main() {
     // Initialize application state
     let app_state = init_app_state().await;
 
+    // Initialize auth state
+    let auth_state = Arc::new(auth::AuthState::new());
+
     // Build and run Tauri application
     tauri::Builder::default()
         .manage(app_state)
+        .manage(auth_state)
         .invoke_handler(tauri::generate_handler![
             // System
             get_system_metrics,
+            // Authentication
+            auth::commands::login_with_github,
+            auth::commands::logout,
+            auth::commands::get_current_user,
+            auth::commands::is_authenticated,
+            auth::commands::set_oauth_config,
+            auth::commands::get_oauth_config,
             // Commands from module
             commands::get_service_metrics,
             commands::get_service_metrics_batch,

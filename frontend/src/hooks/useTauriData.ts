@@ -91,6 +91,27 @@ export function useTauriData() {
     }
   }, []);
 
+  // Search traces
+  const searchTraces = useCallback(async (query: string, limit = 100): Promise<TraceInfo[]> => {
+    try {
+      setError(null);
+
+      if (isTauriAvailable()) {
+        const traces = await safeTauriInvoke<TraceInfo[]>('search_traces', { query, limit });
+        return traces || [];
+      } else {
+        // Return mock traces
+        return mockTraces.filter(trace => trace.root_operation.includes(query)).slice(0, limit);
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to search traces';
+      setError(errorMessage);
+      
+      // Fallback to mock data
+      return mockTraces.filter(trace => trace.root_operation.includes(query)).slice(0, limit);
+    }
+  }, []);
+
   return {
     loading,
     setLoading,
@@ -98,6 +119,7 @@ export function useTauriData() {
     setError,
     fetchMetrics,
     fetchTraces,
+    searchTraces,
     startReceiver,
     stopReceiver,
     isTauriMode: isTauriAvailable()

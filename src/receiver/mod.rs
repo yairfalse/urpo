@@ -130,7 +130,7 @@ impl OtelReceiver {
         self.batch_size = batch_size;
         // Initialize batch processor
         let (tx, mut rx) = tokio::sync::mpsc::channel::<Vec<UrpoSpan>>(16);
-        let storage = self.storage.clone();
+        let storage = Arc::clone(&self.storage);
 
         // Spawn batch processor task
         tokio::spawn(async move {
@@ -258,7 +258,7 @@ impl OtelReceiver {
         if let Some(ref metrics_storage) = self.metrics_storage {
             tracing::info!("Adding OTLP metrics service to GRPC server");
             server = server.add_service(
-                metrics::create_metrics_service_server(metrics_storage.clone())
+                metrics::create_metrics_service_server(Arc::clone(metrics_storage))
             );
         }
 
