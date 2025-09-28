@@ -441,7 +441,7 @@ async fn query_handler(
     let limit = params.limit.unwrap_or(100).min(state.config.max_results);
 
     // Create query engine
-    let engine = QueryEngine::new(state.storage.clone());
+    let engine = QueryEngine::new(Arc::clone(&state.storage));
 
     // Execute query
     match engine.execute(&params.q, Some(limit)).await {
