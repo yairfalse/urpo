@@ -10,15 +10,13 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 mod commands;
 mod telemetry;
 mod types;
-mod auth;
+mod device_auth;
 
-use once_cell::sync::Lazy;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tauri::Manager;
 use tokio::sync::RwLock;
 
-use telemetry::TelemetryState;
 use types::{AppState, SystemMetrics};
 use urpo_lib::{
     monitoring::Monitor,
@@ -38,8 +36,8 @@ async fn init_app_state() -> AppState {
     let monitor = Arc::new(Monitor::new());
 
     // Spawn background monitoring task
-    let monitor_clone = monitor.clone();
-    let _storage_clone = storage.clone();
+    let monitor_clone = Arc::clone(&monitor);
+    let _storage_clone = Arc::clone(&storage);
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_secs(5));
         loop {
@@ -56,9 +54,31 @@ async fn init_app_state() -> AppState {
         }
     });
 
+    // Auto-start OTLP receiver for BLAZING FAST trace ingestion
+    let receiver = Arc::new(RwLock::new(Some(urpo_lib::receiver::OtelReceiver::new(
+        4317, // gRPC port
+        4318, // HTTP port
+        Arc::clone(&storage),
+        Arc::clone(&monitor),
+    ))));
+
+    // Start receiver in background - ZERO BLOCKING
+    {
+        let receiver_guard = receiver.read().await;
+        if let Some(ref recv) = *receiver_guard {
+            let receiver_arc = Arc::new(recv.clone()); // Note: This clone is necessary as recv is &OtelReceiver
+            tokio::spawn(async move {
+                tracing::info!("🚀 Auto-starting OTLP receiver on ports 4317 (gRPC) and 4318 (HTTP)");
+                if let Err(e) = receiver_arc.run().await {
+                    tracing::error!("OTLP receiver error: {}", e);
+                }
+            });
+        }
+    }
+
     AppState {
         storage,
-        receiver: Arc::new(RwLock::new(None)),
+        receiver,
         monitor,
     }
 }
@@ -101,23 +121,22 @@ async fn main() {
     // Initialize application state
     let app_state = init_app_state().await;
 
-    // Initialize auth state
-    let auth_state = Arc::new(auth::AuthState::new());
+    // Initialize device auth state
+    let device_auth_state = device_auth::DeviceAuthState::new();
 
     // Build and run Tauri application
     tauri::Builder::default()
         .manage(app_state)
-        .manage(auth_state)
+        .manage(device_auth_state)
         .invoke_handler(tauri::generate_handler![
             // System
             get_system_metrics,
-            // Authentication
-            auth::commands::login_with_github,
-            auth::commands::logout,
-            auth::commands::get_current_user,
-            auth::commands::is_authenticated,
-            auth::commands::set_oauth_config,
-            auth::commands::get_oauth_config,
+            // Device Flow Authentication
+            device_auth::start_device_login,
+            device_auth::poll_device_login,
+            device_auth::open_device_login_page,
+            device_auth::get_device_user,
+            device_auth::device_logout,
             // Commands from module
             commands::get_service_metrics,
             commands::get_service_metrics_batch,
@@ -128,6 +147,7 @@ async fn main() {
             commands::get_storage_info,
             commands::start_receiver,
             commands::stop_receiver,
+            commands::is_receiver_running,
             commands::trigger_tier_migration,
             commands::stream_trace_data,
         ])
@@ -137,8 +157,9 @@ async fn main() {
 
             #[cfg(debug_assertions)]
             {
-                let window = app.get_window("main").unwrap();
-                window.open_devtools();
+                if let Some(window) = app.get_window("main") {
+                    window.open_devtools();
+                }
             }
 
             let startup_ms = start.elapsed().as_millis();

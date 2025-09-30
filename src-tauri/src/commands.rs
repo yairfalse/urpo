@@ -2,7 +2,7 @@
 
 use serde_json::Value;
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use tauri::{State, Window};
 
 use crate::{AppState, ServiceMetrics, StorageInfo, TraceInfo};
@@ -233,7 +233,7 @@ pub async fn get_storage_info(state: State<'_, AppState>) -> Result<StorageInfo,
 
 #[tauri::command]
 #[inline]
-pub async fn start_receiver(state: State<'_, AppState>) -> Result<(), String> {
+pub async fn start_receiver(state: State<'_, AppState>) -> Result<bool, String> {
     timed_command!("start_receiver", {
         let mut receiver_guard = state.receiver.write().await;
 
@@ -241,15 +241,33 @@ pub async fn start_receiver(state: State<'_, AppState>) -> Result<(), String> {
             let receiver = urpo_lib::receiver::OtelReceiver::new(
                 4317, // gRPC port
                 4318, // HTTP port
-                state.storage.clone(),
-                state.monitor.clone(),
+                Arc::clone(&state.storage),
+                Arc::clone(&state.monitor),
             );
 
-            *receiver_guard = Some(receiver);
-        }
+            // Start receiver in background - BLAZING FAST
+            let receiver_arc = Arc::new(receiver.clone()); // Note: This clone is necessary as receiver is OtelReceiver
+            tokio::spawn(async move {
+                tracing::info!("Starting OTLP receiver on ports 4317/4318");
+                if let Err(e) = receiver_arc.run().await {
+                    tracing::error!("OTLP receiver error: {}", e);
+                }
+            });
 
-        Ok(())
+            *receiver_guard = Some(receiver);
+            Ok(true) // Started
+        } else {
+            Ok(false) // Already running
+        }
     })
+}
+
+/// Check if receiver is running - ZERO ALLOCATION
+#[tauri::command]
+#[inline]
+pub async fn is_receiver_running(state: State<'_, AppState>) -> Result<bool, String> {
+    let receiver_guard = state.receiver.read().await;
+    Ok(receiver_guard.is_some())
 }
 
 #[tauri::command]
@@ -269,7 +287,7 @@ pub async fn stop_receiver(state: State<'_, AppState>) -> Result<(), String> {
 #[inline]
 pub async fn trigger_tier_migration(state: State<'_, AppState>) -> Result<String, String> {
     timed_command!("trigger_tier_migration", {
-        let mut storage = state.storage.write().await;
+        let storage = state.storage.write().await;
         let removed = map_err_str!(storage.emergency_cleanup().await)?;
         Ok(format!("Migrated {} spans to cold storage", removed))
     })
