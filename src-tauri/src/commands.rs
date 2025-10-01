@@ -339,8 +339,11 @@ pub async fn get_service_health_metrics(
 
             for service_id in service_ids {
                 if let Some(health) = storage.get_service_health(service_id) {
-                    // TODO: Get actual service name from string pool
-                    let service_name = format!("service-{}", service_id);
+                    // Get actual service name from string pool, fallback to generic if not found
+                    let service_name = state
+                        .service_name_pool
+                        .get_name(service_id)
+                        .unwrap_or_else(|| format!("service-{}", service_id));
 
                     result.push(ServiceHealth {
                         service_name,
