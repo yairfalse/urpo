@@ -97,8 +97,11 @@ impl App {
             self.service_health.clear();
             for service_id in service_ids {
                 if let Some(health) = storage.get_service_health(service_id) {
-                    // TODO: Get actual service name from string pool
-                    let service_name = format!("service-{}", service_id);
+                    // Get actual service name from string pool, fallback to service-{id}
+                    let service_name = storage
+                        .get_service_name(service_id)
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| format!("service-{}", service_id));
                     self.service_health.push((service_name, health));
                 }
             }
