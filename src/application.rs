@@ -63,7 +63,7 @@ impl Application {
         // Always run TUI for now (we can add a CLI flag later if needed)
         {
             // Run TUI in foreground
-            let result = tui::run_tui(self.storage.as_backend(), Arc::clone(&self.monitor)).await;
+            let result = tui::run_tui(self.storage.as_backend(), Arc::clone(&self.monitor), self.config.clone()).await;
 
             // Shutdown receiver when TUI exits
             receiver_handle.abort();

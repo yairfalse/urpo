@@ -28,7 +28,7 @@ pub use telemetry::TELEMETRY;
 pub use types::*;
 
 /// Initialize application state
-async fn init_app_state() -> AppState {
+async fn init_app_state() -> (AppState, tokio::sync::broadcast::Receiver<urpo_lib::receiver::TraceEvent>) {
     // Create optimized storage with aggressive limits
     let storage: Arc<RwLock<dyn StorageBackend>> = Arc::new(RwLock::new(InMemoryStorage::new(100_000)));
 
@@ -54,13 +54,26 @@ async fn init_app_state() -> AppState {
         }
     });
 
+    // Initialize metrics storage (1M metrics, 1000 services)
+    let metrics_storage = Some(Arc::new(tokio::sync::Mutex::new(
+        urpo_lib::metrics::MetricStorage::new(1_048_576, 1000),
+    )));
+
     // Auto-start OTLP receiver for BLAZING FAST trace ingestion
-    let otel_receiver = urpo_lib::receiver::OtelReceiver::new(
+    let mut otel_receiver = urpo_lib::receiver::OtelReceiver::new(
         4327, // gRPC port (temporary change to avoid conflicts)
         4328, // HTTP port (temporary change to avoid conflicts)
         Arc::clone(&storage),
         Arc::clone(&monitor),
     );
+
+    // Wire up metrics storage to receiver
+    if let Some(ref metrics_storage) = metrics_storage {
+        otel_receiver = otel_receiver.with_metrics(1_048_576, 1000);
+    }
+
+    // Enable real-time event broadcasting
+    let (otel_receiver, mut event_rx) = otel_receiver.with_events();
 
     let receiver = Arc::new(RwLock::new(Some(otel_receiver.clone())));
 
@@ -73,11 +86,15 @@ async fn init_app_state() -> AppState {
         }
     });
 
-    AppState {
-        storage,
-        receiver,
-        monitor,
-    }
+    (
+        AppState {
+            storage,
+            receiver,
+            monitor,
+            metrics_storage,
+        },
+        event_rx,
+    )
 }
 
 /// Get system metrics command with caching
@@ -116,7 +133,7 @@ async fn main() {
         .init();
 
     // Initialize application state
-    let app_state = init_app_state().await;
+    let (app_state, mut event_rx) = init_app_state().await;
 
     // Initialize device auth state
     let device_auth_state = device_auth::DeviceAuthState::new();
@@ -147,8 +164,9 @@ async fn main() {
             commands::is_receiver_running,
             commands::trigger_tier_migration,
             commands::stream_trace_data,
+            commands::get_service_health_metrics,
         ])
-        .setup(|app| {
+        .setup(move |app| {
             // Log startup time for performance tracking
             let start = Instant::now();
 
@@ -165,6 +183,18 @@ async fn main() {
             if startup_ms > 200 {
                 tracing::warn!("⚠️ Startup time {}ms exceeds 200ms target!", startup_ms);
             }
+
+            // Spawn task to broadcast trace events to frontend
+            let app_handle = app.handle();
+            tokio::spawn(async move {
+                while let Ok(event) = event_rx.recv().await {
+                    tracing::debug!("Broadcasting trace event: {:?}", event);
+                    // Emit to all windows
+                    if let Err(e) = app_handle.emit_all("trace_received", &event) {
+                        tracing::warn!("Failed to emit trace event: {}", e);
+                    }
+                }
+            });
 
             Ok(())
         })

@@ -11,6 +11,7 @@ pub struct AppState {
     pub storage: Arc<RwLock<dyn StorageBackend>>,
     pub receiver: Arc<RwLock<Option<OtelReceiver>>>,
     pub monitor: Arc<Monitor>,
+    pub metrics_storage: Option<Arc<tokio::sync::Mutex<urpo_lib::metrics::MetricStorage>>>,
 }
 
 /// Service metrics for frontend display
@@ -61,4 +62,15 @@ pub struct SystemMetrics {
     pub active_services: usize,
     pub uptime_seconds: u64,
     pub command_latencies: std::collections::HashMap<String, f64>,
+}
+
+/// OTLP Service Health Metrics (real-time from metrics receiver)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServiceHealth {
+    pub service_name: String,
+    pub request_rate: f64,      // requests per second
+    pub error_rate: f64,         // error percentage (0.0 - 100.0)
+    pub avg_latency_ms: f64,     // average latency in milliseconds
+    pub p95_latency_ms: f64,     // 95th percentile latency
+    pub last_updated: i64,       // unix timestamp
 }

@@ -11,6 +11,7 @@ pub enum Action {
     SelectItem,
     ToggleView,
     Refresh,
+    OpenSettings,
     None,
 }
 
@@ -38,6 +39,9 @@ pub fn handle_key(key: KeyEvent) -> Action {
 
         // Refresh
         KeyCode::Char('r') => Action::Refresh,
+
+        // Settings
+        KeyCode::Char('s') => Action::OpenSettings,
 
         _ => Action::None,
     }

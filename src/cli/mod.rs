@@ -528,7 +528,7 @@ async fn start_with_ui(config: Config, cli: &Cli) -> Result<()> {
     };
 
     // Start the minimal terminal UI
-    let ui_result = crate::tui::run_tui(storage_trait, health_monitor).await;
+    let ui_result = crate::tui::run_tui(storage_trait, health_monitor, config).await;
 
     // Cleanup
     receiver_handle.abort();

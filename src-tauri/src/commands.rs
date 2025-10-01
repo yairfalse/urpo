@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use tauri::{State, Window};
 
-use crate::{AppState, ServiceMetrics, StorageInfo, TraceInfo};
+use crate::{AppState, ServiceHealth, ServiceMetrics, StorageInfo, TraceInfo};
 use urpo_lib::core::{ServiceName, TraceId};
 
 /// Macro for efficient error conversion with zero allocation where possible
@@ -321,5 +321,48 @@ pub async fn stream_trace_data(
 
         map_err_str!(window.emit("trace-complete", ()))?;
         Ok(())
+    })
+}
+
+/// Get real-time OTLP metrics from metrics storage
+#[tauri::command]
+#[inline]
+pub async fn get_service_health_metrics(
+    state: State<'_, AppState>,
+) -> Result<Vec<ServiceHealth>, String> {
+    timed_command!("get_service_health_metrics", {
+        if let Some(ref metrics_storage) = state.metrics_storage {
+            let storage = metrics_storage.lock().await;
+            let service_ids = storage.list_services();
+
+            let mut result = preallocated_vec!(service_ids.len());
+
+            for service_id in service_ids {
+                if let Some(health) = storage.get_service_health(service_id) {
+                    // Get actual service name from string pool, fallback to generic if not found
+                    let service_name = state
+                        .service_name_pool
+                        .get_name(service_id)
+                        .unwrap_or_else(|| format!("service-{}", service_id));
+
+                    result.push(ServiceHealth {
+                        service_name,
+                        request_rate: health.request_rate,
+                        error_rate: health.error_rate,
+                        avg_latency_ms: health.avg_latency_ms,
+                        p95_latency_ms: health.p95_latency_ms,
+                        last_updated: health
+                            .last_updated
+                            .duration_since(UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_secs() as i64,
+                    });
+                }
+            }
+
+            Ok(result)
+        } else {
+            Ok(vec![])
+        }
     })
 }
