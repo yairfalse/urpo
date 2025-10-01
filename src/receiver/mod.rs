@@ -350,9 +350,9 @@ impl OtelReceiver {
             // Direct storage without batching
             tracing::info!("Storing spans directly to storage (no batching configured)");
             let storage = self.storage.write().await;
-            for span in &sampled_spans {
+            for span in sampled_spans {
                 tracing::debug!("Storing span: {} for service: {}", span.span_id, span.service_name);
-                storage.store_span(span.clone()).await?;
+                storage.store_span(span).await?;
             }
             tracing::info!("Successfully stored {} spans", sampled_spans.len());
         }

@@ -67,7 +67,7 @@ async fn init_app_state() -> AppState {
     // Start receiver in background - ZERO BLOCKING
     let receiver_arc = Arc::new(otel_receiver);
     tokio::spawn(async move {
-        tracing::info!("🚀 Auto-starting OTLP receiver on ports 4317 (gRPC) and 4318 (HTTP)");
+        tracing::info!("🚀 Auto-starting OTLP receiver on ports 4327 (gRPC) and 4328 (HTTP)");
         if let Err(e) = receiver_arc.run().await {
             tracing::error!("OTLP receiver error: {}", e);
         }
