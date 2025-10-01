@@ -269,6 +269,7 @@ interface ButtonProps {
   onClick?: () => void;
   disabled?: boolean;
   className?: string;
+  style?: React.CSSProperties;
 }
 
 export const Button = ({
@@ -277,7 +278,8 @@ export const Button = ({
   size = 'md',
   onClick,
   disabled,
-  className
+  className,
+  style
 }: ButtonProps) => (
   <button
     className={clsx(
@@ -288,6 +290,7 @@ export const Button = ({
     )}
     onClick={onClick}
     disabled={disabled}
+    style={style}
   >
     {children}
   </button>

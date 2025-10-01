@@ -6,9 +6,9 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Button, Card, COLORS, SPACING, TYPOGRAPHY, RADIUS } from '../design-system/core';
-import { Activity, Github, ArrowRight, Shield, Zap, Eye, Settings } from 'lucide-react';
+import { Activity, Github, ArrowRight, Shield, Zap, Eye } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/tauri';
-import { OAuthSettings } from '../components/OAuthSettings';
+import { DeviceLogin } from '../components/DeviceLogin';
 
 interface LoginPageProps {
   onLogin: (username: string) => void;
@@ -17,37 +17,11 @@ interface LoginPageProps {
 export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const [showSettings, setShowSettings] = useState(false);
-  const [hasOAuthConfig, setHasOAuthConfig] = useState(false);
+  const [showDeviceFlow, setShowDeviceFlow] = useState(false);
 
-  // Check if OAuth is configured on mount
-  useEffect(() => {
-    const checkConfig = async () => {
-      try {
-        const config = await invoke('get_oauth_config');
-        setHasOAuthConfig(!!config);
-      } catch (err) {
-        console.log('No OAuth config found');
-      }
-    };
-    checkConfig();
-  }, []);
 
-  const handleGitHubLogin = async () => {
-    setIsLoading(true);
-    setError('');
-
-    try {
-      const user = await invoke<{ username: string; name?: string; email?: string }>('login_with_github');
-      onLogin(user.username);
-    } catch (error) {
-      const errorMessage = typeof error === 'string' ? error :
-                          error instanceof Error ? error.message :
-                          'GitHub login failed';
-      setError(errorMessage);
-    } finally {
-      setIsLoading(false);
-    }
+  const handleDeviceLoginSuccess = (user: any) => {
+    onLogin(user.username);
   };
 
   const features = [
@@ -238,25 +212,23 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
 
               {/* GitHub Login Button */}
               <button
-                onClick={hasOAuthConfig ? handleGitHubLogin : () => setShowSettings(true)}
+                onClick={() => setShowDeviceFlow(true)}
                 disabled={isLoading}
                 style={{
                   width: '100%',
-                  padding: '14px',
+                  padding: '12px 16px',
                   background: COLORS.bg.primary,
                   border: `1px solid ${COLORS.border.default}`,
                   borderRadius: RADIUS.md,
-                  display: 'flex',
+                  display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: SPACING.md,
+                  gap: '8px',
                   cursor: isLoading ? 'not-allowed' : 'pointer',
-                  transition: 'all 0.2s ease',
-                  fontSize: TYPOGRAPHY.size.base,
-                  fontWeight: TYPOGRAPHY.weight.medium,
+                  fontSize: '14px',
+                  fontWeight: 500,
                   color: COLORS.text.primary,
-                  position: 'relative',
-                  overflow: 'hidden'
+                  transition: 'background 0.1s, border 0.1s'
                 }}
                 onMouseEnter={(e) => {
                   if (!isLoading) {
@@ -269,29 +241,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
                   e.currentTarget.style.borderColor = COLORS.border.default;
                 }}
               >
-                {isLoading ? (
-                  <>
-                    <div style={{
-                      width: '16px',
-                      height: '16px',
-                      border: `2px solid ${COLORS.border.default}`,
-                      borderTopColor: COLORS.accent.primary,
-                      borderRadius: '50%',
-                      animation: 'spin 1s linear infinite'
-                    }} />
-                    <span>Connecting to GitHub...</span>
-                  </>
-                ) : (
-                  <>
-                    <Github size={18} />
-                    <span>{hasOAuthConfig ? 'Continue with GitHub' : 'Setup GitHub OAuth'}</span>
-                    {hasOAuthConfig ? (
-                      <ArrowRight size={14} style={{ marginLeft: 'auto' }} />
-                    ) : (
-                      <Settings size={14} style={{ marginLeft: 'auto' }} />
-                    )}
-                  </>
-                )}
+                <Github size={16} />
+                <span>Continue with GitHub</span>
               </button>
 
               {/* Error message */}
@@ -378,45 +329,36 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
         </motion.div>
       </motion.div>
 
-      {/* Settings button */}
-      {!hasOAuthConfig && (
-        <motion.button
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.7 }}
-          onClick={() => setShowSettings(true)}
+
+      {/* Device Flow Modal */}
+      {showDeviceFlow && (
+        <div
           style={{
             position: 'fixed',
-            top: '20px',
-            right: '20px',
-            padding: '10px',
-            background: COLORS.bg.secondary,
-            border: `1px solid ${COLORS.border.subtle}`,
-            borderRadius: RADIUS.md,
-            cursor: 'pointer',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.8)',
             display: 'flex',
             alignItems: 'center',
-            gap: SPACING.sm,
-            fontSize: TYPOGRAPHY.size.sm,
-            color: COLORS.text.secondary
+            justifyContent: 'center',
+            zIndex: 1000
+          }}
+          onClick={(e) => {
+            // Close modal if clicking background
+            if (e.target === e.currentTarget) {
+              setShowDeviceFlow(false);
+            }
           }}
         >
-          <Settings size={16} />
-          Configure GitHub OAuth
-        </motion.button>
+          <DeviceLogin
+            onSuccess={handleDeviceLoginSuccess}
+            onCancel={() => setShowDeviceFlow(false)}
+          />
+        </div>
       )}
 
-      {/* OAuth Settings Modal */}
-      {showSettings && (
-        <OAuthSettings
-          isModal={true}
-          onClose={() => setShowSettings(false)}
-          onConfigured={() => {
-            setShowSettings(false);
-            setHasOAuthConfig(true);
-          }}
-        />
-      )}
 
       {/* Add spinning animation */}
       <style>{`
