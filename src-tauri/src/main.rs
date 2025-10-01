@@ -54,13 +54,23 @@ async fn init_app_state() -> AppState {
         }
     });
 
+    // Initialize metrics storage (1M metrics, 1000 services)
+    let metrics_storage = Some(Arc::new(tokio::sync::Mutex::new(
+        urpo_lib::metrics::MetricStorage::new(1_048_576, 1000),
+    )));
+
     // Auto-start OTLP receiver for BLAZING FAST trace ingestion
-    let otel_receiver = urpo_lib::receiver::OtelReceiver::new(
+    let mut otel_receiver = urpo_lib::receiver::OtelReceiver::new(
         4327, // gRPC port (temporary change to avoid conflicts)
         4328, // HTTP port (temporary change to avoid conflicts)
         Arc::clone(&storage),
         Arc::clone(&monitor),
     );
+
+    // Wire up metrics storage to receiver
+    if let Some(ref metrics_storage) = metrics_storage {
+        otel_receiver = otel_receiver.with_metrics(1_048_576, 1000);
+    }
 
     let receiver = Arc::new(RwLock::new(Some(otel_receiver.clone())));
 
@@ -77,6 +87,7 @@ async fn init_app_state() -> AppState {
         storage,
         receiver,
         monitor,
+        metrics_storage,
     }
 }
 
@@ -147,6 +158,7 @@ async fn main() {
             commands::is_receiver_running,
             commands::trigger_tier_migration,
             commands::stream_trace_data,
+            commands::get_service_health_metrics,
         ])
         .setup(|app| {
             // Log startup time for performance tracking
