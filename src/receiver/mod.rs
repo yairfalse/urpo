@@ -46,6 +46,7 @@ impl Default for ReceiverConfig {
 /// - HTTP/JSON on the configured port (standard: 4318)
 /// - Real-time span processing and storage
 /// - Health monitoring and metrics collection
+/// - Real-time event broadcasting for UI updates
 #[derive(Clone)]
 pub struct OtelReceiver {
     /// GRPC port
@@ -68,6 +69,17 @@ pub struct OtelReceiver {
     sampler: Option<Arc<crate::sampling::SmartSampler>>,
     /// Metrics storage for OTLP metrics
     metrics_storage: Option<Arc<tokio::sync::Mutex<MetricStorage>>>,
+    /// Event broadcaster for real-time UI updates
+    event_sender: Option<tokio::sync::broadcast::Sender<TraceEvent>>,
+}
+
+/// Real-time trace event for broadcasting to UI
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct TraceEvent {
+    pub trace_id: String,
+    pub service_name: String,
+    pub span_count: usize,
+    pub timestamp: u64,
 }
 
 impl OtelReceiver {
@@ -117,6 +129,7 @@ impl OtelReceiver {
             batch_size: config.batch_size,
             sampler: None,
             metrics_storage,
+            event_sender: None,
         }
     }
 
@@ -177,6 +190,19 @@ impl OtelReceiver {
     /// Get metrics storage for querying.
     pub fn metrics_storage(&self) -> Option<&Arc<tokio::sync::Mutex<MetricStorage>>> {
         self.metrics_storage.as_ref()
+    }
+
+    /// Enable real-time event broadcasting for UI updates.
+    /// Returns a receiver that can subscribe to trace events.
+    pub fn with_events(mut self) -> (Self, tokio::sync::broadcast::Receiver<TraceEvent>) {
+        let (tx, rx) = tokio::sync::broadcast::channel(1000); // Buffer 1000 events
+        self.event_sender = Some(tx);
+        (self, rx)
+    }
+
+    /// Get event receiver for subscribing to trace events.
+    pub fn subscribe_events(&self) -> Option<tokio::sync::broadcast::Receiver<TraceEvent>> {
+        self.event_sender.as_ref().map(|tx| tx.subscribe())
     }
 
     /// Flush a batch to storage.
@@ -354,14 +380,47 @@ impl OtelReceiver {
             tracing::info!("Storing spans directly to storage (no batching configured)");
             let storage = self.storage.write().await;
             let span_count = sampled_spans.len();
+
+            // Group spans by trace_id for event broadcasting
+            let mut trace_map: std::collections::HashMap<String, (String, usize)> = std::collections::HashMap::new();
+
             for span in sampled_spans {
                 tracing::debug!(
                     "Storing span: {} for service: {}",
                     span.span_id,
                     span.service_name
                 );
+
+                // Track trace info for events
+                let trace_id = span.trace_id.as_str().to_string();
+                let service_name = span.service_name.to_string();
+
                 storage.store_span(span).await?;
+
+                // Update trace map
+                trace_map.entry(trace_id.clone())
+                    .and_modify(|(_, count)| *count += 1)
+                    .or_insert((service_name, 1));
             }
+
+            // Broadcast events for real-time UI updates
+            if let Some(ref event_tx) = self.event_sender {
+                for (trace_id, (service_name, span_count)) in trace_map {
+                    let event = TraceEvent {
+                        trace_id,
+                        service_name,
+                        span_count,
+                        timestamp: std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap()
+                            .as_nanos() as u64,
+                    };
+
+                    // Non-blocking send - if no receivers, that's OK
+                    let _ = event_tx.send(event);
+                }
+            }
+
             tracing::info!("Successfully stored {} spans", span_count);
         }
         Ok(())
