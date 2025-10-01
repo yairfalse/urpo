@@ -75,7 +75,10 @@ const SpanFlamegraphImpl = ({ spans, traceId }: SpanFlamegraphProps) => {
 
     // Calculate timing
     const minTime = Math.min(...spans.map(s => s.start_time));
-    const maxTime = Math.max(...spans.map(s => s.start_time + s.duration));
+    const maxTime = spans.reduce((max, s) => {
+      const endTime = s.start_time + s.duration;
+      return endTime > max ? endTime : max;
+    }, -Infinity);
     const totalDuration = maxTime - minTime;
 
     // Build flamegraph nodes (inverted - root at bottom)
