@@ -201,7 +201,8 @@ impl OtelReceiver {
 
         let config = LogStorageConfig {
             max_logs: buffer_capacity,
-            max_memory_mb: 100, // 100MB limit
+            max_age: std::time::Duration::from_secs(3600), // 1 hour
+            enable_search: true,
         };
 
         self.logs_storage = Some(Arc::new(tokio::sync::Mutex::new(
