@@ -171,7 +171,6 @@ impl MetricsService for OtelMetricsReceiver {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -297,7 +296,7 @@ mod tests {
 
         let points = receiver
             .convert_otlp_metric(&metric, 1, 1234567890)
-            .unwrap();
+            .expect("Test gauge metric conversion should succeed");
         assert_eq!(points.len(), 1);
 
         let point = &points[0];
@@ -332,7 +331,7 @@ mod tests {
 
         let points = receiver
             .convert_otlp_metric(&metric, 2, 1234567890)
-            .unwrap();
+            .expect("Test sum metric conversion should succeed");
         assert_eq!(points.len(), 1);
 
         let point = &points[0];
@@ -355,7 +354,7 @@ mod tests {
 
         let points = receiver
             .convert_otlp_metric(&metric, 1, 1234567890)
-            .unwrap();
+            .expect("Test empty metric conversion should succeed");
         assert_eq!(points.len(), 0);
     }
 

@@ -118,12 +118,8 @@ impl MetricsAggregator {
         // Process chunks of 4
         for chunk in chunks {
             // Load 4 values
-            let values = _mm256_set_pd(
-                chunk[3].value,
-                chunk[2].value,
-                chunk[1].value,
-                chunk[0].value,
-            );
+            let values =
+                _mm256_set_pd(chunk[3].value, chunk[2].value, chunk[1].value, chunk[0].value);
 
             // Update sum
             sum_vec = _mm256_add_pd(sum_vec, values);

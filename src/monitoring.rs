@@ -433,10 +433,10 @@ impl Monitor {
 
     /// Start metrics collection loop.
     async fn start_metrics_collection(&self) -> Result<()> {
-        let metrics = self.metrics.clone();
-        let error_tracker = self.error_tracker.clone();
-        let uptime_tracker = self.uptime_tracker.clone();
-        let shutdown = self.shutdown.clone();
+        let metrics = Arc::clone(&self.metrics);
+        let error_tracker = Arc::clone(&self.error_tracker);
+        let uptime_tracker = Arc::clone(&self.uptime_tracker);
+        let shutdown = Arc::clone(&self.shutdown);
         let config = self.config.clone();
 
         tokio::spawn(async move {
@@ -482,8 +482,8 @@ impl Monitor {
 
     /// Start health check loop.
     async fn start_health_checks(&self) -> Result<()> {
-        let health_checks = self.health_checks.clone();
-        let shutdown = self.shutdown.clone();
+        let health_checks = Arc::clone(&self.health_checks);
+        let shutdown = Arc::clone(&self.shutdown);
         let config = self.config.clone();
 
         tokio::spawn(async move {

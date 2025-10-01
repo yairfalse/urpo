@@ -31,9 +31,9 @@ pub struct ReceiverConfig {
 impl Default for ReceiverConfig {
     fn default() -> Self {
         Self {
-            span_pool_size: 10_000,  // Configurable instead of hardcoded
-            batch_size: 512,         // Configurable instead of hardcoded
-            sampling_rate: 1.0,      // Accept all traces by default for debugging
+            span_pool_size: 10_000, // Configurable instead of hardcoded
+            batch_size: 512,        // Configurable instead of hardcoded
+            sampling_rate: 1.0,     // Accept all traces by default for debugging
         }
     }
 }
@@ -167,9 +167,10 @@ impl OtelReceiver {
 
     /// Enable metrics collection with specified capacity.
     pub fn with_metrics(mut self, buffer_capacity: usize, max_services: usize) -> Self {
-        self.metrics_storage = Some(Arc::new(tokio::sync::Mutex::new(
-            MetricStorage::new(buffer_capacity, max_services),
-        )));
+        self.metrics_storage = Some(Arc::new(tokio::sync::Mutex::new(MetricStorage::new(
+            buffer_capacity,
+            max_services,
+        ))));
         self
     }
 
@@ -179,7 +180,10 @@ impl OtelReceiver {
     }
 
     /// Flush a batch to storage.
-    async fn flush_batch(storage: &Arc<tokio::sync::RwLock<dyn crate::storage::StorageBackend>>, batch: &mut Vec<UrpoSpan>) {
+    async fn flush_batch(
+        storage: &Arc<tokio::sync::RwLock<dyn crate::storage::StorageBackend>>,
+        batch: &mut Vec<UrpoSpan>,
+    ) {
         if batch.is_empty() {
             return;
         }
@@ -258,9 +262,8 @@ impl OtelReceiver {
         // Add metrics service if enabled
         if let Some(ref metrics_storage) = self.metrics_storage {
             tracing::info!("Adding OTLP metrics service to GRPC server");
-            server = server.add_service(
-                metrics::create_metrics_service_server(Arc::clone(metrics_storage))
-            );
+            server = server
+                .add_service(metrics::create_metrics_service_server(Arc::clone(metrics_storage)));
         }
 
         tracing::debug!("Starting server.serve() on {}", addr);
@@ -322,16 +325,14 @@ impl OtelReceiver {
                         if self.should_sample() {
                             sampled.push(span);
                         }
-                    }
-                    crate::sampling::SamplingDecision::Drop => {}
+                    },
+                    crate::sampling::SamplingDecision::Drop => {},
                 }
             }
             sampled
         } else {
             // Fallback to simple sampling
-            spans.into_iter()
-                .filter(|_| self.should_sample())
-                .collect()
+            spans.into_iter().filter(|_| self.should_sample()).collect()
         };
 
         if sampled_spans.is_empty() {
@@ -344,17 +345,24 @@ impl OtelReceiver {
         // Use batch processing if configured
         if let Some(ref sender) = self.batch_sender {
             tracing::debug!("Sending spans to batch processor");
-            sender.send(sampled_spans).await
+            sender
+                .send(sampled_spans)
+                .await
                 .map_err(|_| UrpoError::protocol("Batch channel closed"))?;
         } else {
             // Direct storage without batching
             tracing::info!("Storing spans directly to storage (no batching configured)");
             let storage = self.storage.write().await;
-            for span in &sampled_spans {
-                tracing::debug!("Storing span: {} for service: {}", span.span_id, span.service_name);
-                storage.store_span(span.clone()).await?;
+            let span_count = sampled_spans.len();
+            for span in sampled_spans {
+                tracing::debug!(
+                    "Storing span: {} for service: {}",
+                    span.span_id,
+                    span.service_name
+                );
+                storage.store_span(span).await?;
             }
-            tracing::info!("Successfully stored {} spans", sampled_spans.len());
+            tracing::info!("Successfully stored {} spans", span_count);
         }
         Ok(())
     }
@@ -386,7 +394,10 @@ impl TraceService for GrpcTraceService {
         let mut total_scope_spans = 0;
         let mut total_spans = 0;
 
-        tracing::info!("Export request contains {} resource spans", export_request.resource_spans.len());
+        tracing::info!(
+            "Export request contains {} resource spans",
+            export_request.resource_spans.len()
+        );
 
         // Process resource spans with full semantics
         for resource_spans in export_request.resource_spans {
@@ -418,13 +429,25 @@ impl TraceService for GrpcTraceService {
                 for otel_span in scope_spans.spans {
                     total_spans += 1;
 
-                    match convert_otel_span_with_pool(otel_span, &service_name, &self.receiver.span_pool) {
+                    match convert_otel_span_with_pool(
+                        otel_span,
+                        &service_name,
+                        &self.receiver.span_pool,
+                    ) {
                         Ok(span) => {
-                            tracing::debug!("Successfully converted span: {} for service: {}", span.span_id, service_name);
+                            tracing::debug!(
+                                "Successfully converted span: {} for service: {}",
+                                span.span_id,
+                                service_name
+                            );
                             spans.push(span);
                         },
                         Err(e) => {
-                            tracing::warn!("Failed to convert span: service={}, error={}", service_name, e);
+                            tracing::warn!(
+                                "Failed to convert span: service={}, error={}",
+                                service_name,
+                                e
+                            );
                         },
                     }
                 }
@@ -453,8 +476,7 @@ impl TraceService for GrpcTraceService {
 
 /// Extract service name from resource attributes.
 fn extract_service_name(attributes: &[opentelemetry_proto::tonic::common::v1::KeyValue]) -> String {
-    extract_resource_attribute(attributes, "service.name")
-        .unwrap_or_else(|| "unknown".into())
+    extract_resource_attribute(attributes, "service.name").unwrap_or_else(|| "unknown".into())
 }
 
 /// Extract resource attribute by key (OTEL semantic conventions).
@@ -515,7 +537,9 @@ struct ResourceSemantics {
 }
 
 /// Extract attribute value from OTEL any value.
-fn extract_attribute_value(value: &Option<opentelemetry_proto::tonic::common::v1::AnyValue>) -> Option<String> {
+fn extract_attribute_value(
+    value: &Option<opentelemetry_proto::tonic::common::v1::AnyValue>,
+) -> Option<String> {
     value.as_ref()?.value.as_ref().map(|v| match v {
         opentelemetry_proto::tonic::common::v1::any_value::Value::StringValue(s) => s.clone(),
         opentelemetry_proto::tonic::common::v1::any_value::Value::IntValue(i) => i.to_string(),
@@ -553,15 +577,16 @@ fn convert_otel_span_with_pool(
 
     // Clear and set attributes
     span_box.attributes.0.clear();
-    span_box.attributes.push(
-        Arc::from("span.kind"),
-        Arc::from(extract_span_kind(&otel_span))
-    );
+    span_box
+        .attributes
+        .push(Arc::from("span.kind"), Arc::from(extract_span_kind(&otel_span)));
 
     // Add other attributes from OTEL span
     for attr in otel_span.attributes {
         if let Some(value) = extract_attribute_value(&attr.value) {
-            span_box.attributes.push(Arc::from(attr.key.as_str()), Arc::from(value.as_str()));
+            span_box
+                .attributes
+                .push(Arc::from(attr.key.as_str()), Arc::from(value.as_str()));
         }
     }
 
@@ -613,7 +638,9 @@ fn extract_span_ids(
 
             let parent_span_id = if otel_span.parent_span_id.is_empty() {
                 None
-            } else if otel_span.parent_span_id.len() == 8 && !is_all_zeros(&otel_span.parent_span_id) {
+            } else if otel_span.parent_span_id.len() == 8
+                && !is_all_zeros(&otel_span.parent_span_id)
+            {
                 let parent_hex = unsafe { unsafe_hex_encode(&otel_span.parent_span_id) };
                 Some(SpanId::new(parent_hex)?)
             } else {
@@ -697,7 +724,9 @@ struct SpanTiming {
 }
 
 /// Extract timing information from OTEL span with proper error handling
-fn extract_span_timing(otel_span: &opentelemetry_proto::tonic::trace::v1::Span) -> Result<SpanTiming> {
+fn extract_span_timing(
+    otel_span: &opentelemetry_proto::tonic::trace::v1::Span,
+) -> Result<SpanTiming> {
     // Validate timestamps are reasonable (not zero, not in far future)
     if otel_span.start_time_unix_nano == 0 {
         return Err(UrpoError::protocol("Invalid span: start_time is zero"));
@@ -750,7 +779,8 @@ fn safe_nanos_to_system_time(nanos: u64) -> Result<std::time::SystemTime> {
     if nanos >= YEAR_2000_NANOS && nanos <= YEAR_2100_NANOS && nanos <= MAX_NANOS {
         // UNSAFE: We've validated the range, so this is safe
         return Ok(unsafe {
-            std::time::SystemTime::UNIX_EPOCH.checked_add(std::time::Duration::from_nanos(nanos))
+            std::time::SystemTime::UNIX_EPOCH
+                .checked_add(std::time::Duration::from_nanos(nanos))
                 .unwrap_unchecked()
         });
     }
@@ -938,7 +968,10 @@ mod tests {
 
         let result = extract_span_timing(&span);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("start_time is zero"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("start_time is zero"));
     }
 
     #[test]
@@ -964,7 +997,10 @@ mod tests {
 
         let result = extract_span_timing(&span);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("outside valid range"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("outside valid range"));
     }
 
     #[test]
@@ -1007,7 +1043,8 @@ mod tests {
             ..Default::default()
         };
 
-        let (trace_id, span_id, parent_id) = extract_span_ids(&span).expect("Test span IDs should be valid");
+        let (trace_id, span_id, parent_id) =
+            extract_span_ids(&span).expect("Test span IDs should be valid");
         assert_eq!(trace_id.to_string(), "0102030405060708090a0b0c0d0e0f10");
         assert_eq!(span_id.to_string(), "0102030405060708");
         assert!(parent_id.is_none());
@@ -1142,14 +1179,12 @@ mod tests {
             start_time_unix_nano: 1_700_000_000_000_000_000,
             end_time_unix_nano: 1_700_000_001_000_000_000,
             kind: 2, // SERVER
-            attributes: vec![
-                KeyValue {
-                    key: "http.method".to_string(),
-                    value: Some(AnyValue {
-                        value: Some(Value::StringValue("GET".to_string())),
-                    }),
-                },
-            ],
+            attributes: vec![KeyValue {
+                key: "http.method".to_string(),
+                value: Some(AnyValue {
+                    value: Some(Value::StringValue("GET".to_string())),
+                }),
+            }],
             ..Default::default()
         };
 

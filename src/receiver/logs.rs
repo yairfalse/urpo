@@ -49,7 +49,7 @@ impl OtelLogsReceiver {
                 // Process logs in batches for efficiency
                 let batch = processor_buffer.pop_batch(1000);
                 if !batch.is_empty() {
-                    let mut storage = processor_storage.lock().await;
+                    let storage = processor_storage.lock().await;
                     for log_arc in batch {
                         // Convert Arc<LogRecord> back to owned
                         let log_record = (*log_arc).clone();

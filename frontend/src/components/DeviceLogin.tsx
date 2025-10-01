@@ -10,18 +10,35 @@ import { Github, Copy, CheckCircle, ExternalLink, Loader } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/tauri';
 import { listen } from '@tauri-apps/api/event';
 
+interface DeviceFlowInfo {
+  user_code: string;
+  verification_url: string;
+  device_code: string;
+  expires_in: number;
+  interval: number;
+}
+
+interface GitHubUser {
+  username: string;
+  name?: string;
+  email?: string;
+  avatar_url?: string;
+}
+
 interface DeviceLoginProps {
-  onSuccess: (user: any) => void;
+  onSuccess: (user: GitHubUser) => void;
   onCancel?: () => void;
 }
 
 export const DeviceLogin: React.FC<DeviceLoginProps> = ({ onSuccess, onCancel }) => {
   const [step, setStep] = useState<'start' | 'code' | 'waiting' | 'success'>('start');
-  const [deviceInfo, setDeviceInfo] = useState<any>(null);
+  const [deviceInfo, setDeviceInfo] = useState<DeviceFlowInfo | null>(null);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
   const [isPolling, setIsPolling] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
+  const timeoutIdsRef = React.useRef<number[]>([]);
+  const isMountedRef = React.useRef(true);
 
   useEffect(() => {
     // Listen for auth status updates
@@ -38,10 +55,24 @@ export const DeviceLogin: React.FC<DeviceLoginProps> = ({ onSuccess, onCancel })
 
   // Auto-start the device login flow when component mounts
   useEffect(() => {
-    if (!isStarting && step === 'start') {
-      setIsStarting(true);
-      startDeviceLogin();
-    }
+    let cancelled = false;
+
+    const initLogin = async () => {
+      if (!isStarting && step === 'start' && !cancelled) {
+        setIsStarting(true);
+        await startDeviceLogin();
+      }
+    };
+
+    initLogin();
+
+    return () => {
+      cancelled = true;
+      isMountedRef.current = false;
+      // Clear all pending timeouts on unmount
+      timeoutIdsRef.current.forEach(clearTimeout);
+      timeoutIdsRef.current = [];
+    };
   }, []);
 
   const startDeviceLogin = async () => {
@@ -50,10 +81,10 @@ export const DeviceLogin: React.FC<DeviceLoginProps> = ({ onSuccess, onCancel })
     try {
       // Get device code from backend
       console.log('Invoking start_device_login...');
-      const info = await invoke('start_device_login');
+      const info = await invoke<DeviceFlowInfo>('start_device_login');
       console.log('Device info received:', info);
       console.log('Setting deviceInfo to:', info);
-      console.log('user_code from info:', info?.user_code);
+      console.log('user_code from info:', info.user_code);
       setDeviceInfo(info);
       console.log('Setting step to code');
       setStep('code');
@@ -71,30 +102,44 @@ export const DeviceLogin: React.FC<DeviceLoginProps> = ({ onSuccess, onCancel })
     }
   };
 
-  const startPolling = async (info: any) => {
+  const startPolling = async (info: DeviceFlowInfo) => {
     setIsPolling(true);
     // Don't immediately change to waiting - let user see the code first
-    setTimeout(() => {
-      if (step === 'code') {
+    const waitingTimeout = window.setTimeout(() => {
+      if (step === 'code' && isMountedRef.current) {
         setStep('waiting');
       }
     }, 3000); // Give user 3 seconds to see the code
+    timeoutIdsRef.current.push(waitingTimeout);
 
     try {
-      const user = await invoke('poll_device_login', {
+      const user = await invoke<GitHubUser>('poll_device_login', {
         deviceCode: info.device_code,
         interval: info.interval
       });
 
+      // Only update state if component is still mounted
+      if (!isMountedRef.current) return;
+
+      clearTimeout(waitingTimeout);
       setStep('success');
-      setTimeout(() => {
-        onSuccess(user);
+      const successTimeout = window.setTimeout(() => {
+        if (isMountedRef.current) {
+          onSuccess(user);
+        }
       }, 1500);
+      timeoutIdsRef.current.push(successTimeout);
     } catch (err) {
+      // Only update state if component is still mounted
+      if (!isMountedRef.current) return;
+
+      clearTimeout(waitingTimeout);
       setError(typeof err === 'string' ? err : 'Authentication failed');
       setStep('code');
     } finally {
-      setIsPolling(false);
+      if (isMountedRef.current) {
+        setIsPolling(false);
+      }
     }
   };
 

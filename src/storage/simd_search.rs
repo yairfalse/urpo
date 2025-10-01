@@ -254,7 +254,6 @@ fn compute_scores_scalar(lengths: &[u32], weights: &[f32]) -> Vec<f32> {
         .collect()
 }
 
-
 /// Batch check if any values in the array match the target using SIMD
 #[inline]
 pub fn contains_u64_simd(haystack: &[u64], needle: u64) -> bool {

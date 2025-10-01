@@ -283,10 +283,10 @@ mod tests {
         use std::sync::Arc;
 
         let attempts = Arc::new(AtomicU32::new(0));
-        let attempts_clone = attempts.clone();
+        let attempts_clone = Arc::clone(&attempts);
 
         let result = retry(move || {
-            let attempts = attempts_clone.clone();
+            let attempts = Arc::clone(&attempts_clone);
             async move {
                 let count = attempts.fetch_add(1, Ordering::Relaxed) + 1;
                 if count < 3 {

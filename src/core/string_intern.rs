@@ -71,7 +71,7 @@ impl StringIntern {
         let arc_str: Arc<str> = Arc::from(s);
 
         // Double-check under entry API to avoid races
-        let entry = self.table.entry(arc_str.clone());
+        let entry = self.table.entry(Arc::clone(&arc_str));
 
         match entry {
             dashmap::mapref::entry::Entry::Occupied(e) => *e.get(),

@@ -24,7 +24,9 @@ import {
   Search,
   RefreshCw,
   User,
-  LogOut
+  LogOut,
+  Play,
+  Square
 } from 'lucide-react';
 
 type ViewMode = 'dashboard' | 'services' | 'traces' | 'health' | 'flows';
@@ -33,6 +35,7 @@ const App = () => {
   const [activeView, setActiveView] = useState<ViewMode>('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
   const [currentUser, setCurrentUser] = useState<string | null>(null);
+  const [receiverRunning, setReceiverRunning] = useState(true); // Assume running since auto-started
 
   // Data hooks
   const {
@@ -52,7 +55,7 @@ const App = () => {
 
   const handleLogout = async () => {
     try {
-      await invoke('logout');
+      await invoke('device_logout');
       setCurrentUser(null);
       localStorage.removeItem('urpo_user');
     } catch (error) {
@@ -68,7 +71,7 @@ const App = () => {
     const checkAuth = async () => {
       try {
         // First check if we have a GitHub user logged in
-        const githubUser = await invoke('get_current_user');
+        const githubUser = await invoke<{ username: string; name?: string; email?: string; avatar_url?: string } | null>('get_device_user');
         if (githubUser) {
           setCurrentUser(githubUser.username);
           localStorage.setItem('urpo_user', githubUser.username);
@@ -88,6 +91,38 @@ const App = () => {
 
     checkAuth();
   }, []);
+
+  // Check receiver status on mount and periodically
+  React.useEffect(() => {
+    const checkReceiverStatus = async () => {
+      try {
+        const isRunning = await invoke<boolean>('is_receiver_running');
+        setReceiverRunning(isRunning);
+      } catch (error) {
+        console.error('Failed to check receiver status:', error);
+      }
+    };
+
+    checkReceiverStatus();
+    // Check every 5 seconds for status updates
+    const interval = setInterval(checkReceiverStatus, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Toggle receiver on/off - BLAZING FAST
+  const toggleReceiver = async () => {
+    try {
+      if (receiverRunning) {
+        await invoke('stop_receiver');
+        setReceiverRunning(false);
+      } else {
+        const started = await invoke<boolean>('start_receiver');
+        setReceiverRunning(started);
+      }
+    } catch (error) {
+      console.error('Failed to toggle receiver:', error);
+    }
+  };
 
   // Filter traces based on search
   const filteredTraces = useMemo(() => {
@@ -238,6 +273,20 @@ const App = () => {
             <RefreshCw size={12} />
           </Button>
 
+          {/* OTLP Receiver Control - BLAZING FAST */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={toggleReceiver}
+            style={{
+              padding: '4px',
+              color: receiverRunning ? COLORS.accent.success : COLORS.text.secondary
+            }}
+            title={receiverRunning ? 'Stop OTLP Receiver (Port 4317/4318)' : 'Start OTLP Receiver'}
+          >
+            {receiverRunning ? <Square size={12} /> : <Play size={12} />}
+          </Button>
+
           {/* User button */}
           <div style={{ marginLeft: '8px', paddingLeft: '8px', borderLeft: `1px solid ${COLORS.border.subtle}` }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -272,9 +321,9 @@ const App = () => {
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <StatusDot status={hasError ? 'warning' : 'success'} />
+              <StatusDot status={receiverRunning ? 'success' : 'warning'} pulse={receiverRunning} />
               <span style={{ fontSize: '10px', color: COLORS.text.secondary }}>
-                {hasError ? 'Connection Issues' : 'OTLP Connected'}
+                {receiverRunning ? 'OTLP Active • Port 4317/4318' : 'OTLP Receiver Stopped'}
               </span>
             </div>
 

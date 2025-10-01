@@ -243,7 +243,10 @@ async fn test_otlp_span_status_processing() {
     assert!(error_span.is_error);
 
     // Verify success span
-    let ok_span = spans.iter().find(|s| s.name == "success-operation").unwrap();
+    let ok_span = spans
+        .iter()
+        .find(|s| s.name == "success-operation")
+        .unwrap();
     assert!(!ok_span.is_error);
 }
 
@@ -385,7 +388,10 @@ fn create_request_with_spans(spans: Vec<Span>) -> ExportTraceServiceRequest {
     }
 }
 
-fn create_test_export_request(service_count: usize, spans_per_service: usize) -> ExportTraceServiceRequest {
+fn create_test_export_request(
+    service_count: usize,
+    spans_per_service: usize,
+) -> ExportTraceServiceRequest {
     let mut resource_spans = Vec::new();
 
     for i in 0..service_count {
