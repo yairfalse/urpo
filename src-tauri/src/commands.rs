@@ -239,8 +239,8 @@ pub async fn start_receiver(state: State<'_, AppState>) -> Result<bool, String> 
 
         if receiver_guard.is_none() {
             let receiver = urpo_lib::receiver::OtelReceiver::new(
-                4317, // gRPC port
-                4318, // HTTP port
+                4327, // gRPC port (temporary change to avoid conflicts)
+                4328, // HTTP port (temporary change to avoid conflicts)
                 Arc::clone(&state.storage),
                 Arc::clone(&state.monitor),
             );

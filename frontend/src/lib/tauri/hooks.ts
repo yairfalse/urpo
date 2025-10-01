@@ -51,7 +51,7 @@ export const queryKeys = {
 
 const defaultOptions: Partial<UseQueryOptions> = {
   enabled: isTauriAvailable(),
-  staleTime: 5000, // Consider data fresh for 5 seconds
+  staleTime: 100, // Consider data fresh for only 100ms - BLAZING FAST!
   gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes (renamed from cacheTime)
   refetchOnWindowFocus: false, // Don't refetch on window focus by default
   retry: 2,
@@ -68,7 +68,7 @@ export function useServiceMetrics(options?: Partial<UseQueryOptions<ServiceMetri
   return useQuery({
     queryKey: queryKeys.serviceMetrics(),
     queryFn: TauriClient.getServiceMetrics,
-    refetchInterval: 5000, // Auto-refresh every 5 seconds
+    refetchInterval: 500, // BLAZING FAST: Auto-refresh every 500ms for real-time updates!
     ...defaultOptions,
     ...options,
   });
@@ -104,7 +104,7 @@ export function useRecentTraces(
   return useQuery({
     queryKey: queryKeys.recentTraces(params),
     queryFn: () => TauriClient.listRecentTraces(params),
-    refetchInterval: 10000, // Auto-refresh every 10 seconds
+    refetchInterval: 750, // BLAZING FAST: Auto-refresh every 750ms for real-time trace updates!
     ...defaultOptions,
     ...options,
   });

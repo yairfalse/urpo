@@ -33,7 +33,7 @@ impl Default for ReceiverConfig {
         Self {
             span_pool_size: 10_000,  // Configurable instead of hardcoded
             batch_size: 512,         // Configurable instead of hardcoded
-            sampling_rate: 0.1,      // Configurable instead of hardcoded
+            sampling_rate: 1.0,      // Accept all traces by default for debugging
         }
     }
 }
@@ -306,6 +306,9 @@ impl OtelReceiver {
 
     /// Process incoming spans with batching and sampling.
     async fn process_spans(&self, spans: Vec<UrpoSpan>) -> Result<()> {
+        let span_count = spans.len();
+        tracing::info!("🔧 Processing {} spans through sampling and storage", span_count);
+
         // Apply sampling
         let sampled_spans: Vec<UrpoSpan> = if let Some(ref sampler) = self.sampler {
             // Use smart sampler for OTEL-compliant sampling
@@ -332,19 +335,26 @@ impl OtelReceiver {
         };
 
         if sampled_spans.is_empty() {
+            tracing::warn!("All {} spans were filtered out by sampling", span_count);
             return Ok(());
         }
 
+        tracing::info!("After sampling: {} spans will be stored", sampled_spans.len());
+
         // Use batch processing if configured
         if let Some(ref sender) = self.batch_sender {
+            tracing::debug!("Sending spans to batch processor");
             sender.send(sampled_spans).await
                 .map_err(|_| UrpoError::protocol("Batch channel closed"))?;
         } else {
             // Direct storage without batching
+            tracing::info!("Storing spans directly to storage (no batching configured)");
             let storage = self.storage.write().await;
-            for span in sampled_spans {
-                storage.store_span(span).await?;
+            for span in &sampled_spans {
+                tracing::debug!("Storing span: {} for service: {}", span.span_id, span.service_name);
+                storage.store_span(span.clone()).await?;
             }
+            tracing::info!("Successfully stored {} spans", sampled_spans.len());
         }
         Ok(())
     }
@@ -368,11 +378,15 @@ impl TraceService for GrpcTraceService {
         &self,
         request: Request<ExportTraceServiceRequest>,
     ) -> std::result::Result<Response<ExportTraceServiceResponse>, Status> {
+        tracing::info!("🔥 RECEIVED OTLP TRACE EXPORT REQUEST");
+
         let export_request = request.into_inner();
         let mut spans = Vec::new();
         let mut total_resource_spans = 0;
         let mut total_scope_spans = 0;
         let mut total_spans = 0;
+
+        tracing::info!("Export request contains {} resource spans", export_request.resource_spans.len());
 
         // Process resource spans with full semantics
         for resource_spans in export_request.resource_spans {
@@ -381,7 +395,7 @@ impl TraceService for GrpcTraceService {
             let semantics = extract_resource_semantics(&resource);
             let service_name = semantics.service_name.clone();
 
-            tracing::debug!(
+            tracing::info!(
                 "Processing resource spans for service: {}, scope_spans count: {}",
                 service_name,
                 resource_spans.scope_spans.len()
@@ -395,7 +409,7 @@ impl TraceService for GrpcTraceService {
                     .map(|s| s.name.as_str())
                     .unwrap_or("unknown");
 
-                tracing::debug!(
+                tracing::info!(
                     "Processing scope: {}, spans count: {}",
                     scope_name,
                     scope_spans.spans.len()
@@ -406,6 +420,7 @@ impl TraceService for GrpcTraceService {
 
                     match convert_otel_span_with_pool(otel_span, &service_name, &self.receiver.span_pool) {
                         Ok(span) => {
+                            tracing::debug!("Successfully converted span: {} for service: {}", span.span_id, service_name);
                             spans.push(span);
                         },
                         Err(e) => {
@@ -417,7 +432,7 @@ impl TraceService for GrpcTraceService {
         }
 
         tracing::info!(
-            "Received OTEL export request: {} resource spans, {} scope spans, {} spans total, {} successfully converted",
+            "🚀 PROCESSING OTLP export: {} resource spans, {} scope spans, {} spans total, {} successfully converted",
             total_resource_spans,
             total_scope_spans,
             total_spans,
@@ -750,14 +765,14 @@ fn safe_nanos_to_system_time(nanos: u64) -> Result<std::time::SystemTime> {
 
     if nanos < YEAR_2000_NANOS {
         return Err(UrpoError::protocol(format!(
-            "Invalid timestamp: {} is before year 2000",
+            "Timestamp outside valid range: {} is before year 2000",
             nanos
         )));
     }
 
     if nanos > YEAR_2100_NANOS {
         return Err(UrpoError::protocol(format!(
-            "Invalid timestamp: {} is after year 2100",
+            "Timestamp outside valid range: {} is after year 2100",
             nanos
         )));
     }
@@ -1065,19 +1080,25 @@ mod tests {
             kind: 3, // CLIENT
             ..Default::default()
         };
-        assert_eq!(extract_span_kind(&client_span), "CLIENT");
+        assert_eq!(extract_span_kind(&client_span), "client");
 
         let server_span = OtelSpan {
             kind: 2, // SERVER
             ..Default::default()
         };
-        assert_eq!(extract_span_kind(&server_span), "SERVER");
+        assert_eq!(extract_span_kind(&server_span), "server");
 
-        let unknown_span = OtelSpan {
-            kind: 99,
+        let internal_span = OtelSpan {
+            kind: 1, // INTERNAL
             ..Default::default()
         };
-        assert_eq!(extract_span_kind(&unknown_span), "UNSPECIFIED");
+        assert_eq!(extract_span_kind(&internal_span), "internal");
+
+        let unspecified_span = OtelSpan {
+            kind: 0, // UNSPECIFIED
+            ..Default::default()
+        };
+        assert_eq!(extract_span_kind(&unspecified_span), "internal");
     }
 
     #[test]

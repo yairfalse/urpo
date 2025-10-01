@@ -55,26 +55,23 @@ async fn init_app_state() -> AppState {
     });
 
     // Auto-start OTLP receiver for BLAZING FAST trace ingestion
-    let receiver = Arc::new(RwLock::new(Some(urpo_lib::receiver::OtelReceiver::new(
-        4317, // gRPC port
-        4318, // HTTP port
+    let otel_receiver = urpo_lib::receiver::OtelReceiver::new(
+        4327, // gRPC port (temporary change to avoid conflicts)
+        4328, // HTTP port (temporary change to avoid conflicts)
         Arc::clone(&storage),
         Arc::clone(&monitor),
-    ))));
+    );
+
+    let receiver = Arc::new(RwLock::new(Some(otel_receiver.clone())));
 
     // Start receiver in background - ZERO BLOCKING
-    {
-        let receiver_guard = receiver.read().await;
-        if let Some(ref recv) = *receiver_guard {
-            let receiver_arc = Arc::new(recv.clone()); // Note: This clone is necessary as recv is &OtelReceiver
-            tokio::spawn(async move {
-                tracing::info!("🚀 Auto-starting OTLP receiver on ports 4317 (gRPC) and 4318 (HTTP)");
-                if let Err(e) = receiver_arc.run().await {
-                    tracing::error!("OTLP receiver error: {}", e);
-                }
-            });
+    let receiver_arc = Arc::new(otel_receiver);
+    tokio::spawn(async move {
+        tracing::info!("🚀 Auto-starting OTLP receiver on ports 4317 (gRPC) and 4318 (HTTP)");
+        if let Err(e) = receiver_arc.run().await {
+            tracing::error!("OTLP receiver error: {}", e);
         }
-    }
+    });
 
     AppState {
         storage,
