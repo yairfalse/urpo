@@ -144,9 +144,13 @@ impl InMemoryStorage {
                 continue;
             }
 
-            match self.compression_engine.compress_spans(&spans, CompressionLevel::Balanced) {
+            match self
+                .compression_engine
+                .compress_spans(&spans, CompressionLevel::Balanced)
+            {
                 Ok(compressed_batch) => {
-                    self.compressed_batches.insert(trace_id.clone(), compressed_batch);
+                    self.compressed_batches
+                        .insert(trace_id.clone(), compressed_batch);
                     compressed_count += spans.len();
 
                     // Remove compressed spans from traces mapping
@@ -166,7 +170,11 @@ impl InMemoryStorage {
                         }
                     }
 
-                    tracing::debug!("Compressed {} spans for trace {} (5-10x memory savings)", spans.len(), trace_id);
+                    tracing::debug!(
+                        "Compressed {} spans for trace {} (5-10x memory savings)",
+                        spans.len(),
+                        trace_id
+                    );
                 },
                 Err(e) => {
                     tracing::error!("Failed to compress spans for trace {}: {}", trace_id, e);
@@ -174,12 +182,15 @@ impl InMemoryStorage {
                     for span in spans {
                         self.spans.insert(span.span_id.clone(), span);
                     }
-                }
+                },
             }
         }
 
         if compressed_count > 0 {
-            tracing::info!("Compressed {} spans total, achieving 5-10x memory savings", compressed_count);
+            tracing::info!(
+                "Compressed {} spans total, achieving 5-10x memory savings",
+                compressed_count
+            );
         }
 
         Ok(())
@@ -548,7 +559,8 @@ impl InMemoryStorage {
         let target_id = trace_id.as_u128();
 
         // Collect all trace IDs as u128 array for SIMD batch processing
-        let trace_ids: Vec<u128> = self.traces
+        let trace_ids: Vec<u128> = self
+            .traces
             .iter()
             .map(|entry| entry.key().as_u128())
             .collect();
@@ -567,7 +579,10 @@ impl InMemoryStorage {
 
     /// SIMD-accelerated service lookup for batch operations
     #[inline]
-    pub fn find_services_simd(&self, service_names: &[&str]) -> Vec<Option<VecDeque<(SystemTime, SpanId)>>> {
+    pub fn find_services_simd(
+        &self,
+        service_names: &[&str],
+    ) -> Vec<Option<VecDeque<(SystemTime, SpanId)>>> {
         // Use SIMD for batch service lookups - much faster for multiple queries
         service_names
             .iter()
@@ -820,7 +835,7 @@ impl StorageBackend for InMemoryStorage {
                 },
                 Err(e) => {
                     tracing::error!("Failed to decompress spans for trace {}: {}", trace_id, e);
-                }
+                },
             }
         }
 

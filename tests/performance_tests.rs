@@ -10,10 +10,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
-use urpo_lib::{
-    receiver::OtelReceiver,
-    storage::memory::InMemoryStorage,
-};
+use urpo_lib::{receiver::OtelReceiver, storage::memory::InMemoryStorage};
 
 mod common;
 use common::*;
@@ -275,10 +272,7 @@ async fn test_optimal_batch_size() {
         let elapsed = start.elapsed();
         let spans_per_second = TOTAL_SPANS as f64 / elapsed.as_secs_f64();
 
-        println!(
-            "Batch size {}: {:.0} spans/second",
-            batch_size, spans_per_second
-        );
+        println!("Batch size {}: {:.0} spans/second", batch_size, spans_per_second);
     }
 }
 
@@ -311,11 +305,7 @@ async fn test_memory_cleanup() {
     println!("Leaked memory: {} KB", leaked_memory / 1000);
 
     // Should not leak more than 1MB
-    assert!(
-        leaked_memory < 1_000_000,
-        "Memory leak detected: {} bytes",
-        leaked_memory
-    );
+    assert!(leaked_memory < 1_000_000, "Memory leak detected: {} bytes", leaked_memory);
 }
 
 // Helper functions

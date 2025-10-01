@@ -59,12 +59,12 @@ impl UnifiedStorage {
 
     /// Get the inner storage backend
     pub fn inner(&self) -> Arc<RwLock<dyn StorageBackend>> {
-        self.inner.clone()
+        Arc::clone(&self.inner)
     }
 
     /// Get the storage backend for API usage
     pub fn as_backend(&self) -> Arc<RwLock<dyn StorageBackend>> {
-        self.inner.clone()
+        Arc::clone(&self.inner)
     }
 
     /// Create storage with specific backend (enables swapping)
@@ -87,7 +87,7 @@ impl UnifiedStorage {
 impl Clone for UnifiedStorage {
     fn clone(&self) -> Self {
         Self {
-            inner: self.inner.clone(),
+            inner: Arc::clone(&self.inner),
         }
     }
 }

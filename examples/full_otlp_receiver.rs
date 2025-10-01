@@ -1,9 +1,9 @@
 //! Example showing full OTLP receiver with traces, metrics, and logs support.
 
 use std::sync::Arc;
+use urpo::monitoring::Monitor;
 use urpo::receiver::OtelReceiver;
 use urpo::storage::memory::InMemoryStorage;
-use urpo::monitoring::Monitor;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -25,7 +25,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .with_batch_processing(1024)           // Batch up to 1024 spans
     .with_smart_sampling(100)              // Smart sampling with 100GB budget
     .with_metrics(100_000, 1000)           // Support 100K metrics, 1K services
-    .with_logs(50_000, 1000);              // Support 50K logs, 1K services
+    .with_logs(50_000, 1000); // Support 50K logs, 1K services
 
     println!("🚀 Starting full OTLP receiver...");
     println!("   - Traces:  GRPC :4317, HTTP :4318");

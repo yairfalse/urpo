@@ -38,7 +38,7 @@ impl StringPool {
                 .fetch_add(1, std::sync::atomic::Ordering::SeqCst),
         );
 
-        self.strings.insert(arc_str.clone(), id);
+        self.strings.insert(Arc::clone(&arc_str), id);
         self.reverse.insert(id, arc_str);
 
         id
@@ -60,8 +60,8 @@ impl StringPool {
                 .fetch_add(1, std::sync::atomic::Ordering::SeqCst),
         );
 
-        self.strings.insert(arc_str.clone(), id);
-        self.reverse.insert(id, arc_str.clone());
+        self.strings.insert(Arc::clone(&arc_str), id);
+        self.reverse.insert(id, Arc::clone(&arc_str));
 
         (id, arc_str)
     }
@@ -179,7 +179,7 @@ mod tests {
         let mut handles = vec![];
 
         for i in 0..10 {
-            let pool_clone = pool.clone();
+            let pool_clone = Arc::clone(&pool);
             let handle = thread::spawn(move || {
                 let metric_name = format!("metric.thread.{}", i);
                 pool_clone.intern(&metric_name)

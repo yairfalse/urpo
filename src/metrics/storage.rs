@@ -6,9 +6,7 @@
 //! - Real-time service health calculation
 
 use crate::metrics::{
-    aggregator::MetricsAggregator,
-    ring_buffer::MetricRingBuffer,
-    string_pool::StringPool,
+    aggregator::MetricsAggregator, ring_buffer::MetricRingBuffer, string_pool::StringPool,
     types::MetricPoint,
 };
 use dashmap::DashMap;
@@ -108,7 +106,10 @@ impl MetricStorage {
 
     /// List all services with metrics
     pub fn list_services(&self) -> Vec<u16> {
-        self.service_aggregates.iter().map(|item| *item.key()).collect()
+        self.service_aggregates
+            .iter()
+            .map(|item| *item.key())
+            .collect()
     }
 
     /// Get current memory usage estimate

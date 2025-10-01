@@ -7,7 +7,7 @@ use dashmap::DashMap;
 use parking_lot::RwLock;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 /// Log storage configuration
 pub struct LogStorageConfig {
@@ -293,6 +293,7 @@ pub struct LogStorageStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::SystemTime;
 
     fn create_test_storage() -> LogStorage {
         LogStorage::new(LogStorageConfig::default())
@@ -315,7 +316,7 @@ mod tests {
         let storage = create_test_storage();
         let log = create_test_log("Test log message", LogSeverity::Info);
 
-        storage.store_log(log.clone()).unwrap();
+        storage.store_log(log).unwrap();
 
         let recent = storage.get_recent_logs(10);
         assert_eq!(recent.len(), 1);

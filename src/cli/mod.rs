@@ -325,8 +325,9 @@ async fn execute_export(
     let config = cli.load_config().await?;
 
     // Initialize storage (read-only for export)
-    let storage = Arc::new(RwLock::new(InMemoryStorage::with_config(&config)));
-    let storage_trait: Arc<RwLock<dyn StorageBackend>> = Arc::clone(&storage);
+    let storage: Arc<RwLock<dyn StorageBackend>> =
+        Arc::new(RwLock::new(InMemoryStorage::with_config(&config)));
+    let storage_trait = Arc::clone(&storage);
 
     // Parse export format
     let export_format = format
@@ -482,8 +483,9 @@ async fn start_with_ui(config: Config, cli: &Cli) -> Result<()> {
     use tokio::sync::RwLock;
 
     // Initialize storage
-    let storage = Arc::new(RwLock::new(InMemoryStorage::with_config(&config)));
-    let storage_trait: Arc<RwLock<dyn StorageBackend>> = Arc::clone(&storage);
+    let storage: Arc<RwLock<dyn StorageBackend>> =
+        Arc::new(RwLock::new(InMemoryStorage::with_config(&config)));
+    let storage_trait = Arc::clone(&storage);
 
     // Initialize health monitor
     let health_monitor = Arc::new(Monitor::new());
@@ -548,8 +550,9 @@ async fn start_headless(config: Config, cli: &Cli) -> Result<()> {
     use tokio::sync::RwLock;
 
     // Initialize storage
-    let storage = Arc::new(RwLock::new(InMemoryStorage::with_config(&config)));
-    let storage_trait: Arc<RwLock<dyn StorageBackend>> = Arc::clone(&storage);
+    let storage: Arc<RwLock<dyn StorageBackend>> =
+        Arc::new(RwLock::new(InMemoryStorage::with_config(&config)));
+    let storage_trait = Arc::clone(&storage);
 
     // Initialize health monitor
     let health_monitor = Arc::new(Monitor::new());
