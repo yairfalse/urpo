@@ -6,6 +6,7 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useDashboardData } from './lib/tauri/convenience';
+import { useRealtimeTraces } from './hooks/useRealtimeTraces';
 import { Button, Input, StatusDot, Badge, COLORS } from './design-system/core';
 import {
   UnifiedHealthView,
@@ -37,6 +38,9 @@ const App = () => {
   const [currentUser, setCurrentUser] = useState<string | null>(null);
   const [receiverRunning, setReceiverRunning] = useState(true); // Assume running since auto-started
 
+  // Enable real-time trace updates
+  useRealtimeTraces(true);
+
   // Data hooks
   const {
     serviceMetrics,
@@ -46,6 +50,15 @@ const App = () => {
     hasError,
     refetchAll
   } = useDashboardData();
+
+  // Debug: Log data
+  React.useEffect(() => {
+    console.log('Dashboard data:', {
+      services: serviceMetrics?.length,
+      traces: recentTraces?.length,
+      system: systemMetrics
+    });
+  }, [serviceMetrics, recentTraces, systemMetrics]);
 
   const handleLogin = (username: string, password?: string) => {
     // Handle both GitHub OAuth and regular login

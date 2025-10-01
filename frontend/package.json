@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "tauri": "tauri",
+    "tauri": "cd .. && tauri",
+    "tauri:dev": "cd .. && tauri dev",
+    "tauri:build": "cd .. && tauri build",
     "lint": "eslint src --ext .ts,.tsx",
     "lint:fix": "eslint src --ext .ts,.tsx --fix",
     "type-check": "tsc --noEmit"
