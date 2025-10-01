@@ -37,6 +37,8 @@ export const DeviceLogin: React.FC<DeviceLoginProps> = ({ onSuccess, onCancel })
   const [copied, setCopied] = useState(false);
   const [isPolling, setIsPolling] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
+  const timeoutIdsRef = React.useRef<number[]>([]);
+  const isMountedRef = React.useRef(true);
 
   useEffect(() => {
     // Listen for auth status updates
@@ -66,6 +68,10 @@ export const DeviceLogin: React.FC<DeviceLoginProps> = ({ onSuccess, onCancel })
 
     return () => {
       cancelled = true;
+      isMountedRef.current = false;
+      // Clear all pending timeouts on unmount
+      timeoutIdsRef.current.forEach(clearTimeout);
+      timeoutIdsRef.current = [];
     };
   }, []);
 
@@ -99,11 +105,12 @@ export const DeviceLogin: React.FC<DeviceLoginProps> = ({ onSuccess, onCancel })
   const startPolling = async (info: DeviceFlowInfo) => {
     setIsPolling(true);
     // Don't immediately change to waiting - let user see the code first
-    const waitingTimeout = setTimeout(() => {
-      if (step === 'code') {
+    const waitingTimeout = window.setTimeout(() => {
+      if (step === 'code' && isMountedRef.current) {
         setStep('waiting');
       }
     }, 3000); // Give user 3 seconds to see the code
+    timeoutIdsRef.current.push(waitingTimeout);
 
     try {
       const user = await invoke<GitHubUser>('poll_device_login', {
@@ -111,17 +118,28 @@ export const DeviceLogin: React.FC<DeviceLoginProps> = ({ onSuccess, onCancel })
         interval: info.interval
       });
 
+      // Only update state if component is still mounted
+      if (!isMountedRef.current) return;
+
       clearTimeout(waitingTimeout);
       setStep('success');
-      setTimeout(() => {
-        onSuccess(user);
+      const successTimeout = window.setTimeout(() => {
+        if (isMountedRef.current) {
+          onSuccess(user);
+        }
       }, 1500);
+      timeoutIdsRef.current.push(successTimeout);
     } catch (err) {
+      // Only update state if component is still mounted
+      if (!isMountedRef.current) return;
+
       clearTimeout(waitingTimeout);
       setError(typeof err === 'string' ? err : 'Authentication failed');
       setStep('code');
     } finally {
-      setIsPolling(false);
+      if (isMountedRef.current) {
+        setIsPolling(false);
+      }
     }
   };
 
