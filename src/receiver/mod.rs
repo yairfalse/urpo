@@ -69,6 +69,8 @@ pub struct OtelReceiver {
     sampler: Option<Arc<crate::sampling::SmartSampler>>,
     /// Metrics storage for OTLP metrics
     metrics_storage: Option<Arc<tokio::sync::Mutex<MetricStorage>>>,
+    /// Logs storage for OTLP logs
+    logs_storage: Option<Arc<tokio::sync::Mutex<crate::logs::LogStorage>>>,
     /// Event broadcaster for real-time UI updates
     event_sender: Option<tokio::sync::broadcast::Sender<TraceEvent>>,
 }
@@ -129,6 +131,7 @@ impl OtelReceiver {
             batch_size: config.batch_size,
             sampler: None,
             metrics_storage,
+            logs_storage: None,
             event_sender: None,
         }
     }
@@ -190,6 +193,27 @@ impl OtelReceiver {
     /// Get metrics storage for querying.
     pub fn metrics_storage(&self) -> Option<&Arc<tokio::sync::Mutex<MetricStorage>>> {
         self.metrics_storage.as_ref()
+    }
+
+    /// Enable logs collection with specified capacity.
+    pub fn with_logs(mut self, buffer_capacity: usize) -> Self {
+        use crate::logs::storage::LogStorageConfig;
+
+        let config = LogStorageConfig {
+            max_logs: buffer_capacity,
+            max_age: std::time::Duration::from_secs(3600), // 1 hour
+            enable_search: true,
+        };
+
+        self.logs_storage = Some(Arc::new(tokio::sync::Mutex::new(
+            crate::logs::LogStorage::new(config)
+        )));
+        self
+    }
+
+    /// Get logs storage for querying.
+    pub fn logs_storage(&self) -> Option<&Arc<tokio::sync::Mutex<crate::logs::LogStorage>>> {
+        self.logs_storage.as_ref()
     }
 
     /// Enable real-time event broadcasting for UI updates.
@@ -290,6 +314,13 @@ impl OtelReceiver {
             tracing::info!("Adding OTLP metrics service to GRPC server");
             server = server
                 .add_service(metrics::create_metrics_service_server(Arc::clone(metrics_storage)));
+        }
+
+        // Add logs service if enabled
+        if let Some(ref logs_storage) = self.logs_storage {
+            tracing::info!("Adding OTLP logs service to GRPC server");
+            server = server
+                .add_service(logs::create_logs_service_server(Arc::clone(logs_storage)));
         }
 
         tracing::debug!("Starting server.serve() on {}", addr);

@@ -1,0 +1,12 @@
+{
+  "name": "urpo",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "cd frontend && npm run dev",
+    "tauri": "cd frontend && npm run tauri",
+    "tauri:dev": "cd frontend && npm run tauri dev",
+    "tauri:build": "cd frontend && npm run tauri build",
+    "build": "cd frontend && npm run build"
+  }
+}

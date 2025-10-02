@@ -6,3 +6,4 @@ export * from './useDebounce';
 export * from './useLocalStorage';
 export * from './useTauriData';
 export * from './useDependencyDiscovery';
+export * from './useRealtimeTraces';

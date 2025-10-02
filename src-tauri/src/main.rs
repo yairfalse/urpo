@@ -72,6 +72,9 @@ async fn init_app_state() -> (AppState, tokio::sync::broadcast::Receiver<urpo_li
         otel_receiver = otel_receiver.with_metrics(1_048_576, 1000);
     }
 
+    // Enable logs collection (100K logs)
+    otel_receiver = otel_receiver.with_logs(100_000);
+
     // Enable real-time event broadcasting
     let (otel_receiver, mut event_rx) = otel_receiver.with_events();
 
