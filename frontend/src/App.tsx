@@ -12,7 +12,9 @@ import {
   UnifiedHealthView,
   UnifiedTracesView,
   UnifiedServicesView,
-  UnifiedDashboardView
+  UnifiedDashboardView,
+  UnifiedMetricsView,
+  UnifiedLogsView
 } from './pages/unified-views';
 import { invoke } from '@tauri-apps/api/tauri';
 import { LoginPage } from './pages/LoginPage';
@@ -27,10 +29,12 @@ import {
   User,
   LogOut,
   Play,
-  Square
+  Square,
+  LineChart,
+  FileText
 } from 'lucide-react';
 
-type ViewMode = 'dashboard' | 'services' | 'traces' | 'health' | 'flows';
+type ViewMode = 'dashboard' | 'services' | 'traces' | 'health' | 'flows' | 'metrics' | 'logs';
 
 const App = () => {
   const [activeView, setActiveView] = useState<ViewMode>('dashboard');
@@ -169,7 +173,9 @@ const App = () => {
     { key: 'services', icon: GitBranch, label: 'Services', shortcut: '2' },
     { key: 'traces', icon: Layers, label: 'Traces', shortcut: '3' },
     { key: 'health', icon: Activity, label: 'Health', shortcut: '4' },
-    { key: 'flows', icon: Share2, label: 'Flows', shortcut: '5' },
+    { key: 'metrics', icon: LineChart, label: 'Metrics', shortcut: '5' },
+    { key: 'logs', icon: FileText, label: 'Logs', shortcut: '6' },
+    { key: 'flows', icon: Share2, label: 'Flows', shortcut: '7' },
   ] as const;
 
   // Debug render checkpoint
@@ -401,6 +407,12 @@ const App = () => {
             )}
             {activeView === 'health' && (
               <UnifiedHealthView services={filteredServices} metrics={systemMetrics?.data} />
+            )}
+            {activeView === 'metrics' && (
+              <UnifiedMetricsView />
+            )}
+            {activeView === 'logs' && (
+              <UnifiedLogsView />
             )}
             {activeView === 'flows' && (
               <UnifiedTracesView traces={filteredTraces} />
