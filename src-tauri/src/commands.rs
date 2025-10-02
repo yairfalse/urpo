@@ -348,7 +348,6 @@ pub async fn get_service_health_metrics(
                     } else {
                         format!("service-{}", service_id)
                     };
-
                     result.push(ServiceHealth {
                         service_name,
                         request_rate: health.request_rate,

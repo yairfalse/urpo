@@ -100,6 +100,7 @@ impl App {
                     // Try to get actual service name from string pool; fallback to placeholder if not found
                     let service_name = storage
                         .get_service_name(service_id)
+
                         .unwrap_or_else(|| format!("service-{}", service_id));
                     self.service_health.push((service_name, health));
                 }
