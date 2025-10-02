@@ -27,6 +27,11 @@ use urpo_lib::{
 pub use telemetry::TELEMETRY;
 pub use types::*;
 
+// Configuration constants (matching Config defaults in urpo_lib)
+const MAX_METRICS: usize = 1_048_576; // 1M metrics
+const MAX_SERVICES: usize = 1000;      // 1000 services
+const MAX_LOGS: usize = 100_000;       // 100K logs
+
 /// Initialize application state
 async fn init_app_state() -> (AppState, tokio::sync::broadcast::Receiver<urpo_lib::receiver::TraceEvent>) {
     // Create optimized storage with aggressive limits
@@ -54,9 +59,9 @@ async fn init_app_state() -> (AppState, tokio::sync::broadcast::Receiver<urpo_li
         }
     });
 
-    // Initialize metrics storage (1M metrics, 1000 services)
+    // Initialize metrics storage
     let metrics_storage = Some(Arc::new(tokio::sync::Mutex::new(
-        urpo_lib::metrics::MetricStorage::new(1_048_576, 1000),
+        urpo_lib::metrics::MetricStorage::new(MAX_METRICS, MAX_SERVICES),
     )));
 
     // Auto-start OTLP receiver for BLAZING FAST trace ingestion
@@ -69,11 +74,11 @@ async fn init_app_state() -> (AppState, tokio::sync::broadcast::Receiver<urpo_li
 
     // Wire up metrics storage to receiver
     if let Some(ref metrics_storage) = metrics_storage {
-        otel_receiver = otel_receiver.with_metrics(1_048_576, 1000);
+        otel_receiver = otel_receiver.with_metrics(MAX_METRICS, MAX_SERVICES);
     }
 
-    // Enable logs collection (100K logs)
-    otel_receiver = otel_receiver.with_logs(100_000);
+    // Enable logs collection
+    otel_receiver = otel_receiver.with_logs(MAX_LOGS);
 
     // Enable real-time event broadcasting
     let (otel_receiver, mut event_rx) = otel_receiver.with_events();
