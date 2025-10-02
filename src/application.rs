@@ -38,8 +38,8 @@ impl Application {
                 Arc::clone(&monitor),
             )
             .with_sampling_rate(config.sampling.default_rate as f32)
-            .with_metrics(1_048_576, 1000) // 1M metrics, 1000 services
-            .with_logs(100_000), // 100K logs
+            .with_metrics(config.monitoring.max_metrics, config.monitoring.max_services)
+            .with_logs(config.logging.max_logs),
         );
 
         Ok(Self {

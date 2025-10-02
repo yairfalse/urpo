@@ -121,6 +121,10 @@ pub struct MonitoringConfig {
     pub metrics_port: Option<u16>,
     /// Alert thresholds
     pub alerts: AlertConfig,
+    /// Maximum metrics to store
+    pub max_metrics: usize,
+    /// Maximum services to track
+    pub max_services: usize,
 }
 
 /// Alert configuration
@@ -146,6 +150,11 @@ pub struct LoggingConfig {
     pub rotation: LogRotation,
     /// Structured logging format
     pub structured: bool,
+    /// Maximum logs to store in OTLP receiver
+    pub max_logs: usize,
+    /// Log retention duration
+    #[serde(with = "humantime_serde")]
+    pub log_retention: Duration,
 }
 
 /// Feature configuration
@@ -271,6 +280,8 @@ impl Default for MonitoringConfig {
             metrics_enabled: true,
             metrics_port: None,
             alerts: AlertConfig::default(),
+            max_metrics: 1_048_576, // 1M metrics
+            max_services: 1000,      // 1000 services
         }
     }
 }
@@ -292,6 +303,8 @@ impl Default for LoggingConfig {
             file: None,
             rotation: LogRotation::Daily,
             structured: false,
+            max_logs: 100_000,                        // 100K logs
+            log_retention: Duration::from_secs(3600), // 1 hour
         }
     }
 }
