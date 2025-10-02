@@ -51,14 +51,17 @@ const App = () => {
     refetchAll
   } = useDashboardData();
 
-  // Debug: Log data
+  // Debug: Log data AND render state
   React.useEffect(() => {
+    console.log('App mounted! Current user:', currentUser);
     console.log('Dashboard data:', {
-      services: serviceMetrics?.length,
-      traces: recentTraces?.length,
-      system: systemMetrics
+      services: serviceMetrics?.data?.length,
+      traces: recentTraces?.data?.length,
+      system: systemMetrics?.data,
+      isLoading,
+      hasError
     });
-  }, [serviceMetrics, recentTraces, systemMetrics]);
+  }, [serviceMetrics, recentTraces, systemMetrics, currentUser, isLoading, hasError]);
 
   const handleLogin = (username: string, password?: string) => {
     // Handle both GitHub OAuth and regular login
@@ -139,9 +142,10 @@ const App = () => {
 
   // Filter traces based on search
   const filteredTraces = useMemo(() => {
-    if (!searchQuery || !recentTraces) return recentTraces;
+    const traces = recentTraces?.data || [];
+    if (!searchQuery || traces.length === 0) return traces;
     const query = searchQuery.toLowerCase();
-    return recentTraces.filter((trace: any) =>
+    return traces.filter((trace: any) =>
       trace.root_service?.toLowerCase().includes(query) ||
       trace.trace_id?.toLowerCase().includes(query) ||
       trace.root_operation?.toLowerCase().includes(query)
@@ -150,9 +154,10 @@ const App = () => {
 
   // Filter services based on search
   const filteredServices = useMemo(() => {
-    if (!searchQuery || !serviceMetrics) return serviceMetrics;
+    const services = serviceMetrics?.data || [];
+    if (!searchQuery || services.length === 0) return services;
     const query = searchQuery.toLowerCase();
-    return serviceMetrics.filter((service: any) =>
+    return services.filter((service: any) =>
       service.name?.toLowerCase().includes(query)
     );
   }, [serviceMetrics, searchQuery]);
@@ -167,10 +172,16 @@ const App = () => {
     { key: 'flows', icon: Share2, label: 'Flows', shortcut: '5' },
   ] as const;
 
+  // Debug render checkpoint
+  console.log('App rendering...', { currentUser, isLoading });
+
   // Show login page if not authenticated
   if (!currentUser) {
+    console.log('Showing login page');
     return <LoginPage onLogin={handleLogin} />;
   }
+
+  console.log('Showing main app');
 
   return (
     <div style={{ height: '100vh', background: COLORS.bg.primary, display: 'flex', flexDirection: 'column' }}>
@@ -278,7 +289,7 @@ const App = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <StatusDot status={hasError ? 'error' : 'success'} pulse />
             <span style={{ fontSize: '10px', color: COLORS.text.tertiary }}>
-              {serviceMetrics?.length || 0} services
+              {serviceMetrics?.data?.length || 0} services
             </span>
           </div>
 
@@ -321,7 +332,7 @@ const App = () => {
       </header>
 
       {/* STATUS BAR - System metrics */}
-      {systemMetrics && (
+      {systemMetrics?.data && (
         <div
           style={{
             background: COLORS.bg.primary,
@@ -344,19 +355,19 @@ const App = () => {
               <div>
                 <span style={{ fontSize: '9px', color: COLORS.text.tertiary }}>SPANS/S</span>
                 <span style={{ fontSize: '10px', color: COLORS.text.primary, marginLeft: '6px' }}>
-                  {systemMetrics?.spans_per_second?.toFixed(0) || '0'}
+                  {systemMetrics.data?.spans_per_second?.toFixed(0) || '0'}
                 </span>
               </div>
               <div>
                 <span style={{ fontSize: '9px', color: COLORS.text.tertiary }}>MEM</span>
                 <span style={{ fontSize: '10px', color: COLORS.text.primary, marginLeft: '6px' }}>
-                  {systemMetrics?.memory_usage_mb?.toFixed(0) || '0'}MB
+                  {systemMetrics.data?.memory_usage_mb?.toFixed(0) || '0'}MB
                 </span>
               </div>
               <div>
                 <span style={{ fontSize: '9px', color: COLORS.text.tertiary }}>CPU</span>
                 <span style={{ fontSize: '10px', color: COLORS.text.primary, marginLeft: '6px' }}>
-                  {systemMetrics?.cpu_usage_percent?.toFixed(1) || '0'}%
+                  {systemMetrics.data?.cpu_usage_percent?.toFixed(1) || '0'}%
                 </span>
               </div>
             </div>
@@ -389,7 +400,7 @@ const App = () => {
               <UnifiedTracesView traces={filteredTraces} />
             )}
             {activeView === 'health' && (
-              <UnifiedHealthView services={filteredServices} metrics={systemMetrics} />
+              <UnifiedHealthView services={filteredServices} metrics={systemMetrics?.data} />
             )}
             {activeView === 'flows' && (
               <UnifiedTracesView traces={filteredTraces} />

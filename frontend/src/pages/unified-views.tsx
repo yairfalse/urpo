@@ -26,48 +26,59 @@ import {
 // ============================================================================
 
 export const UnifiedHealthView = ({ services, metrics }: any) => {
+  const servicesList = services || [];
+
   const healthColumns = [
     {
       key: 'name',
       label: 'Service',
       render: (item: any) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <StatusDot status={item.status} />
+          <StatusDot status={item.error_rate >= 0.05 ? 'error' : item.error_rate >= 0.01 ? 'warning' : 'success'} />
           <span>{item.name}</span>
         </div>
       )
     },
     {
-      key: 'requests',
-      label: 'Requests/s',
+      key: 'trace_count',
+      label: 'Traces',
       align: 'right' as const,
-      render: (item: any) => <Badge variant={item.requests > 100 ? 'warning' : 'success'}>{item.requests}</Badge>
+      render: (item: any) => <Badge variant="primary">{item.trace_count || 0}</Badge>
     },
     {
-      key: 'errors',
-      label: 'Errors',
+      key: 'error_rate',
+      label: 'Error Rate',
       align: 'right' as const,
       render: (item: any) => (
-        <span style={{ color: item.errors > 0 ? COLORS.accent.error : COLORS.text.tertiary }}>
-          {item.errors}%
+        <span style={{ color: (item.error_rate || 0) >= 0.05 ? COLORS.accent.error : COLORS.text.tertiary }}>
+          {((item.error_rate || 0) * 100).toFixed(2)}%
         </span>
       )
     },
     {
-      key: 'latency',
-      label: 'P95 Latency',
+      key: 'avg_duration',
+      label: 'Avg Latency',
       align: 'right' as const,
-      render: (item: any) => `${item.latency}ms`
+      render: (item: any) => `${(item.avg_duration || 0).toFixed(0)}ms`
     },
     {
-      key: 'uptime',
-      label: 'Uptime',
+      key: 'p95_duration',
+      label: 'P95 Latency',
       align: 'right' as const,
       render: (item: any) => (
-        <span style={{ color: COLORS.text.secondary }}>{item.uptime}</span>
+        <span style={{ color: COLORS.text.secondary }}>{(item.p95_duration || 0).toFixed(0)}ms</span>
       )
     }
   ];
+
+  // Calculate health statistics
+  const healthyServices = servicesList.filter((s: any) => !s.error_rate || s.error_rate < 0.01).length;
+  const warningServices = servicesList.filter((s: any) => s.error_rate >= 0.01 && s.error_rate < 0.05).length;
+  const criticalServices = servicesList.filter((s: any) => s.error_rate >= 0.05).length;
+  const avgResponse = servicesList.length > 0
+    ? Math.round(servicesList.reduce((acc: number, s: any) => acc + (s.avg_duration || 0), 0) / servicesList.length)
+    : 0;
+  const totalTraces = servicesList.reduce((acc: number, s: any) => acc + (s.trace_count || 0), 0);
 
   return (
     <Page>
@@ -77,38 +88,52 @@ export const UnifiedHealthView = ({ services, metrics }: any) => {
         actions={<></>}
         metrics={
           <>
-            <Metric label="Total Services" value={services?.length || 0} />
-            <Metric label="Healthy" value={services?.filter((s: any) => !s.error_rate || s.error_rate < 0.01).length || 0} color="success" />
-            <Metric label="Warning" value={services?.filter((s: any) => s.error_rate >= 0.01 && s.error_rate < 0.05).length || 0} color="warning" />
-            <Metric label="Critical" value={services?.filter((s: any) => s.error_rate >= 0.05).length || 0} color="error" />
-            <Metric label="Avg Response" value={services?.length ? `${Math.round(services.reduce((acc: number, s: any) => acc + (s.avg_duration || 0), 0) / services.length)}ms` : '0ms'} />
+            <Metric label="Total Services" value={servicesList.length} />
+            <Metric label="Healthy" value={healthyServices} color="success" />
+            <Metric label="Warning" value={warningServices} color="warning" />
+            <Metric label="Critical" value={criticalServices} color="error" />
+            <Metric label="Avg Response" value={avgResponse > 0 ? `${avgResponse}ms` : 'N/A'} />
           </>
         }
       />
 
       <div className="urpo-content">
-        <Grid cols={4} gap="md">
-          <Card>
-            <Metric label="Total Requests" value="1.2M" trend="up" />
-          </Card>
-          <Card>
-            <Metric label="Error Rate" value="0.02%" trend="down" color="success" />
-          </Card>
-          <Card>
-            <Metric label="Avg Latency" value="89ms" trend="neutral" />
-          </Card>
-          <Card>
-            <Metric label="Active Traces" value="423" color="primary" />
-          </Card>
-        </Grid>
-
-        <div className="urpo-section">
-          <Table
-            data={services || []}
-            columns={healthColumns}
-            onRowClick={(item) => console.log('Service clicked:', item)}
+        {servicesList.length === 0 ? (
+          <EmptyState
+            message="No service health data"
+            description="Start sending OTLP data to monitor service health"
           />
-        </div>
+        ) : (
+          <>
+            <Grid cols={4} gap="md">
+              <Card>
+                <Metric label="Total Traces" value={totalTraces} trend={totalTraces > 100 ? "up" : undefined} />
+              </Card>
+              <Card>
+                <Metric
+                  label="Error Rate"
+                  value={servicesList.length > 0 ? `${((servicesList.reduce((acc: number, s: any) => acc + (s.error_rate || 0), 0) / servicesList.length) * 100).toFixed(2)}%` : '0.00%'}
+                  trend={(servicesList.reduce((acc: number, s: any) => acc + (s.error_rate || 0), 0) / servicesList.length) < 0.01 ? "down" : undefined}
+                  color={(servicesList.reduce((acc: number, s: any) => acc + (s.error_rate || 0), 0) / servicesList.length) < 0.01 ? "success" : "error"}
+                />
+              </Card>
+              <Card>
+                <Metric label="Avg Latency" value={avgResponse > 0 ? `${avgResponse}ms` : 'N/A'} trend="neutral" />
+              </Card>
+              <Card>
+                <Metric label="Services Monitored" value={servicesList.length} color="primary" />
+              </Card>
+            </Grid>
+
+            <div className="urpo-section">
+              <Table
+                data={servicesList}
+                columns={healthColumns}
+                onRowClick={(item) => console.log('Service clicked:', item)}
+              />
+            </div>
+          </>
+        )}
       </div>
     </Page>
   );
@@ -262,6 +287,18 @@ export const UnifiedDashboardView = ({ data }: any) => {
   const services = data?.services || [];
   const traces = data?.traces || [];
 
+  // Calculate real metrics from data
+  const totalErrors = traces.filter((t: any) => t.has_error).length;
+  const errorRate = traces.length > 0 ? ((totalErrors / traces.length) * 100).toFixed(2) : '0.00';
+  const avgDuration = traces.length > 0
+    ? Math.round(traces.reduce((acc: number, t: any) => acc + (t.duration?.as_millis || 0), 0) / traces.length)
+    : 0;
+  const p95Duration = traces.length > 0
+    ? Math.round(traces.map((t: any) => t.duration?.as_millis || 0).sort((a: number, b: number) => b - a)[Math.floor(traces.length * 0.05)] || 0)
+    : 0;
+
+  const hasData = services.length > 0 || traces.length > 0;
+
   return (
     <Page>
       <PageHeader
@@ -271,104 +308,115 @@ export const UnifiedDashboardView = ({ data }: any) => {
       />
 
       <div className="urpo-content">
-        {/* Key Metrics */}
-        <Grid cols={4} gap="md">
-          <Card>
-            <Metric label="Services" value={services.length} color="primary" />
-            <div style={{ fontSize: '11px', color: COLORS.text.tertiary, marginTop: '4px' }}>
-              Active services
-            </div>
-          </Card>
-          <Card>
-            <Metric label="Total Traces" value={traces.length} trend="up" />
-            <div style={{ fontSize: '11px', color: COLORS.accent.success, marginTop: '4px' }}>
-              Recent traces
-            </div>
-          </Card>
-          <Card>
-            <Metric label="Error Rate" value="0.08%" trend="down" color="success" />
-            <div style={{ fontSize: '11px', color: COLORS.text.tertiary, marginTop: '4px' }}>
-              Well within SLA
-            </div>
-          </Card>
-          <Card>
-            <Metric label="P95 Latency" value="234ms" />
-            <div style={{ fontSize: '11px', color: COLORS.text.tertiary, marginTop: '4px' }}>
-              Stable performance
-            </div>
-          </Card>
-        </Grid>
-
-        {/* Recent Activity */}
-        <div className="urpo-section">
-          <h2 style={{ fontSize: '14px', fontWeight: 600, color: COLORS.text.primary, marginBottom: '12px' }}>
-            Recent Activity
-          </h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <ListItem
-              title="High latency detected"
-              subtitle="checkout-service • 2 minutes ago"
-              status="warning"
-            />
-            <ListItem
-              title="New service deployed"
-              subtitle="payment-gateway • 15 minutes ago"
-              status="success"
-            />
-            <ListItem
-              title="Error spike resolved"
-              subtitle="auth-service • 1 hour ago"
-              status="info"
-            />
-          </div>
-        </div>
-
-        {/* System Status */}
-        <Grid cols={3} gap="md">
-          <Card>
-            <h3 style={{ fontSize: '13px', fontWeight: 600, color: COLORS.text.primary, marginBottom: '12px' }}>
-              Infrastructure
-            </h3>
-            <Grid cols={2} gap="sm">
-              <Metric label="CPU" value="42%" />
-              <Metric label="Memory" value="67%" color="warning" />
-              <Metric label="Disk" value="31%" />
-              <Metric label="Network" value="12Mb/s" />
+        {!hasData ? (
+          <EmptyState
+            message="No data available"
+            description="Start the OTLP receiver and send trace data to populate the dashboard"
+          />
+        ) : (
+          <>
+            {/* Key Metrics */}
+            <Grid cols={4} gap="md">
+              <Card>
+                <Metric label="Services" value={services.length} color="primary" />
+                <div style={{ fontSize: '11px', color: COLORS.text.tertiary, marginTop: '4px' }}>
+                  Active services
+                </div>
+              </Card>
+              <Card>
+                <Metric label="Total Traces" value={traces.length} trend={traces.length > 100 ? "up" : undefined} />
+                <div style={{ fontSize: '11px', color: COLORS.accent.success, marginTop: '4px' }}>
+                  Recent traces
+                </div>
+              </Card>
+              <Card>
+                <Metric
+                  label="Error Rate"
+                  value={`${errorRate}%`}
+                  trend={parseFloat(errorRate) < 1 ? "down" : undefined}
+                  color={parseFloat(errorRate) < 1 ? "success" : "error"}
+                />
+                <div style={{ fontSize: '11px', color: COLORS.text.tertiary, marginTop: '4px' }}>
+                  {parseFloat(errorRate) < 1 ? 'Within SLA' : 'Above threshold'}
+                </div>
+              </Card>
+              <Card>
+                <Metric label="P95 Latency" value={p95Duration > 0 ? `${p95Duration}ms` : 'N/A'} />
+                <div style={{ fontSize: '11px', color: COLORS.text.tertiary, marginTop: '4px' }}>
+                  {avgDuration > 0 ? `Avg: ${avgDuration}ms` : 'No data'}
+                </div>
+              </Card>
             </Grid>
-          </Card>
 
-          <Card>
-            <h3 style={{ fontSize: '13px', fontWeight: 600, color: COLORS.text.primary, marginBottom: '12px' }}>
-              Storage
-            </h3>
-            <Grid cols={2} gap="sm">
-              <Metric label="Traces" value="1.2GB" />
-              <Metric label="Spans" value="423K" />
-              <Metric label="Retention" value="7 days" />
-              <Metric label="Compression" value="82%" color="success" />
+            {/* Recent Activity - Only show if there are traces */}
+            {traces.length > 0 && (
+              <div className="urpo-section">
+                <h2 style={{ fontSize: '14px', fontWeight: 600, color: COLORS.text.primary, marginBottom: '12px' }}>
+                  Recent Activity
+                </h2>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {traces.slice(0, 5).map((trace: any, idx: number) => (
+                    <ListItem
+                      key={idx}
+                      title={trace.root_operation || 'Unknown operation'}
+                      subtitle={`${trace.root_service || 'Unknown service'} • ${trace.span_count || 0} spans • ${trace.duration?.as_millis || 0}ms`}
+                      status={trace.has_error ? 'error' : 'success'}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* System Status */}
+            <Grid cols={3} gap="md">
+              <Card>
+                <h3 style={{ fontSize: '13px', fontWeight: 600, color: COLORS.text.primary, marginBottom: '12px' }}>
+                  Collection Stats
+                </h3>
+                <Grid cols={2} gap="sm">
+                  <Metric label="Services" value={services.length} />
+                  <Metric label="Traces" value={traces.length} />
+                  <Metric label="Errors" value={totalErrors} color={totalErrors > 0 ? "error" : undefined} />
+                  <Metric label="Avg Spans" value={traces.length > 0 ? (traces.reduce((acc: number, t: any) => acc + (t.span_count || 0), 0) / traces.length).toFixed(1) : '0'} />
+                </Grid>
+              </Card>
+
+              <Card>
+                <h3 style={{ fontSize: '13px', fontWeight: 600, color: COLORS.text.primary, marginBottom: '12px' }}>
+                  Performance
+                </h3>
+                <Grid cols={2} gap="sm">
+                  <Metric label="Avg" value={avgDuration > 0 ? `${avgDuration}ms` : 'N/A'} />
+                  <Metric label="P95" value={p95Duration > 0 ? `${p95Duration}ms` : 'N/A'} />
+                  <Metric label="Fastest" value={traces.length > 0 ? `${Math.min(...traces.map((t: any) => t.duration?.as_millis || 0))}ms` : 'N/A'} />
+                  <Metric label="Slowest" value={traces.length > 0 ? `${Math.max(...traces.map((t: any) => t.duration?.as_millis || 0))}ms` : 'N/A'} />
+                </Grid>
+              </Card>
+
+              <Card>
+                <h3 style={{ fontSize: '13px', fontWeight: 600, color: COLORS.text.primary, marginBottom: '12px' }}>
+                  Receivers
+                </h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '12px', color: COLORS.text.secondary }}>OTLP/gRPC</span>
+                    <Badge variant="success">Port 4327</Badge>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '12px', color: COLORS.text.secondary }}>OTLP/HTTP</span>
+                    <Badge variant="success">Port 4328</Badge>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '12px', color: COLORS.text.secondary }}>Status</span>
+                    <Badge variant={traces.length > 0 ? "success" : undefined}>
+                      {traces.length > 0 ? 'Receiving' : 'Idle'}
+                    </Badge>
+                  </div>
+                </div>
+              </Card>
             </Grid>
-          </Card>
-
-          <Card>
-            <h3 style={{ fontSize: '13px', fontWeight: 600, color: COLORS.text.primary, marginBottom: '12px' }}>
-              Receivers
-            </h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '12px', color: COLORS.text.secondary }}>OTLP/gRPC</span>
-                <Badge variant="success">Active</Badge>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '12px', color: COLORS.text.secondary }}>OTLP/HTTP</span>
-                <Badge variant="success">Active</Badge>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '12px', color: COLORS.text.secondary }}>Jaeger</span>
-                <Badge>Idle</Badge>
-              </div>
-            </div>
-          </Card>
-        </Grid>
+          </>
+        )}
       </div>
     </Page>
   );

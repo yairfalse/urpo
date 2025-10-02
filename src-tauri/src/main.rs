@@ -64,6 +64,15 @@ async fn init_app_state() -> (AppState, tokio::sync::broadcast::Receiver<urpo_li
         urpo_lib::metrics::MetricStorage::new(MAX_METRICS, MAX_SERVICES),
     )));
 
+    // Initialize logs storage
+    let logs_storage = Some(Arc::new(tokio::sync::Mutex::new(
+        urpo_lib::logs::LogStorage::new(urpo_lib::logs::storage::LogStorageConfig {
+            max_logs: MAX_LOGS,
+            max_age: std::time::Duration::from_secs(3600),
+            enable_search: true,
+        })
+    )));
+
     // Auto-start OTLP receiver for BLAZING FAST trace ingestion
     let mut otel_receiver = urpo_lib::receiver::OtelReceiver::new(
         4327, // gRPC port (temporary change to avoid conflicts)
@@ -100,6 +109,7 @@ async fn init_app_state() -> (AppState, tokio::sync::broadcast::Receiver<urpo_li
             receiver,
             monitor,
             metrics_storage,
+            logs_storage,
         },
         event_rx,
     )
@@ -173,6 +183,10 @@ async fn main() {
             commands::trigger_tier_migration,
             commands::stream_trace_data,
             commands::get_service_health_metrics,
+            // Logs commands
+            commands::get_recent_logs,
+            commands::search_logs,
+            commands::get_trace_logs,
         ])
         .setup(move |app| {
             // Log startup time for performance tracking

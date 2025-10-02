@@ -4,7 +4,7 @@ use crate::core::{SpanId, TraceId};
 use std::collections::HashMap;
 
 /// Log severity levels per OpenTelemetry specification
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
 #[repr(u8)]
 pub enum LogSeverity {
     Trace = 1,
@@ -43,7 +43,7 @@ impl LogSeverity {
 }
 
 /// Compact log record optimized for storage
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct LogRecord {
     /// Timestamp in nanoseconds
     pub timestamp: u64,

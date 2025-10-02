@@ -245,6 +245,39 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
                 <span>Continue with GitHub</span>
               </button>
 
+              {/* Skip Login Button */}
+              <button
+                onClick={() => onLogin('guest')}
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  marginTop: SPACING.md,
+                  background: 'transparent',
+                  border: `1px solid ${COLORS.border.subtle}`,
+                  borderRadius: RADIUS.md,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: 500,
+                  color: COLORS.text.secondary,
+                  transition: 'all 0.1s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = COLORS.border.default;
+                  e.currentTarget.style.color = COLORS.text.primary;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = COLORS.border.subtle;
+                  e.currentTarget.style.color = COLORS.text.secondary;
+                }}
+              >
+                <ArrowRight size={14} />
+                <span>Continue without login</span>
+              </button>
+
               {/* Error message */}
               {error && (
                 <motion.div
