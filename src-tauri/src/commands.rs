@@ -81,9 +81,16 @@ macro_rules! batch_convert {
 pub async fn get_service_metrics(
     state: State<'_, AppState>,
 ) -> Result<Vec<ServiceMetrics>, String> {
+    tracing::info!("🔍 get_service_metrics called");
     timed_command!("get_service_metrics", {
         let storage = state.storage.read().await;
         let metrics = map_err_str!(storage.get_service_metrics().await)?;
+
+        tracing::info!("📊 get_service_metrics returning {} services", metrics.len());
+        for metric in &metrics {
+            tracing::debug!("   Service: {}, spans: {}, error_rate: {:.2}%",
+                metric.name.as_str(), metric.span_count, metric.error_rate * 100.0);
+        }
 
         Ok(batch_convert!(metrics, |metric: urpo_lib::core::ServiceMetrics| {
             ServiceMetrics {
@@ -146,6 +153,7 @@ pub async fn list_recent_traces(
     limit: usize,
     service_filter: Option<String>,
 ) -> Result<Vec<TraceInfo>, String> {
+    tracing::info!("🔍 list_recent_traces called (limit: {}, filter: {:?})", limit, service_filter);
     timed_command!("list_recent_traces", {
         let service = service_filter
             .map(|s| ServiceName::new(s))
@@ -156,6 +164,12 @@ pub async fn list_recent_traces(
         let traces = map_err_str!(
             storage.list_recent_traces(limit, service.as_ref()).await
         )?;
+
+        tracing::info!("📊 list_recent_traces returning {} traces", traces.len());
+        for trace in traces.iter().take(3) {
+            tracing::debug!("   Trace: {}, service: {}, spans: {}",
+                &trace.trace_id.to_string()[..16], trace.root_service.as_str(), trace.span_count);
+        }
 
         Ok(batch_convert!(traces, convert_trace_info))
     })
