@@ -12,7 +12,9 @@ import {
   UnifiedHealthView,
   UnifiedTracesView,
   UnifiedServicesView,
-  UnifiedDashboardView
+  UnifiedDashboardView,
+  UnifiedMetricsView,
+  UnifiedLogsView
 } from './pages/unified-views';
 import { invoke } from '@tauri-apps/api/tauri';
 import { LoginPage } from './pages/LoginPage';
@@ -27,10 +29,12 @@ import {
   User,
   LogOut,
   Play,
-  Square
+  Square,
+  LineChart,
+  FileText
 } from 'lucide-react';
 
-type ViewMode = 'dashboard' | 'services' | 'traces' | 'health' | 'flows';
+type ViewMode = 'dashboard' | 'services' | 'traces' | 'health' | 'flows' | 'metrics' | 'logs';
 
 const App = () => {
   const [activeView, setActiveView] = useState<ViewMode>('dashboard');
@@ -51,14 +55,24 @@ const App = () => {
     refetchAll
   } = useDashboardData();
 
-  // Debug: Log data
+  // Debug: Log data AND render state (development only)
   React.useEffect(() => {
-    console.log('Dashboard data:', {
-      services: serviceMetrics?.length,
-      traces: recentTraces?.length,
-      system: systemMetrics
-    });
-  }, [serviceMetrics, recentTraces, systemMetrics]);
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🎨 App mounted! Current user:', currentUser);
+      console.log('📊 Dashboard data:', {
+        services: serviceMetrics?.data?.length,
+        traces: recentTraces?.data?.length,
+        system: systemMetrics?.data,
+        isLoading,
+        hasError
+      });
+      console.log('🔍 Hook states:', {
+        serviceMetrics: serviceMetrics ? 'defined' : 'undefined',
+        recentTraces: recentTraces ? 'defined' : 'undefined',
+        systemMetrics: systemMetrics ? 'defined' : 'undefined'
+      });
+    }
+  }, [serviceMetrics, recentTraces, systemMetrics, currentUser, isLoading, hasError]);
 
   const handleLogin = (username: string, password?: string) => {
     // Handle both GitHub OAuth and regular login
@@ -139,9 +153,10 @@ const App = () => {
 
   // Filter traces based on search
   const filteredTraces = useMemo(() => {
-    if (!searchQuery || !recentTraces) return recentTraces;
+    const traces = recentTraces?.data || [];
+    if (!searchQuery || traces.length === 0) return traces;
     const query = searchQuery.toLowerCase();
-    return recentTraces.filter((trace: any) =>
+    return traces.filter((trace: any) =>
       trace.root_service?.toLowerCase().includes(query) ||
       trace.trace_id?.toLowerCase().includes(query) ||
       trace.root_operation?.toLowerCase().includes(query)
@@ -150,9 +165,10 @@ const App = () => {
 
   // Filter services based on search
   const filteredServices = useMemo(() => {
-    if (!searchQuery || !serviceMetrics) return serviceMetrics;
+    const services = serviceMetrics?.data || [];
+    if (!searchQuery || services.length === 0) return services;
     const query = searchQuery.toLowerCase();
-    return serviceMetrics.filter((service: any) =>
+    return services.filter((service: any) =>
       service.name?.toLowerCase().includes(query)
     );
   }, [serviceMetrics, searchQuery]);
@@ -164,11 +180,16 @@ const App = () => {
     { key: 'services', icon: GitBranch, label: 'Services', shortcut: '2' },
     { key: 'traces', icon: Layers, label: 'Traces', shortcut: '3' },
     { key: 'health', icon: Activity, label: 'Health', shortcut: '4' },
-    { key: 'flows', icon: Share2, label: 'Flows', shortcut: '5' },
+    { key: 'metrics', icon: LineChart, label: 'Metrics', shortcut: '5' },
+    { key: 'logs', icon: FileText, label: 'Logs', shortcut: '6' },
+    { key: 'flows', icon: Share2, label: 'Flows', shortcut: '7' },
   ] as const;
 
   // Show login page if not authenticated
   if (!currentUser) {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🚪 Showing login page');
+    }
     return <LoginPage onLogin={handleLogin} />;
   }
 
@@ -278,7 +299,7 @@ const App = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <StatusDot status={hasError ? 'error' : 'success'} pulse />
             <span style={{ fontSize: '10px', color: COLORS.text.tertiary }}>
-              {serviceMetrics?.length || 0} services
+              {serviceMetrics?.data?.length || 0} services
             </span>
           </div>
 
@@ -321,52 +342,60 @@ const App = () => {
       </header>
 
       {/* STATUS BAR - System metrics */}
-      {systemMetrics && (
-        <div
-          style={{
-            background: COLORS.bg.primary,
-            borderBottom: `1px solid ${COLORS.border.subtle}`,
-            padding: '4px 16px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between'
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <StatusDot status={receiverRunning ? 'success' : 'warning'} pulse={receiverRunning} />
-              <span style={{ fontSize: '10px', color: COLORS.text.secondary }}>
-                {receiverRunning ? 'OTLP Active • Port 4317/4318' : 'OTLP Receiver Stopped'}
-              </span>
-            </div>
+      <div
+        style={{
+          background: COLORS.bg.primary,
+          borderBottom: `1px solid ${COLORS.border.subtle}`,
+          padding: '4px 16px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <StatusDot status={receiverRunning ? 'success' : 'warning'} pulse={receiverRunning} />
+            <span style={{ fontSize: '10px', color: COLORS.text.secondary }}>
+              {receiverRunning ? 'OTLP Active • Port 4317/4318' : 'OTLP Receiver Stopped'}
+            </span>
+          </div>
 
+          {/* Tauri Availability Indicator */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <StatusDot status={typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window ? 'success' : 'error'} pulse={false} />
+            <span style={{ fontSize: '10px', color: COLORS.text.secondary }}>
+              {typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window ? 'Tauri Mode' : '⚠️ BROWSER MODE - HOOKS DISABLED'}
+            </span>
+          </div>
+
+          {systemMetrics?.data && (
             <div style={{ display: 'flex', gap: '12px' }}>
               <div>
                 <span style={{ fontSize: '9px', color: COLORS.text.tertiary }}>SPANS/S</span>
                 <span style={{ fontSize: '10px', color: COLORS.text.primary, marginLeft: '6px' }}>
-                  {systemMetrics?.spans_per_second?.toFixed(0) || '0'}
+                  {systemMetrics.data?.spans_per_second?.toFixed(0) || '0'}
                 </span>
               </div>
               <div>
                 <span style={{ fontSize: '9px', color: COLORS.text.tertiary }}>MEM</span>
                 <span style={{ fontSize: '10px', color: COLORS.text.primary, marginLeft: '6px' }}>
-                  {systemMetrics?.memory_usage_mb?.toFixed(0) || '0'}MB
+                  {systemMetrics.data?.memory_usage_mb?.toFixed(0) || '0'}MB
                 </span>
               </div>
               <div>
                 <span style={{ fontSize: '9px', color: COLORS.text.tertiary }}>CPU</span>
                 <span style={{ fontSize: '10px', color: COLORS.text.primary, marginLeft: '6px' }}>
-                  {systemMetrics?.cpu_usage_percent?.toFixed(1) || '0'}%
+                  {systemMetrics.data?.cpu_usage_percent?.toFixed(1) || '0'}%
                 </span>
               </div>
             </div>
-          </div>
-
-          <div style={{ fontSize: '9px', color: COLORS.text.tertiary }}>
-            {new Date().toLocaleTimeString()}
-          </div>
+          )}
         </div>
-      )}
+
+        <div style={{ fontSize: '9px', color: COLORS.text.tertiary }}>
+          {new Date().toLocaleTimeString()}
+        </div>
+      </div>
 
       {/* MAIN CONTENT */}
       <main style={{ flex: 1, overflow: 'hidden' }}>
@@ -389,7 +418,13 @@ const App = () => {
               <UnifiedTracesView traces={filteredTraces} />
             )}
             {activeView === 'health' && (
-              <UnifiedHealthView services={filteredServices} metrics={systemMetrics} />
+              <UnifiedHealthView services={filteredServices} metrics={systemMetrics?.data} />
+            )}
+            {activeView === 'metrics' && (
+              <UnifiedMetricsView />
+            )}
+            {activeView === 'logs' && (
+              <UnifiedLogsView />
             )}
             {activeView === 'flows' && (
               <UnifiedTracesView traces={filteredTraces} />

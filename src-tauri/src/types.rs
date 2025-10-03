@@ -12,6 +12,7 @@ pub struct AppState {
     pub receiver: Arc<RwLock<Option<OtelReceiver>>>,
     pub monitor: Arc<Monitor>,
     pub metrics_storage: Option<Arc<tokio::sync::Mutex<urpo_lib::metrics::MetricStorage>>>,
+    pub logs_storage: Option<Arc<tokio::sync::Mutex<urpo_lib::logs::LogStorage>>>,
 }
 
 /// Service metrics for frontend display

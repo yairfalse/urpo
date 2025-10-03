@@ -891,25 +891,68 @@ impl StorageBackend for InMemoryStorage {
     }
 
     async fn get_service_metrics(&self) -> Result<Vec<ServiceMetrics>> {
-        // Simple implementation without the aggregator module
+        // Calculate real metrics from stored spans
         let mut metrics = Vec::new();
         for entry in self.services.iter() {
             let service_name = entry.key().clone();
             let span_ids = entry.value();
 
+            // Collect all spans for this service to calculate real metrics
+            let mut durations = Vec::new();
+            let mut error_count = 0u64;
+            let mut last_seen = SystemTime::UNIX_EPOCH;
+
+            for (timestamp, span_id) in span_ids.iter() {
+                if let Some(span) = self.spans.get(span_id) {
+                    durations.push(span.duration);
+                    if span.status.is_error() {
+                        error_count += 1;
+                    }
+                    if *timestamp > last_seen {
+                        last_seen = *timestamp;
+                    }
+                }
+            }
+
+            let span_count = durations.len() as u64;
+            if span_count == 0 {
+                continue; // Skip services with no spans
+            }
+
+            // Sort durations for percentile calculation
+            durations.sort();
+
+            // Calculate percentiles
+            let latency_p50 = durations.get(durations.len() / 2).copied().unwrap_or_default();
+            let latency_p95 = durations.get(durations.len() * 95 / 100).copied().unwrap_or_default();
+            let latency_p99 = durations.get(durations.len() * 99 / 100).copied().unwrap_or_default();
+
+            // Calculate avg, min, max
+            let total_duration: Duration = durations.iter().sum();
+            let avg_duration = total_duration / (span_count as u32);
+            let min_duration = durations.first().copied().unwrap_or_default();
+            let max_duration = durations.last().copied().unwrap_or_default();
+
+            // Calculate error rate
+            let error_rate = if span_count > 0 {
+                error_count as f64 / span_count as f64
+            } else {
+                0.0
+            };
+
             metrics.push(ServiceMetrics {
                 name: service_name,
-                request_rate: 0.0,
-                error_rate: 0.0,
-                latency_p50: Duration::from_millis(0),
-                latency_p95: Duration::from_millis(0),
-                latency_p99: Duration::from_millis(0),
-                last_seen: SystemTime::now(),
-                span_count: span_ids.len() as u64,
-                error_count: 0,
-                avg_duration: Duration::from_millis(0),
-                max_duration: Duration::from_millis(0),
-                min_duration: Duration::from_millis(0),
+                request_rate: span_count as f64 / 60.0, // Approximate req/sec over last minute
+                error_rate,
+                latency_p50,
+                latency_p95,
+                latency_p99,
+                last_seen,
+                span_count,
+                error_count,
+                avg_duration,
+                max_duration,
+                min_duration,
             });
         }
         Ok(metrics)

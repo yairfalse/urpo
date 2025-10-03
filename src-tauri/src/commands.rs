@@ -85,6 +85,14 @@ pub async fn get_service_metrics(
         let storage = state.storage.read().await;
         let metrics = map_err_str!(storage.get_service_metrics().await)?;
 
+        tracing::debug!("get_service_metrics returning {} services", metrics.len());
+        if tracing::enabled!(tracing::Level::TRACE) {
+            for metric in &metrics {
+                tracing::trace!("Service: {}, spans: {}, error_rate: {:.2}%",
+                    metric.name.as_str(), metric.span_count, metric.error_rate * 100.0);
+            }
+        }
+
         Ok(batch_convert!(metrics, |metric: urpo_lib::core::ServiceMetrics| {
             ServiceMetrics {
                 name: metric.name.to_string(),
@@ -157,7 +165,26 @@ pub async fn list_recent_traces(
             storage.list_recent_traces(limit, service.as_ref()).await
         )?;
 
-        Ok(batch_convert!(traces, convert_trace_info))
+        tracing::debug!("list_recent_traces returning {} traces (limit: {}, filter: {:?})",
+            traces.len(), limit, service.as_ref().map(|s| s.as_str()));
+
+        let result = batch_convert!(traces, convert_trace_info);
+
+        // Log sample data at TRACE level only
+        if tracing::enabled!(tracing::Level::TRACE) {
+            for (i, trace_info) in result.iter().take(3).enumerate() {
+                tracing::trace!("Trace {}: id={}, service={}, operation={}, spans={}, duration={}ms",
+                    i + 1,
+                    &trace_info.trace_id,
+                    &trace_info.root_service,
+                    &trace_info.root_operation,
+                    trace_info.span_count,
+                    trace_info.duration
+                );
+            }
+        }
+
+        Ok(result)
     })
 }
 
@@ -361,6 +388,95 @@ pub async fn get_service_health_metrics(
                             .as_secs() as i64,
                     });
                 }
+            }
+
+            Ok(result)
+        } else {
+            Ok(vec![])
+        }
+    })
+}
+
+/// Get recent logs with optional filtering
+#[tauri::command]
+#[inline]
+pub async fn get_recent_logs(
+    state: State<'_, AppState>,
+    limit: usize,
+    severity_filter: Option<String>,
+) -> Result<Vec<Value>, String> {
+    timed_command!("get_recent_logs", {
+        if let Some(ref logs_storage) = state.logs_storage {
+            let storage = logs_storage.lock().await;
+
+            // Parse severity filter
+            let severity = severity_filter.as_ref().and_then(|s| {
+                match s.to_uppercase().as_str() {
+                    "TRACE" => Some(urpo_lib::logs::LogSeverity::Trace),
+                    "DEBUG" => Some(urpo_lib::logs::LogSeverity::Debug),
+                    "INFO" => Some(urpo_lib::logs::LogSeverity::Info),
+                    "WARN" => Some(urpo_lib::logs::LogSeverity::Warn),
+                    "ERROR" => Some(urpo_lib::logs::LogSeverity::Error),
+                    "FATAL" => Some(urpo_lib::logs::LogSeverity::Fatal),
+                    _ => None,
+                }
+            });
+
+            let logs = map_err_str!(storage.get_recent_logs(limit, severity))?;
+
+            let mut result = preallocated_vec!(logs.len());
+            for log in logs {
+                result.push(map_err_str!(serde_json::to_value(log))?);
+            }
+
+            Ok(result)
+        } else {
+            Ok(vec![])
+        }
+    })
+}
+
+/// Search logs by text query
+#[tauri::command]
+#[inline]
+pub async fn search_logs(
+    state: State<'_, AppState>,
+    query: String,
+    limit: usize,
+) -> Result<Vec<Value>, String> {
+    timed_command!("search_logs", {
+        if let Some(ref logs_storage) = state.logs_storage {
+            let storage = logs_storage.lock().await;
+            let logs = map_err_str!(storage.search_logs(&query, limit))?;
+
+            let mut result = preallocated_vec!(logs.len());
+            for log in logs {
+                result.push(map_err_str!(serde_json::to_value(log))?);
+            }
+
+            Ok(result)
+        } else {
+            Ok(vec![])
+        }
+    })
+}
+
+/// Get logs correlated with a specific trace
+#[tauri::command]
+#[inline]
+pub async fn get_trace_logs(
+    state: State<'_, AppState>,
+    trace_id: String,
+) -> Result<Vec<Value>, String> {
+    timed_command!("get_trace_logs", {
+        if let Some(ref logs_storage) = state.logs_storage {
+            let trace_id = map_err_str!(TraceId::new(trace_id))?;
+            let storage = logs_storage.lock().await;
+            let logs = map_err_str!(storage.get_logs_by_trace(&trace_id))?;
+
+            let mut result = preallocated_vec!(logs.len());
+            for log in logs {
+                result.push(map_err_str!(serde_json::to_value(log))?);
             }
 
             Ok(result)

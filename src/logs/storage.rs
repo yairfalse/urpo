@@ -102,9 +102,9 @@ impl LogStorage {
     }
 
     /// Search logs by text query
-    pub fn search_logs(&self, query: &str, limit: usize) -> Vec<LogRecord> {
+    pub fn search_logs(&self, query: &str, limit: usize) -> Result<Vec<LogRecord>> {
         if !self.config.enable_search || query.is_empty() {
-            return Vec::new();
+            return Ok(Vec::new());
         }
 
         // Tokenize query
@@ -115,7 +115,7 @@ impl LogStorage {
             .collect();
 
         if query_tokens.is_empty() {
-            return Vec::new();
+            return Ok(Vec::new());
         }
 
         // Find matching log indices
@@ -147,17 +147,17 @@ impl LogStorage {
 
         // Sort by timestamp (newest first)
         results.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
-        results
+        Ok(results)
     }
 
     /// Get logs by trace ID
-    pub fn get_logs_by_trace(&self, trace_id: &TraceId) -> Vec<LogRecord> {
+    pub fn get_logs_by_trace(&self, trace_id: &TraceId) -> Result<Vec<LogRecord>> {
         if let Some(indices) = self.trace_index.get(trace_id) {
             let logs = self.logs.read();
             let counter = *self.log_counter.read();
             let base_index = counter.saturating_sub(logs.len());
 
-            indices
+            let results = indices
                 .iter()
                 .filter_map(|&idx| {
                     if idx >= base_index {
@@ -166,9 +166,10 @@ impl LogStorage {
                         None
                     }
                 })
-                .collect()
+                .collect();
+            Ok(results)
         } else {
-            Vec::new()
+            Ok(Vec::new())
         }
     }
 
@@ -207,10 +208,20 @@ impl LogStorage {
             .collect()
     }
 
-    /// Get recent logs
-    pub fn get_recent_logs(&self, limit: usize) -> Vec<LogRecord> {
+    /// Get recent logs with optional severity filter
+    pub fn get_recent_logs(&self, limit: usize, min_severity: Option<LogSeverity>) -> Result<Vec<LogRecord>> {
         let logs = self.logs.read();
-        logs.iter().rev().take(limit).cloned().collect()
+        let filtered: Vec<LogRecord> = if let Some(severity) = min_severity {
+            logs.iter()
+                .rev() // Newest first
+                .filter(|log| log.severity >= severity)
+                .take(limit)
+                .cloned()
+                .collect()
+        } else {
+            logs.iter().rev().take(limit).cloned().collect()
+        };
+        Ok(filtered)
     }
 
     /// Get storage statistics
