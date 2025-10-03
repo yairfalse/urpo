@@ -55,16 +55,23 @@ const App = () => {
     refetchAll
   } = useDashboardData();
 
-  // Debug: Log data AND render state
+  // Debug: Log data AND render state (development only)
   React.useEffect(() => {
-    console.log('App mounted! Current user:', currentUser);
-    console.log('Dashboard data:', {
-      services: serviceMetrics?.data?.length,
-      traces: recentTraces?.data?.length,
-      system: systemMetrics?.data,
-      isLoading,
-      hasError
-    });
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🎨 App mounted! Current user:', currentUser);
+      console.log('📊 Dashboard data:', {
+        services: serviceMetrics?.data?.length,
+        traces: recentTraces?.data?.length,
+        system: systemMetrics?.data,
+        isLoading,
+        hasError
+      });
+      console.log('🔍 Hook states:', {
+        serviceMetrics: serviceMetrics ? 'defined' : 'undefined',
+        recentTraces: recentTraces ? 'defined' : 'undefined',
+        systemMetrics: systemMetrics ? 'defined' : 'undefined'
+      });
+    }
   }, [serviceMetrics, recentTraces, systemMetrics, currentUser, isLoading, hasError]);
 
   const handleLogin = (username: string, password?: string) => {
@@ -178,16 +185,13 @@ const App = () => {
     { key: 'flows', icon: Share2, label: 'Flows', shortcut: '7' },
   ] as const;
 
-  // Debug render checkpoint
-  console.log('App rendering...', { currentUser, isLoading });
-
   // Show login page if not authenticated
   if (!currentUser) {
-    console.log('Showing login page');
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🚪 Showing login page');
+    }
     return <LoginPage onLogin={handleLogin} />;
   }
-
-  console.log('Showing main app');
 
   return (
     <div style={{ height: '100vh', background: COLORS.bg.primary, display: 'flex', flexDirection: 'column' }}>
@@ -338,25 +342,33 @@ const App = () => {
       </header>
 
       {/* STATUS BAR - System metrics */}
-      {systemMetrics?.data && (
-        <div
-          style={{
-            background: COLORS.bg.primary,
-            borderBottom: `1px solid ${COLORS.border.subtle}`,
-            padding: '4px 16px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between'
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <StatusDot status={receiverRunning ? 'success' : 'warning'} pulse={receiverRunning} />
-              <span style={{ fontSize: '10px', color: COLORS.text.secondary }}>
-                {receiverRunning ? 'OTLP Active • Port 4317/4318' : 'OTLP Receiver Stopped'}
-              </span>
-            </div>
+      <div
+        style={{
+          background: COLORS.bg.primary,
+          borderBottom: `1px solid ${COLORS.border.subtle}`,
+          padding: '4px 16px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <StatusDot status={receiverRunning ? 'success' : 'warning'} pulse={receiverRunning} />
+            <span style={{ fontSize: '10px', color: COLORS.text.secondary }}>
+              {receiverRunning ? 'OTLP Active • Port 4317/4318' : 'OTLP Receiver Stopped'}
+            </span>
+          </div>
 
+          {/* Tauri Availability Indicator */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <StatusDot status={typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window ? 'success' : 'error'} pulse={false} />
+            <span style={{ fontSize: '10px', color: COLORS.text.secondary }}>
+              {typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window ? 'Tauri Mode' : '⚠️ BROWSER MODE - HOOKS DISABLED'}
+            </span>
+          </div>
+
+          {systemMetrics?.data && (
             <div style={{ display: 'flex', gap: '12px' }}>
               <div>
                 <span style={{ fontSize: '9px', color: COLORS.text.tertiary }}>SPANS/S</span>
@@ -377,13 +389,13 @@ const App = () => {
                 </span>
               </div>
             </div>
-          </div>
-
-          <div style={{ fontSize: '9px', color: COLORS.text.tertiary }}>
-            {new Date().toLocaleTimeString()}
-          </div>
+          )}
         </div>
-      )}
+
+        <div style={{ fontSize: '9px', color: COLORS.text.tertiary }}>
+          {new Date().toLocaleTimeString()}
+        </div>
+      </div>
 
       {/* MAIN CONTENT */}
       <main style={{ flex: 1, overflow: 'hidden' }}>

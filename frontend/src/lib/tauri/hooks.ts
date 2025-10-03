@@ -50,7 +50,7 @@ export const queryKeys = {
 // ============================================================================
 
 const defaultOptions: Partial<UseQueryOptions> = {
-  enabled: isTauriAvailable(),
+  enabled: true, // Always enabled - let individual queries fail if Tauri unavailable
   staleTime: 1000, // Consider data fresh for 1 second (1000ms)
   gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes (renamed from cacheTime)
   refetchOnWindowFocus: false, // Don't refetch on window focus by default
@@ -65,9 +65,16 @@ const defaultOptions: Partial<UseQueryOptions> = {
  * Hook to fetch all service metrics
  */
 export function useServiceMetrics(options?: Partial<UseQueryOptions<ServiceMetrics[]>>) {
+  console.log('🔧 useServiceMetrics hook called, isTauriAvailable:', isTauriAvailable());
+
   return useQuery({
     queryKey: queryKeys.serviceMetrics(),
-    queryFn: TauriClient.getServiceMetrics,
+    queryFn: async () => {
+      console.log('🚀 useServiceMetrics queryFn executing...');
+      const result = await TauriClient.getServiceMetrics();
+      console.log('✅ useServiceMetrics result:', result);
+      return result;
+    },
     refetchInterval: 2000, // Auto-refresh every 2s for timely updates without excessive load
     ...defaultOptions,
     ...options,
@@ -101,9 +108,16 @@ export function useRecentTraces(
   params: ListTracesParams,
   options?: Partial<UseQueryOptions<TraceInfo[]>>
 ) {
+  console.log('🔧 useRecentTraces hook called, params:', params, 'isTauriAvailable:', isTauriAvailable());
+
   return useQuery({
     queryKey: queryKeys.recentTraces(params),
-    queryFn: () => TauriClient.listRecentTraces(params),
+    queryFn: async () => {
+      console.log('🚀 useRecentTraces queryFn executing with params:', params);
+      const result = await TauriClient.listRecentTraces(params);
+      console.log('✅ useRecentTraces result:', result);
+      return result;
+    },
     refetchInterval: 750, // BLAZING FAST: Auto-refresh every 750ms for real-time trace updates!
     ...defaultOptions,
     ...options,

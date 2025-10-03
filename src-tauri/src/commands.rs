@@ -81,15 +81,16 @@ macro_rules! batch_convert {
 pub async fn get_service_metrics(
     state: State<'_, AppState>,
 ) -> Result<Vec<ServiceMetrics>, String> {
-    tracing::info!("🔍 get_service_metrics called");
     timed_command!("get_service_metrics", {
         let storage = state.storage.read().await;
         let metrics = map_err_str!(storage.get_service_metrics().await)?;
 
-        tracing::info!("📊 get_service_metrics returning {} services", metrics.len());
-        for metric in &metrics {
-            tracing::debug!("   Service: {}, spans: {}, error_rate: {:.2}%",
-                metric.name.as_str(), metric.span_count, metric.error_rate * 100.0);
+        tracing::debug!("get_service_metrics returning {} services", metrics.len());
+        if tracing::enabled!(tracing::Level::TRACE) {
+            for metric in &metrics {
+                tracing::trace!("Service: {}, spans: {}, error_rate: {:.2}%",
+                    metric.name.as_str(), metric.span_count, metric.error_rate * 100.0);
+            }
         }
 
         Ok(batch_convert!(metrics, |metric: urpo_lib::core::ServiceMetrics| {
@@ -153,7 +154,6 @@ pub async fn list_recent_traces(
     limit: usize,
     service_filter: Option<String>,
 ) -> Result<Vec<TraceInfo>, String> {
-    tracing::info!("🔍 list_recent_traces called (limit: {}, filter: {:?})", limit, service_filter);
     timed_command!("list_recent_traces", {
         let service = service_filter
             .map(|s| ServiceName::new(s))
@@ -165,13 +165,26 @@ pub async fn list_recent_traces(
             storage.list_recent_traces(limit, service.as_ref()).await
         )?;
 
-        tracing::info!("📊 list_recent_traces returning {} traces", traces.len());
-        for trace in traces.iter().take(3) {
-            tracing::debug!("   Trace: {}, service: {}, spans: {}",
-                &trace.trace_id.to_string()[..16], trace.root_service.as_str(), trace.span_count);
+        tracing::debug!("list_recent_traces returning {} traces (limit: {}, filter: {:?})",
+            traces.len(), limit, service.as_ref().map(|s| s.as_str()));
+
+        let result = batch_convert!(traces, convert_trace_info);
+
+        // Log sample data at TRACE level only
+        if tracing::enabled!(tracing::Level::TRACE) {
+            for (i, trace_info) in result.iter().take(3).enumerate() {
+                tracing::trace!("Trace {}: id={}, service={}, operation={}, spans={}, duration={}ms",
+                    i + 1,
+                    &trace_info.trace_id,
+                    &trace_info.root_service,
+                    &trace_info.root_operation,
+                    trace_info.span_count,
+                    trace_info.duration
+                );
+            }
         }
 
-        Ok(batch_convert!(traces, convert_trace_info))
+        Ok(result)
     })
 }
 

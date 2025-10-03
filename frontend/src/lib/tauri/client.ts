@@ -107,19 +107,26 @@ async function invokeWithRetry<T>(
 export const TauriClient = {
   // Service Metrics
   async getServiceMetrics(): Promise<ServiceMetrics[]> {
+    console.log('🔥 TauriClient.getServiceMetrics called');
     performance.mark('tauri-get_service_metrics-start');
-    return invokeWithRetry<ServiceMetrics[]>('get_service_metrics');
+    const result = await invokeWithRetry<ServiceMetrics[]>('get_service_metrics');
+    console.log('🔥 TauriClient.getServiceMetrics result:', result);
+    return result;
   },
 
   async getServiceMetricsBatch(params: ServiceMetricsBatchParams): Promise<ServiceMetrics[]> {
+    console.log('🔥 TauriClient.getServiceMetricsBatch called with:', params);
     performance.mark('tauri-get_service_metrics_batch-start');
     return invokeWithRetry<ServiceMetrics[]>('get_service_metrics_batch', params);
   },
 
   // Traces
   async listRecentTraces(params: ListTracesParams): Promise<TraceInfo[]> {
+    console.log('🔥 TauriClient.listRecentTraces called with:', params);
     performance.mark('tauri-list_recent_traces-start');
-    return invokeWithRetry<TraceInfo[]>('list_recent_traces', params);
+    const result = await invokeWithRetry<TraceInfo[]>('list_recent_traces', params);
+    console.log('🔥 TauriClient.listRecentTraces result:', result);
+    return result;
   },
 
   async getErrorTraces(limit: number): Promise<TraceInfo[]> {
