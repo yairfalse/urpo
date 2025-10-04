@@ -329,7 +329,7 @@ mod tests {
 
         storage.store_log(log).unwrap();
 
-        let recent = storage.get_recent_logs(10);
+        let recent = storage.get_recent_logs(10, None).unwrap();
         assert_eq!(recent.len(), 1);
         assert_eq!(recent[0].body, "Test log message");
     }
@@ -348,10 +348,10 @@ mod tests {
             .store_log(create_test_log("Network timeout occurred", LogSeverity::Warn))
             .unwrap();
 
-        let results = storage.search_logs("database", 10);
+        let results = storage.search_logs("database", 10).unwrap();
         assert_eq!(results.len(), 2);
 
-        let results = storage.search_logs("error", 10);
+        let results = storage.search_logs("error", 10).unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].severity, LogSeverity::Error);
     }
@@ -395,7 +395,7 @@ mod tests {
         storage.store_log(log2).unwrap();
         storage.store_log(log3).unwrap();
 
-        let trace_logs = storage.get_logs_by_trace(&trace_id);
+        let trace_logs = storage.get_logs_by_trace(&trace_id).unwrap();
         assert_eq!(trace_logs.len(), 2);
     }
 
@@ -437,7 +437,7 @@ mod tests {
             storage.store_log(log).unwrap();
         }
 
-        let recent = storage.get_recent_logs(10);
+        let recent = storage.get_recent_logs(10, None).unwrap();
         assert_eq!(recent.len(), 3); // Only 3 most recent
         assert_eq!(recent[0].body, "Log 4"); // Newest first
         assert_eq!(recent[2].body, "Log 2"); // Oldest retained
@@ -475,10 +475,10 @@ mod tests {
         storage
             .store_log(create_test_log("Test", LogSeverity::Info))
             .unwrap();
-        assert_eq!(storage.get_recent_logs(10).len(), 1);
+        assert_eq!(storage.get_recent_logs(10, None).unwrap().len(), 1);
 
         storage.clear();
-        assert_eq!(storage.get_recent_logs(10).len(), 0);
+        assert_eq!(storage.get_recent_logs(10, None).unwrap().len(), 0);
 
         let stats = storage.get_stats();
         assert_eq!(stats.total_logs, 0);
