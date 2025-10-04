@@ -215,7 +215,7 @@ impl MetricStorage {
         use crate::metrics::string_pool::StringId;
         let service_name = self
             .string_pool
-            .get(StringId(service_id))
+            .get(StringId::from(service_id))
             .map(|arc_str| arc_str.to_string())
             .unwrap_or_else(|| format!("service-{}", service_id));
 
