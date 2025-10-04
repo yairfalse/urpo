@@ -527,16 +527,29 @@ async fn start_with_ui(config: Config, cli: &Cli) -> Result<()> {
         None
     };
 
-    // Start the minimal terminal UI
-    let ui_result = crate::tui::run_tui(storage_trait, health_monitor, config).await;
+    // Keep receivers running (GUI is separate via Tauri)
+    tracing::info!("Receivers started - use Tauri GUI to view data");
+    tracing::info!("  GRPC receiver on port {}", config.server.grpc_port);
+    tracing::info!("  HTTP receiver on port {}", config.server.http_port);
+
+    // Wait for shutdown signal
+    let shutdown = tokio::signal::ctrl_c();
+
+    tokio::select! {
+        _ = receiver_handle => {
+            tracing::error!("Receiver stopped unexpectedly");
+        }
+        _ = shutdown => {
+            tracing::info!("Received shutdown signal, stopping...");
+        }
+    }
 
     // Cleanup
-    receiver_handle.abort();
     if let Some(handle) = api_handle {
         handle.abort();
     }
 
-    ui_result
+    Ok(())
 }
 
 async fn start_headless(config: Config, cli: &Cli) -> Result<()> {

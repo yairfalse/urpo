@@ -410,7 +410,7 @@ mod tests {
 
         // Verify logs were stored
         let storage_guard = storage.lock().await;
-        let recent_logs = storage_guard.get_recent_logs(10);
+        let recent_logs = storage_guard.get_recent_logs(10, None).unwrap();
         assert_eq!(recent_logs.len(), 2);
         assert_eq!(recent_logs[0].body, "Test log 2"); // Most recent first
         assert_eq!(recent_logs[1].body, "Test log 1");
