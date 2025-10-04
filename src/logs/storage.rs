@@ -124,8 +124,8 @@ impl LogStorage {
         // Find matching log indices using string slices (no per-token allocation)
         let mut matching_indices = HashSet::new();
         for &token in &query_tokens {
-            // Look up using &str (HashMap get accepts &str when key is String)
-            if let Some(indices) = self.search_index.get(token) {
+            // Convert &str token to String for DashMap lookup
+            if let Some(indices) = self.search_index.get(&token.to_string()) {
                 for &idx in indices.iter() {
                     matching_indices.insert(idx);
                 }
