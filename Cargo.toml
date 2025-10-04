@@ -31,10 +31,6 @@ tower = "0.4"
 tower-http = { version = "0.5", features = ["cors", "trace"] }
 hyper = { version = "1.0", features = ["full"] }
 
-# Terminal UI
-ratatui = "0.29"
-crossterm = "0.28"
-
 # Parser
 nom = "7.1"
 
@@ -92,6 +88,7 @@ bumpalo = "3.0"  # Arena allocation
 smallvec = { version = "1.13", features = ["union", "const_generics", "const_new", "serde"] }  # Stack-allocated small vectors
 lru = "0.12"  # LRU cache for bounded memory
 clipboard = { version = "0.5", optional = true }  # Clipboard support for TUI
+quantiles = "0.7"  # Constant-memory percentile estimation (CKMS algorithm)
 
 
 [dev-dependencies]

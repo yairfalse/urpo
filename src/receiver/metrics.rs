@@ -24,16 +24,22 @@ pub fn create_metrics_service_server(
 pub struct OtelMetricsReceiver {
     /// Metrics storage engine
     metric_storage: Arc<Mutex<MetricStorage>>,
-    /// String interning pool for metric names
+    /// Shared string interning pool for service names (from storage)
     string_pool: Arc<StringPool>,
 }
 
 impl OtelMetricsReceiver {
     /// Create new metrics receiver
     pub fn new(metric_storage: Arc<Mutex<MetricStorage>>) -> Self {
+        // Extract the shared string pool from storage
+        let string_pool = {
+            let storage_guard = metric_storage.blocking_lock();
+            Arc::clone(storage_guard.string_pool())
+        };
+
         Self {
             metric_storage,
-            string_pool: Arc::new(StringPool::new()),
+            string_pool,
         }
     }
 

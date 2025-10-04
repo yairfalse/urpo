@@ -54,7 +54,6 @@ pub mod receiver;
 pub mod sampling;
 pub mod service_map;
 pub mod storage;
-pub mod tui;
 
 // Re-export core types for convenience
 pub use crate::application::Application;

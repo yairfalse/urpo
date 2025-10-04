@@ -4,7 +4,6 @@ use crate::core::{Config, Result};
 use crate::monitoring::Monitor;
 use crate::receiver::OtelReceiver;
 use crate::storage::UnifiedStorage;
-use crate::tui;
 use std::sync::Arc;
 
 /// Main application struct that coordinates all components of Urpo.
@@ -50,27 +49,14 @@ impl Application {
         })
     }
 
-    /// Run the application (starts receivers and TUI if enabled).
+    /// Run the application (starts receivers only - GUI runs separately via Tauri).
     pub async fn run(self) -> Result<()> {
         tracing::info!("Starting Urpo application");
 
-        // Start the receiver in the background
-        let receiver = Arc::clone(&self.receiver);
-        let receiver_handle = tokio::spawn(async move {
-            if let Err(e) = receiver.run().await {
-                tracing::error!("Receiver error: {}", e);
-            }
-        });
+        // Start the receiver and run indefinitely
+        self.receiver.run().await?;
 
-        // Always run TUI for now (we can add a CLI flag later if needed)
-        {
-            // Run TUI in foreground
-            let result = tui::run_tui(self.storage.as_backend(), Arc::clone(&self.monitor), self.config.clone()).await;
-
-            // Shutdown receiver when TUI exits
-            receiver_handle.abort();
-            result
-        }
+        Ok(())
     }
 
     /// Get a reference to the storage backend.
