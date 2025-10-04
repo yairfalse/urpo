@@ -45,6 +45,8 @@ pub struct LogStorage {
     service_index: Arc<DashMap<u16, Vec<usize>>>,
     /// Current log counter for indexing
     log_counter: Arc<RwLock<usize>>,
+    /// Last search index cleanup time
+    last_cleanup: Arc<RwLock<SystemTime>>,
 }
 
 impl LogStorage {
@@ -57,6 +59,7 @@ impl LogStorage {
             trace_index: Arc::new(DashMap::new()),
             service_index: Arc::new(DashMap::new()),
             log_counter: Arc::new(RwLock::new(0)),
+            last_cleanup: Arc::new(RwLock::new(SystemTime::now())),
             config,
         }
     }
@@ -277,8 +280,61 @@ impl LogStorage {
             indices.retain(|&idx| idx != log_index);
         }
 
-        // Note: We don't clean search index as it's too expensive
-        // It will naturally age out as indices become invalid
+        // Periodic search index cleanup (every 1000 evictions or 5 minutes)
+        self.maybe_cleanup_search_index();
+    }
+
+    /// Clean up search index to prevent unbounded growth (RASTAFARI FIX!)
+    /// Removes indices that no longer exist in the log buffer
+    fn maybe_cleanup_search_index(&self) {
+        let last_cleanup = *self.last_cleanup.read();
+        let now = SystemTime::now();
+
+        // Cleanup every 5 minutes OR every 1000 log evictions
+        let should_cleanup = now
+            .duration_since(last_cleanup)
+            .unwrap_or_default()
+            .as_secs()
+            >= 300;
+
+        if !should_cleanup {
+            return;
+        }
+
+        // Build valid index set from current logs
+        let counter = *self.log_counter.read();
+        let logs = self.logs.read();
+        let base_index = counter.saturating_sub(logs.len());
+        let max_index = counter;
+
+        // Batch cleanup - process in chunks to avoid blocking
+        let mut cleaned_terms = 0;
+        let mut cleaned_indices = 0;
+
+        self.search_index.retain(|_term, indices| {
+            let before = indices.len();
+            indices.retain(|&idx| idx >= base_index && idx < max_index);
+            let after = indices.len();
+
+            cleaned_indices += before - after;
+
+            if indices.is_empty() {
+                cleaned_terms += 1;
+                false // Remove empty term entries
+            } else {
+                true // Keep non-empty entries
+            }
+        });
+
+        *self.last_cleanup.write() = now;
+
+        if cleaned_terms > 0 || cleaned_indices > 0 {
+            tracing::debug!(
+                "Search index cleanup: removed {} terms, {} stale indices",
+                cleaned_terms,
+                cleaned_indices
+            );
+        }
     }
 
     /// Clear all logs
